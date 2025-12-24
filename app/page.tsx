@@ -66,7 +66,12 @@ export default function Home() {
   const [totalCount, setTotalCount] = useState(0);
   const PAGE_SIZE = 100; // Увеличили с 50 до 100
   
-  const greeting = getTimeGreeting();
+  // Приветствие - рендерится только на клиенте для избежания hydration mismatch
+  const [greeting, setGreeting] = useState({ emoji: '🍽️', text: 'Добро пожаловать', meal: '' });
+  
+  useEffect(() => {
+    setGreeting(getTimeGreeting());
+  }, []);
 
   // Загрузка статистики по категориям
   useEffect(() => {
