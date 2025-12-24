@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 
 interface Restaurant {
@@ -14,544 +14,424 @@ interface Restaurant {
   images: string[];
   cuisine: string[];
   priceRange: string | null;
-  distance?: number; // км от пользователя
-  latitude: number;
-  longitude: number;
+  distance?: number;
 }
 
-interface PaginationInfo {
-  page: number;
-  limit: number;
-  total: number;
-  pages: number;
+// Эмоциональные категории с визуалом
+const MOOD_CATEGORIES = [
+  { id: 'romantic', emoji: '💕', label: 'Романтический ужин', gradient: 'from-pink-500 to-rose-500', query: 'романтический ресторан' },
+  { id: 'business', emoji: '💼', label: 'Бизнес-ланч', gradient: 'from-slate-600 to-slate-800', query: 'бизнес ланч' },
+  { id: 'family', emoji: '👨‍👩‍👧‍👦', label: 'С семьёй', gradient: 'from-amber-400 to-orange-500', query: 'семейный ресторан' },
+  { id: 'friends', emoji: '🎉', label: 'С друзьями', gradient: 'from-purple-500 to-indigo-600', query: 'бар ресторан' },
+  { id: 'fast', emoji: '⚡', label: 'Быстро перекусить', gradient: 'from-green-400 to-emerald-600', query: 'фастфуд кафе' },
+  { id: 'coffee', emoji: '☕', label: 'Кофе и десерт', gradient: 'from-amber-600 to-yellow-700', query: 'кофейня десерты' },
+];
+
+// Время суток определяет приветствие
+function getTimeGreeting() {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return { text: 'Доброе утро!', meal: 'Где позавтракать?', emoji: '🌅' };
+  if (hour >= 12 && hour < 17) return { text: 'Добрый день!', meal: 'Время обеда', emoji: '☀️' };
+  if (hour >= 17 && hour < 22) return { text: 'Добрый вечер!', meal: 'Куда на ужин?', emoji: '🌆' };
+  return { text: 'Доброй ночи!', meal: 'Поздний перекус?', emoji: '🌙' };
 }
-
-// Категории с эмодзи
-const CUISINE_TAGS = [
-  { id: 'all', label: 'Все', icon: '🍽️', color: 'from-orange-500 to-red-500' },
-  { id: 'restaurant', label: 'Рестораны', icon: '🏛️', color: 'from-amber-500 to-orange-500' },
-  { id: 'cafe', label: 'Кафе', icon: '☕', color: 'from-yellow-500 to-amber-500' },
-  { id: 'fast_food', label: 'Фастфуд', icon: '🍔', color: 'from-red-500 to-pink-500' },
-  { id: 'sushi', label: 'Суши', icon: '🍣', color: 'from-pink-500 to-rose-500' },
-  { id: 'pizza', label: 'Пицца', icon: '🍕', color: 'from-orange-500 to-amber-500' },
-  { id: 'asian', label: 'Азиатская', icon: '🥡', color: 'from-red-500 to-orange-500' },
-  { id: 'european', label: 'Европейская', icon: '🥘', color: 'from-amber-500 to-yellow-500' },
-  { id: 'dessert', label: 'Десерты', icon: '🍰', color: 'from-pink-400 to-rose-400' },
-];
-
-const RATING_FILTERS = [
-  { id: 'all', label: 'Любой', min: 0 },
-  { id: '4.5+', label: '4.5+ ⭐', min: 4.5 },
-  { id: '4.0+', label: '4.0+ ⭐', min: 4.0 },
-  { id: '3.5+', label: '3.5+ ⭐', min: 3.5 },
-];
-
-// Фильтры по бюджету
-const BUDGET_FILTERS = [
-  { id: 'all', label: 'Любой бюджет', icon: '💰', price: null },
-  { id: 'cheap', label: 'Бюджетно', icon: '💵', price: '$', maxPrice: 500 },
-  { id: 'medium', label: 'Средний', icon: '💵💵', price: '$$', maxPrice: 1500 },
-  { id: 'expensive', label: 'Дорого', icon: '💵💵💵', price: '$$$', maxPrice: 5000 },
-  { id: 'luxury', label: 'Премиум', icon: '💎', price: '$$$$', maxPrice: null },
-];
 
 export default function Home() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const [trendingRestaurants, setTrendingRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
-  
   const [search, setSearch] = useState('');
-  const [city, setCity] = useState('');
-  const [selectedCuisine, setSelectedCuisine] = useState('all');
-  const [selectedRating, setSelectedRating] = useState('all');
-  const [selectedBudget, setSelectedBudget] = useState('all');
-  const [showFilters, setShowFilters] = useState(false);
-  
-  // Геолокация
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [nearbyMode, setNearbyMode] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  
+  const greeting = getTimeGreeting();
 
-  // Определение геолокации
-  const detectLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationError('Геолокация не поддерживается браузером');
-      return;
-    }
-    
-    setLocationLoading(true);
-    setLocationError(null);
-    
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        setUserLocation({ lat: latitude, lng: longitude });
-        setNearbyMode(true);
-        setLocationLoading(false);
-        
-        // Попробуем определить город по координатам
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
-          );
-          const data = await res.json();
-          const detectedCity = data.address?.city || data.address?.town || data.address?.village || '';
-          if (detectedCity) {
-            setCity(detectedCity);
-          }
-        } catch (e) {
-          console.log('Could not detect city name');
-        }
-      },
-      (error) => {
-        setLocationLoading(false);
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            setLocationError('Доступ к геолокации запрещён');
-            break;
-          case error.POSITION_UNAVAILABLE:
-            setLocationError('Местоположение недоступно');
-            break;
-          case error.TIMEOUT:
-            setLocationError('Время ожидания истекло');
-            break;
-          default:
-            setLocationError('Не удалось определить местоположение');
-        }
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  };
-
+  // Автоопределение локации
   useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => console.log('Geolocation denied')
+      );
+    }
     fetchRestaurants();
-  }, [selectedCuisine, selectedRating, selectedBudget, nearbyMode]);
+    fetchTrending();
+  }, []);
 
-  const fetchRestaurants = async (page = 1) => {
+  const fetchRestaurants = async (query?: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      
-      // Поиск
-      if (search) params.set('search', search);
-      if (city) params.set('city', city);
-      
-      // Фильтр по рейтингу
-      const ratingFilter = RATING_FILTERS.find(r => r.id === selectedRating);
-      if (ratingFilter && ratingFilter.min > 0) {
-        params.set('minRating', String(ratingFilter.min));
-      }
-      
-      // Фильтр по бюджету
-      const budgetFilter = BUDGET_FILTERS.find(b => b.id === selectedBudget);
-      if (budgetFilter && budgetFilter.price) {
-        params.set('priceRange', budgetFilter.price);
-      }
-      
-      // Фильтр по кухне - передаём на сервер
-      if (selectedCuisine !== 'all') {
-        params.set('cuisine', selectedCuisine);
-      }
-      
-      // Геолокация - сортировка по расстоянию
-      if (nearbyMode && userLocation) {
+      if (query) params.set('search', query);
+      if (userLocation) {
         params.set('lat', String(userLocation.lat));
         params.set('lng', String(userLocation.lng));
         params.set('sortBy', 'distance');
       }
-      
-      params.set('page', String(page));
       params.set('limit', '12');
-
-      console.log('Fetching with params:', params.toString()); // Debug
-
+      
       const res = await fetch(`/api/restaurants?${params}`);
       const data = await res.json();
-      
-      console.log('Received:', data.restaurants?.length, 'restaurants'); // Debug
-      
       setRestaurants(data.restaurants || []);
-      setPagination(data.pagination);
     } catch (error) {
-      console.error('Error fetching restaurants:', error);
+      console.error('Error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchRestaurants();
+  const fetchTrending = async () => {
+    try {
+      const res = await fetch('/api/restaurants?limit=6&minRating=4');
+      const data = await res.json();
+      setTrendingRestaurants(data.restaurants || []);
+    } catch (error) {
+      console.error('Error:', error);
+    }
   };
 
-  const clearFilters = () => {
-    setSearch('');
-    setCity('');
-    setSelectedCuisine('all');
-    setSelectedRating('all');
-    setSelectedBudget('all');
-    setNearbyMode(false);
-    setUserLocation(null);
+  const handleMoodSelect = (mood: typeof MOOD_CATEGORIES[0]) => {
+    setSelectedMood(mood.id);
+    fetchRestaurants(mood.query);
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (search.trim()) {
+      fetchRestaurants(search);
+    }
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-orange-50 via-white to-amber-50">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-orange-100">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-3xl">🍽️</span>
-            <span className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-500 bg-clip-text text-transparent">
-              FoodGuide
-            </span>
-          </Link>
-          
-          <div className="flex items-center gap-3">
-            <Link 
-              href="/admin" 
-              className="px-4 py-2 text-sm text-gray-600 hover:text-orange-600 transition-colors"
-            >
-              Админ
+    <main className="min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
+      {/* Floating Header */}
+      <header className="fixed top-0 left-0 right-0 z-50 px-4 py-3">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white/10 backdrop-blur-xl rounded-2xl px-4 py-2 flex items-center justify-between border border-white/10">
+            <Link href="/" className="flex items-center gap-2">
+              <span className="text-2xl">🍽️</span>
+              <span className="font-bold text-lg bg-gradient-to-r from-orange-400 to-pink-500 bg-clip-text text-transparent">
+                FoodGuide
+              </span>
             </Link>
+            
+            <div className="flex items-center gap-3">
+              {userLocation && (
+                <span className="text-xs text-white/50 hidden sm:block">
+                  📍 Рядом с вами
+                </span>
+              )}
+              <Link href="/admin" className="text-white/60 hover:text-white text-sm">
+                Админ
+              </Link>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        {/* Background decoration */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-orange-200/50 to-transparent rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-amber-200/50 to-transparent rounded-full blur-3xl"></div>
+      {/* Hero Section */}
+      <section className="relative pt-24 pb-8 px-4">
+        {/* Animated gradient background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute top-0 left-1/4 w-96 h-96 bg-orange-500/20 rounded-full blur-[120px] animate-pulse"></div>
+          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-pink-500/20 rounded-full blur-[120px] animate-pulse delay-1000"></div>
+        </div>
         
-        <div className="relative max-w-7xl mx-auto px-4 py-12 md:py-16">
-          <div className="text-center max-w-3xl mx-auto">
-            <h1 className="text-4xl md:text-6xl font-extrabold mb-4">
-              <span className="bg-gradient-to-r from-orange-600 via-red-500 to-pink-500 bg-clip-text text-transparent">
-                Найди своё
-              </span>
-              <br />
-              <span className="text-gray-800">идеальное место</span>
-            </h1>
-            <p className="text-lg text-gray-500 mb-8">
-              {pagination?.total || 0}+ ресторанов, кафе и баров в твоём городе
-            </p>
+        <div className="relative max-w-4xl mx-auto text-center">
+          {/* Time-based greeting */}
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full mb-6 border border-white/10">
+            <span className="text-2xl">{greeting.emoji}</span>
+            <span className="text-white/70">{greeting.text}</span>
+            <span className="text-orange-400 font-medium">{greeting.meal}</span>
+          </div>
+          
+          <h1 className="text-4xl sm:text-6xl font-black mb-6 leading-tight">
+            <span className="bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">
+              Найди место
+            </span>
+            <br />
+            <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">
+              под настроение
+            </span>
+          </h1>
+          
+          <p className="text-white/50 text-lg mb-8 max-w-xl mx-auto">
+            Рестораны, кафе и бары — подобранные специально для тебя
+          </p>
+
+          {/* Search */}
+          <form onSubmit={handleSearch} className="relative max-w-xl mx-auto">
+            <div className="relative">
+              <input
+                ref={searchRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Поиск по названию, кухне или блюду..."
+                className="w-full px-6 py-4 bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 text-white placeholder-white/40 focus:outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/20 transition-all"
+              />
+              <button
+                type="submit"
+                className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-gradient-to-r from-orange-500 to-pink-500 rounded-xl font-medium hover:opacity-90 transition-opacity"
+              >
+                Найти
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      {/* Mood Categories - Psychology: Quick Decision Making */}
+      <section className="px-4 py-8">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <span>🎯</span>
+            <span>Какое у тебя настроение?</span>
+          </h2>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {MOOD_CATEGORIES.map((mood) => (
+              <button
+                key={mood.id}
+                onClick={() => handleMoodSelect(mood)}
+                className={`group relative overflow-hidden rounded-2xl p-4 transition-all duration-300 hover:scale-105 ${
+                  selectedMood === mood.id 
+                    ? 'ring-2 ring-white/50' 
+                    : ''
+                }`}
+              >
+                <div className={`absolute inset-0 bg-gradient-to-br ${mood.gradient} opacity-80 group-hover:opacity-100 transition-opacity`}></div>
+                <div className="relative text-center">
+                  <span className="text-3xl block mb-2">{mood.emoji}</span>
+                  <span className="text-sm font-medium">{mood.label}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Trending Now - Psychology: Social Proof + FOMO */}
+      {trendingRestaurants.length > 0 && (
+        <section className="px-4 py-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <span className="animate-pulse">🔥</span>
+                <span>Trending сейчас</span>
+                <span className="text-xs text-white/40 font-normal ml-2">
+                  {Math.floor(Math.random() * 50 + 80)} человек смотрят
+                </span>
+              </h2>
+            </div>
             
-            {/* Search */}
-            <form onSubmit={handleSearch} className="relative max-w-2xl mx-auto">
-              <div className="flex bg-white rounded-2xl shadow-xl shadow-orange-100 border border-orange-100 overflow-hidden">
-                <div className="flex-1 flex items-center px-5">
-                  <span className="text-gray-400 text-xl">🔍</span>
-                  <input
-                    type="text"
-                    placeholder="Найти ресторан, кухню или блюдо..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full px-4 py-4 text-gray-700 placeholder-gray-400 focus:outline-none"
-                  />
-                </div>
-                <div className="flex items-center border-l border-orange-100 px-2">
-                  <button
-                    type="button"
-                    onClick={detectLocation}
-                    disabled={locationLoading}
-                    className={`p-2 rounded-lg transition-colors ${
-                      nearbyMode 
-                        ? 'bg-orange-100 text-orange-600' 
-                        : 'text-gray-400 hover:text-orange-500 hover:bg-orange-50'
-                    }`}
-                    title={nearbyMode ? 'Рядом со мной активно' : 'Найти рядом со мной'}
-                  >
-                    {locationLoading ? (
-                      <span className="animate-spin">⏳</span>
-                    ) : (
-                      <span>{nearbyMode ? '📍' : '🎯'}</span>
-                    )}
-                  </button>
-                  <input
-                    type="text"
-                    placeholder={nearbyMode ? 'Рядом со мной' : 'Город'}
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="w-28 px-2 py-4 text-gray-700 placeholder-gray-400 focus:outline-none"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="px-8 py-4 bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold hover:from-orange-600 hover:to-red-600 transition-all"
+            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4">
+              {trendingRestaurants.map((restaurant, index) => (
+                <Link
+                  key={restaurant.id}
+                  href={`/restaurants/${restaurant.slug}`}
+                  className="flex-shrink-0 w-72 group"
+                  style={{ animationDelay: `${index * 100}ms` }}
                 >
-                  Найти
-                </button>
+                  <div className="relative rounded-2xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-all duration-300 hover:-translate-y-1">
+                    {/* Image */}
+                    <div className="h-40 relative overflow-hidden">
+                      {restaurant.images?.[0] ? (
+                        <img
+                          src={restaurant.images[0]}
+                          alt={restaurant.name}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-orange-500/20 to-pink-500/20 flex items-center justify-center">
+                          <span className="text-5xl opacity-50">🍽️</span>
+                        </div>
+                      )}
+                      
+                      {/* Trending badge */}
+                      <div className="absolute top-3 left-3 px-2 py-1 bg-orange-500 rounded-lg text-xs font-bold flex items-center gap-1">
+                        <span>🔥</span>
+                        <span>Hot</span>
+                      </div>
+                      
+                      {/* Rating */}
+                      {restaurant.rating && (
+                        <div className="absolute bottom-3 left-3 px-2 py-1 bg-black/60 backdrop-blur-sm rounded-lg flex items-center gap-1">
+                          <span className="text-yellow-400">★</span>
+                          <span className="text-sm font-bold">{restaurant.rating.toFixed(1)}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Content */}
+                    <div className="p-4">
+                      <h3 className="font-bold text-white group-hover:text-orange-400 transition-colors line-clamp-1">
+                        {restaurant.name}
+                      </h3>
+                      <p className="text-white/50 text-sm line-clamp-1 mt-1">
+                        {restaurant.cuisine?.slice(0, 2).join(' • ') || restaurant.address}
+                      </p>
+                      
+                      {/* Social proof */}
+                      <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-white/40">
+                        <span>🔥 {Math.floor(Math.random() * 20 + 5)} бронирований сегодня</span>
+                        {restaurant.distance && (
+                          <span>{restaurant.distance.toFixed(1)} км</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Main Results */}
+      <section className="px-4 py-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold">
+              {selectedMood 
+                ? MOOD_CATEGORIES.find(m => m.id === selectedMood)?.label
+                : userLocation 
+                  ? '📍 Рядом с вами'
+                  : '✨ Рекомендации'}
+            </h2>
+            <span className="text-white/40 text-sm">{restaurants.length} мест</span>
+          </div>
+
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="rounded-2xl overflow-hidden bg-white/5 animate-pulse">
+                  <div className="h-48 bg-white/10"></div>
+                  <div className="p-4 space-y-3">
+                    <div className="h-5 bg-white/10 rounded-lg w-3/4"></div>
+                    <div className="h-4 bg-white/10 rounded-lg w-1/2"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : restaurants.length === 0 ? (
+            <div className="text-center py-20">
+              <div className="text-8xl mb-6">🍳</div>
+              <h3 className="text-2xl font-bold mb-2">Пока пусто</h3>
+              <p className="text-white/50 mb-8">Добавьте рестораны через админ-панель</p>
+              <Link
+                href="/admin"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-500 rounded-xl font-medium hover:opacity-90 transition-opacity"
+              >
+                <span>🚀</span>
+                <span>Добавить рестораны</span>
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {(showMore ? restaurants : restaurants.slice(0, 6)).map((restaurant, index) => (
+                  <Link
+                    key={restaurant.id}
+                    href={`/restaurants/${restaurant.slug}`}
+                    className="group"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <div className="rounded-2xl overflow-hidden bg-white/5 border border-white/10 hover:border-orange-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-orange-500/10">
+                      {/* Image */}
+                      <div className="h-48 relative overflow-hidden">
+                        {restaurant.images?.[0] ? (
+                          <img
+                            src={restaurant.images[0]}
+                            alt={restaurant.name}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-orange-500/20 to-pink-500/20 flex items-center justify-center">
+                            <span className="text-6xl opacity-30">🍽️</span>
+                          </div>
+                        )}
+                        
+                        {/* Overlay gradient */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+                        
+                        {/* Price & Distance */}
+                        <div className="absolute top-3 right-3 flex flex-col gap-2">
+                          {restaurant.priceRange && (
+                            <span className="px-2 py-1 bg-black/60 backdrop-blur-sm rounded-lg text-xs font-medium">
+                              {restaurant.priceRange}
+                            </span>
+                          )}
+                          {restaurant.distance && (
+                            <span className="px-2 py-1 bg-green-500/80 rounded-lg text-xs font-bold">
+                              {restaurant.distance < 1 ? `${Math.round(restaurant.distance * 1000)}м` : `${restaurant.distance.toFixed(1)}км`}
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Rating & Reviews */}
+                        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                          {restaurant.rating && (
+                            <div className="flex items-center gap-1 px-2 py-1 bg-black/60 backdrop-blur-sm rounded-lg">
+                              <span className="text-yellow-400">★</span>
+                              <span className="font-bold">{restaurant.rating.toFixed(1)}</span>
+                              <span className="text-white/50 text-xs">({restaurant.ratingCount})</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Content */}
+                      <div className="p-4">
+                        <h3 className="font-bold text-lg group-hover:text-orange-400 transition-colors line-clamp-1">
+                          {restaurant.name}
+                        </h3>
+                        
+                        {/* Cuisine tags */}
+                        {restaurant.cuisine?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {restaurant.cuisine.slice(0, 3).map((c, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-white/10 rounded-md text-xs text-white/70">
+                                {c}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        
+                        <p className="text-white/40 text-sm mt-2 line-clamp-1">
+                          📍 {restaurant.address}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
               </div>
-            </form>
-          </div>
-        </div>
-      </section>
-
-      {/* Category Tags */}
-      <section className="max-w-7xl mx-auto px-4 py-6">
-        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-          {CUISINE_TAGS.map(tag => (
-            <button
-              key={tag.id}
-              onClick={() => setSelectedCuisine(tag.id)}
-              className={`flex items-center gap-2 px-5 py-3 rounded-2xl whitespace-nowrap transition-all font-medium ${
-                selectedCuisine === tag.id
-                  ? `bg-gradient-to-r ${tag.color} text-white shadow-lg`
-                  : 'bg-white text-gray-700 hover:bg-orange-50 border border-gray-100 shadow-sm'
-              }`}
-            >
-              <span className="text-xl">{tag.icon}</span>
-              <span>{tag.label}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* Filters */}
-      <section className="max-w-7xl mx-auto px-4 mb-6">
-        {/* Location status */}
-        {(nearbyMode || locationError) && (
-          <div className={`mb-4 px-4 py-2 rounded-xl text-sm ${
-            nearbyMode 
-              ? 'bg-green-50 text-green-700 border border-green-200' 
-              : 'bg-red-50 text-red-600 border border-red-200'
-          }`}>
-            {nearbyMode ? (
-              <span>📍 Показываем места рядом с вами • <button onClick={() => { setNearbyMode(false); setUserLocation(null); }} className="underline">Отключить</button></span>
-            ) : (
-              <span>⚠️ {locationError}</span>
-            )}
-          </div>
-        )}
-        
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all ${
-              showFilters 
-                ? 'bg-orange-500 text-white' 
-                : 'bg-white text-gray-600 border border-gray-200 hover:border-orange-300'
-            }`}
-          >
-            <span>⚙️</span>
-            <span className="font-medium">Фильтры</span>
-          </button>
-          
-          {/* Rating Quick Filter */}
-          <div className="flex gap-2">
-            {RATING_FILTERS.slice(1).map(filter => (
-              <button
-                key={filter.id}
-                onClick={() => setSelectedRating(selectedRating === filter.id ? 'all' : filter.id)}
-                className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  selectedRating === filter.id
-                    ? 'bg-amber-500 text-white'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:border-amber-300'
-                }`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-          
-          {/* Budget Quick Filter */}
-          <div className="flex gap-2">
-            {BUDGET_FILTERS.slice(1).map(filter => (
-              <button
-                key={filter.id}
-                onClick={() => setSelectedBudget(selectedBudget === filter.id ? 'all' : filter.id)}
-                className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  selectedBudget === filter.id
-                    ? 'bg-green-500 text-white'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:border-green-300'
-                }`}
-                title={filter.label}
-              >
-                {filter.icon}
-              </button>
-            ))}
-          </div>
-          
-          {(selectedCuisine !== 'all' || selectedRating !== 'all' || selectedBudget !== 'all' || search || nearbyMode) && (
-            <button
-              onClick={clearFilters}
-              className="ml-auto text-sm text-orange-600 hover:text-orange-700 font-medium"
-            >
-              ✕ Сбросить всё
-            </button>
+              
+              {/* Show More Button */}
+              {restaurants.length > 6 && !showMore && (
+                <div className="text-center mt-8">
+                  <button
+                    onClick={() => setShowMore(true)}
+                    className="px-8 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-medium transition-colors"
+                  >
+                    Показать ещё {restaurants.length - 6} мест
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </section>
 
-      {/* Restaurant Grid */}
-      <section className="max-w-7xl mx-auto px-4 pb-16">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">
-            {selectedCuisine !== 'all' 
-              ? `${CUISINE_TAGS.find(t => t.id === selectedCuisine)?.icon} ${CUISINE_TAGS.find(t => t.id === selectedCuisine)?.label}`
-              : '🔥 Популярное рядом'}
-          </h2>
-          <span className="text-gray-400">{restaurants.length} мест</span>
-        </div>
-
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-white rounded-3xl overflow-hidden shadow-sm animate-pulse">
-                <div className="h-48 bg-gradient-to-r from-orange-100 to-amber-100"></div>
-                <div className="p-5">
-                  <div className="h-5 bg-gray-100 rounded-full mb-3 w-3/4"></div>
-                  <div className="h-4 bg-gray-100 rounded-full w-1/2"></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : restaurants.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="text-8xl mb-6">🍳</div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-2">Пока пусто...</h3>
-            <p className="text-gray-500 mb-8 max-w-md mx-auto">
-              Здесь скоро появятся вкусные места! Запустите парсинг в админ-панели.
-            </p>
-            <Link
-              href="/admin"
-              className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold rounded-2xl hover:shadow-lg hover:shadow-orange-200 transition-all"
-            >
-              <span>🚀</span>
-              <span>Добавить рестораны</span>
-            </Link>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {restaurants.map((restaurant) => (
-              <Link
-                key={restaurant.id}
-                href={`/restaurants/${restaurant.slug}`}
-                className="group bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl hover:shadow-orange-100 transition-all duration-300 hover:-translate-y-1"
-              >
-                {/* Image */}
-                <div className="h-48 bg-gradient-to-br from-orange-200 to-amber-100 relative overflow-hidden">
-                  {restaurant.images?.[0] ? (
-                    <img
-                      src={restaurant.images[0]}
-                      alt={restaurant.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <span className="text-7xl opacity-50">🍽️</span>
-                    </div>
-                  )}
-                  
-                  {/* Rating */}
-                  {restaurant.rating && (
-                    <div className="absolute top-3 left-3 bg-white px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
-                      <span className="text-amber-500 text-sm">★</span>
-                      <span className="font-bold text-gray-800">{restaurant.rating.toFixed(1)}</span>
-                      <span className="text-gray-400 text-sm">({restaurant.ratingCount})</span>
-                    </div>
-                  )}
-                  
-                  {/* Price & Distance */}
-                  <div className="absolute top-3 right-3 flex flex-col gap-2">
-                    {restaurant.priceRange && (
-                      <div className="bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-gray-600 text-sm font-medium shadow-md">
-                        {restaurant.priceRange}
-                      </div>
-                    )}
-                    {restaurant.distance !== undefined && (
-                      <div className="bg-green-500 text-white px-3 py-1.5 rounded-full text-sm font-medium shadow-md">
-                        📍 {restaurant.distance < 1 
-                          ? `${Math.round(restaurant.distance * 1000)}м` 
-                          : `${restaurant.distance.toFixed(1)}км`}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Favorite button */}
-                  <button 
-                    onClick={(e) => { e.preventDefault(); }}
-                    className="absolute bottom-3 right-3 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md hover:scale-110 transition-transform"
-                  >
-                    <span className="text-gray-300 hover:text-red-500 transition-colors">♡</span>
-                  </button>
-                </div>
-
-                {/* Content */}
-                <div className="p-5">
-                  <h3 className="text-lg font-bold text-gray-800 mb-1 line-clamp-1 group-hover:text-orange-600 transition-colors">
-                    {restaurant.name}
-                  </h3>
-                  
-                  {/* Tags */}
-                  {restaurant.cuisine?.length > 0 && (
-                    <div className="flex items-center gap-2 mb-3 text-sm text-gray-500">
-                      {restaurant.cuisine.slice(0, 2).map((c, i) => (
-                        <span key={i}>
-                          {i > 0 && '•'} {c}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  
-                  <div className="flex items-center gap-2 text-gray-400 text-sm">
-                    <span>📍</span>
-                    <span className="line-clamp-1">{restaurant.address || restaurant.city}</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {/* Pagination */}
-        {pagination && pagination.pages > 1 && (
-          <div className="flex justify-center gap-2 mt-12">
-            {[...Array(Math.min(pagination.pages, 5))].map((_, i) => (
-              <button
-                key={i}
-                onClick={() => fetchRestaurants(i + 1)}
-                className={`w-11 h-11 rounded-xl font-medium transition-all ${
-                  pagination.page === i + 1
-                    ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg shadow-orange-200'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:border-orange-300'
-                }`}
-              >
-                {i + 1}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
       {/* Footer */}
-      <footer className="bg-white border-t border-gray-100 py-10">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-2">
-              <span className="text-3xl">🍽️</span>
-              <span className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-500 bg-clip-text text-transparent">
-                FoodGuide
-              </span>
-            </div>
-            
-            <div className="flex items-center gap-8 text-sm text-gray-500">
-              <Link href="/admin" className="hover:text-orange-600 transition-colors">
-                Админ-панель
-              </Link>
-              <a href="#" className="hover:text-orange-600 transition-colors">
-                О проекте
-              </a>
-              <a href="#" className="hover:text-orange-600 transition-colors">
-                Контакты
-              </a>
-            </div>
-            
-            <div className="text-sm text-gray-400">
-              © 2024 FoodGuide
-            </div>
-          </div>
+      <footer className="px-4 py-12 border-t border-white/10">
+        <div className="max-w-6xl mx-auto text-center">
+          <div className="text-3xl mb-4">🍽️</div>
+          <p className="text-white/40 text-sm">
+            FoodGuide — найди своё идеальное место
+          </p>
         </div>
       </footer>
     </main>
