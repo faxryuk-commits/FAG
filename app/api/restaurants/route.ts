@@ -543,9 +543,11 @@ export async function GET(request: NextRequest) {
     // Комплексная сортировка:
     // 1. Рейтинг (выше = лучше, null в конец)
     // 2. Наличие фото (есть = лучше)
-    // 3. Расстояние (ближе = лучше)
+    // 3. Количество отзывов (больше = лучше)
+    // 4. Расстояние (ближе = лучше)
+    // 5. Остальные
     restaurants.sort((a, b) => {
-      // 1. Рейтинг: выше = лучше, null = хуже
+      // 1. Рейтинг: выше = лучше, null = в конец
       const ratingA = a.rating ?? -1;
       const ratingB = b.rating ?? -1;
       if (ratingB !== ratingA) {
@@ -553,21 +555,32 @@ export async function GET(request: NextRequest) {
       }
       
       // 2. Наличие фото: есть = лучше
-      const hasPhotosA = (a.images as string[])?.length > 0 ? 1 : 0;
-      const hasPhotosB = (b.images as string[])?.length > 0 ? 1 : 0;
+      const photosA = (a.images as string[])?.length || 0;
+      const photosB = (b.images as string[])?.length || 0;
+      const hasPhotosA = photosA > 0 ? 1 : 0;
+      const hasPhotosB = photosB > 0 ? 1 : 0;
       if (hasPhotosB !== hasPhotosA) {
         return hasPhotosB - hasPhotosA;
       }
       
-      // 3. Расстояние: ближе = лучше (если есть геолокация)
+      // 3. Количество отзывов: больше = лучше
+      const reviewsA = a.ratingCount || 0;
+      const reviewsB = b.ratingCount || 0;
+      if (reviewsB !== reviewsA) {
+        return reviewsB - reviewsA;
+      }
+      
+      // 4. Расстояние: ближе = лучше (если есть геолокация)
       if (userLat && userLng) {
         const distA = (a as any).distance ?? Infinity;
         const distB = (b as any).distance ?? Infinity;
-        return distA - distB;
+        if (distA !== distB) {
+          return distA - distB;
+        }
       }
       
-      // 4. По количеству отзывов
-      return (b.ratingCount || 0) - (a.ratingCount || 0);
+      // 5. По количеству фото (больше = лучше)
+      return photosB - photosA;
     });
     
     // Применяем пагинацию
