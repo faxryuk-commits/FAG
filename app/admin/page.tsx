@@ -167,6 +167,213 @@ function JobTimer({
   );
 }
 
+// Модальное окно мониторинга парсинга
+function ParsingMonitorModal({ 
+  isOpen, 
+  onClose, 
+  jobId,
+  source,
+}: { 
+  isOpen: boolean; 
+  onClose: () => void;
+  jobId: string | null;
+  source: string;
+}) {
+  const [job, setJob] = useState<SyncJob | null>(null);
+  const [allItems, setAllItems] = useState<Array<{ name: string; status: 'success' | 'error'; error?: string; time: Date }>>([]);
+
+  useEffect(() => {
+    if (!isOpen || !jobId) return;
+
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch(`/api/sync?jobId=${jobId}`);
+        const data = await res.json();
+        if (data.job) {
+          setJob(data.job);
+          
+          // Добавляем новые элементы в лог
+          const stats = data.job.stats as JobStats;
+          if (stats?.processedItems) {
+            setAllItems(prev => {
+              const newItems = stats.processedItems!.filter(
+                item => !prev.some(p => p.name === item.name)
+              ).map(item => ({ ...item, time: new Date() }));
+              return [...prev, ...newItems];
+            });
+          }
+        }
+        
+        // Если есть результаты, показываем их
+        if (data.results) {
+          setJob(prev => prev ? { ...prev, status: 'completed', stats: data.results } : null);
+        }
+      } catch (error) {
+        console.error('Error fetching job status:', error);
+      }
+    };
+
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 2000); // Обновляем каждые 2 секунды
+    return () => clearInterval(interval);
+  }, [isOpen, jobId]);
+
+  // Сброс при закрытии
+  useEffect(() => {
+    if (!isOpen) {
+      setAllItems([]);
+      setJob(null);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const stats = job?.stats as JobStats;
+  const isCompleted = job?.status === 'completed';
+  const isFailed = job?.status === 'failed';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-2xl bg-gradient-to-br from-[#1a1a2e] to-[#16213e] rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-3 h-3 rounded-full ${
+              isCompleted ? 'bg-green-500' : isFailed ? 'bg-red-500' : 'bg-blue-500 animate-pulse'
+            }`}></div>
+            <h2 className="text-xl font-bold text-white">
+              {isCompleted ? '✅ Парсинг завершён' : isFailed ? '❌ Ошибка' : '🔄 Парсинг выполняется...'}
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors flex items-center justify-center"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Progress */}
+        <div className="px-6 py-4 border-b border-white/10">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-white/70">Источник: <span className="text-white font-medium capitalize">{source}</span></span>
+            {stats?.total && (
+              <span className="text-white font-medium">
+                {stats.processed || 0} / {stats.total}
+                {stats.errors ? <span className="text-red-400 ml-2">({stats.errors} ошибок)</span> : ''}
+              </span>
+            )}
+          </div>
+          <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+            <div 
+              className={`h-full transition-all duration-500 ${
+                isCompleted 
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                  : isFailed 
+                    ? 'bg-gradient-to-r from-red-500 to-orange-500'
+                    : 'bg-gradient-to-r from-blue-500 to-purple-500'
+              }`}
+              style={{ width: `${stats?.total ? ((stats.processed || 0) / stats.total) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Live Log */}
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-white/70">📋 Лог выгрузки</h3>
+            <span className="text-xs text-white/50">{allItems.length} записей</span>
+          </div>
+          
+          <div className="h-64 overflow-y-auto rounded-xl bg-black/30 p-3 space-y-1 font-mono text-sm">
+            {allItems.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-white/30">
+                <div className="text-center">
+                  <div className="text-3xl mb-2 animate-pulse">⏳</div>
+                  <div>Ожидание данных...</div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {allItems.map((item, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`flex items-start gap-2 py-1 px-2 rounded ${
+                      item.status === 'success' 
+                        ? 'bg-green-500/10' 
+                        : 'bg-red-500/10'
+                    } ${idx === allItems.length - 1 ? 'animate-pulse' : ''}`}
+                  >
+                    <span className={item.status === 'success' ? 'text-green-400' : 'text-red-400'}>
+                      {item.status === 'success' ? '✓' : '✗'}
+                    </span>
+                    <span className="text-white/80 flex-1">{item.name}</span>
+                    <span className="text-white/30 text-xs">
+                      {item.time.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                  </div>
+                ))}
+                {!isCompleted && !isFailed && (
+                  <div className="flex items-center gap-2 py-1 px-2 text-white/50">
+                    <span className="animate-spin">⟳</span>
+                    <span>Загрузка...</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-white/10 flex items-center justify-between">
+          {isCompleted ? (
+            <>
+              <div className="text-green-400">
+                ✅ Успешно обработано: {stats?.processed || 0} из {stats?.total || 0}
+              </div>
+              <button
+                onClick={onClose}
+                className="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-medium rounded-xl hover:scale-105 transition-transform"
+              >
+                Готово
+              </button>
+            </>
+          ) : isFailed ? (
+            <>
+              <div className="text-red-400">
+                ❌ {job?.error || 'Произошла ошибка'}
+              </div>
+              <button
+                onClick={onClose}
+                className="px-6 py-2 bg-white/10 text-white font-medium rounded-xl hover:bg-white/20 transition-colors"
+              >
+                Закрыть
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="text-white/50 text-sm">
+                Не закрывайте это окно до завершения
+              </div>
+              <button
+                onClick={async () => {
+                  if (jobId && confirm('Остановить парсинг?')) {
+                    await fetch(`/api/sync?jobId=${jobId}`, { method: 'DELETE' });
+                    onClose();
+                  }
+                }}
+                className="px-6 py-2 bg-red-500/20 text-red-300 font-medium rounded-xl hover:bg-red-500/30 transition-colors"
+              >
+                🛑 Остановить
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [scrapers, setScrapers] = useState<Scraper[]>([]);
   const [selectedScraper, setSelectedScraper] = useState<Scraper | null>(null);
@@ -177,6 +384,9 @@ export default function AdminPage() {
   const [step, setStep] = useState<'select' | 'configure' | 'fields' | 'confirm'>('select');
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [apifyUsage, setApifyUsage] = useState<ApifyUsage | null>(null);
+  const [showMonitor, setShowMonitor] = useState(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [activeSource, setActiveSource] = useState<string>('');
 
   // Загрузка использования Apify
   const fetchApifyUsage = async () => {
@@ -289,7 +499,10 @@ export default function AdminPage() {
       const data = await res.json();
 
       if (res.ok) {
-        alert(`✅ Парсинг запущен!\n\nJob ID: ${data.jobId}\nПримерное время: ${timeFormatted}\nСтоимость: ~$${cost}`);
+        // Открываем модальное окно мониторинга
+        setActiveJobId(data.jobId);
+        setActiveSource(sourceMap[selectedScraper.id] || 'google');
+        setShowMonitor(true);
         setStep('select');
         setSelectedScraper(null);
         fetchJobs();
@@ -866,6 +1079,18 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+
+      {/* Модальное окно мониторинга */}
+      <ParsingMonitorModal
+        isOpen={showMonitor}
+        onClose={() => {
+          setShowMonitor(false);
+          fetchJobs();
+          fetchApifyUsage();
+        }}
+        jobId={activeJobId}
+        source={activeSource}
+      />
     </main>
   );
 }
