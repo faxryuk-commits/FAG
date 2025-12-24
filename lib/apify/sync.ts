@@ -7,8 +7,10 @@ export type SyncSource = 'yandex' | 'google' | '2gis';
 // ID актеров в Apify
 // Можно использовать полное имя (username/actor-name) или ID
 const ACTOR_IDS = {
-  google: 'compass/crawler-google-places',   // Google Maps - работает отлично
-  yandex: 'johnvc/Scrape-Yandex',            // Яндекс.Карты - специализированный скрейпер
+  // Google Maps - пробуем разные актёры для лучшей пагинации
+  google: 'nwua/google-maps-scraper',        // Альтернативный - лучше с пагинацией
+  // google: 'compass/crawler-google-places',// Старый актёр (лимит 20)
+  yandex: 'johnvc/Scrape-Yandex',            // Яндекс.Карты
   '2gis': 'apify/web-scraper',               // 2ГИС - через универсальный web-scraper
 } as const;
 
@@ -175,66 +177,35 @@ function extractReviews(data: any): any[] {
 function getActorInput(source: SyncSource, searchQuery: string, location: string, maxResults: number) {
   switch (source) {
     case 'google':
-      // compass/crawler-google-places - полная конфигурация с детальными отзывами
+      // Используем nwua/google-maps-scraper - более надёжный для большого количества результатов
       console.log(`[Google Maps] Starting scrape with maxResults: ${maxResults}`);
       return {
-        // Основной поисковый запрос - точный формат для актера
-        searchStringsArray: [`${searchQuery} in ${location}`],
+        // Поисковые запросы
+        queries: [`${searchQuery} ${location}`],
         
-        // ===== КЛЮЧЕВЫЕ ПАРАМЕТРЫ ДЛЯ ПАГИНАЦИИ =====
-        maxCrawledPlacesPerSearch: maxResults,  // Главный параметр - сколько мест на 1 поиск
-        maxCrawledPlaces: maxResults,           // Общий лимит мест
+        // ===== ГЛАВНЫЙ ПАРАМЕТР - КОЛИЧЕСТВО РЕЗУЛЬТАТОВ =====
+        maxResultsPerQuery: maxResults,
         
-        // ВАЖНО: Прокрутка списка результатов
-        maxAutoscrolledPlaces: maxResults,      // Сколько прокручивать в списке
-        
-        // Zoom и область поиска
-        zoom: 12,                               // Уровень зума (12-14 оптимально для города)
-        
-        // Язык и регион
+        // Язык
         language: 'ru',
+        region: 'ru',
         
-        // ИЗОБРАЖЕНИЯ
-        maxImages: 10,
-        placeMinimumStars: '',                  // пустая строка = любой рейтинг
+        // Данные для извлечения
+        scrapeDetails: true,      // Детальная информация
+        scrapeReviews: true,      // Отзывы
+        maxReviews: 20,           // Макс отзывов на место
+        scrapeImages: true,       // Фото
+        maxImages: 10,            // Макс фото
         
-        // ДЕТАЛЬНЫЕ ОТЗЫВЫ - все поля
-        maxReviews: 20,                         // Отзывов на каждое место
-        reviewsSort: 'newest',                  // Сначала новые
-        reviewsTranslation: 'originalAndTranslated',
+        // Дополнительные опции
+        includeWebsiteEmail: true,
+        includePeopleAlsoSearch: false,
         
-        // Информация об авторе отзыва
-        scrapeReviewerName: true,
-        scrapeReviewerId: true,
-        scrapeReviewerUrl: true,
-        scrapeReviewId: true,
-        scrapeReviewUrl: true,
-        scrapeResponseFromOwnerText: true,
+        // Производительность
+        maxConcurrency: 5,
         
-        // Дополнительные детали отзывов
-        reviewsFilterString: '',
-        personalDataOptions: 'full',
-        
-        // Дополнительная информация о месте
-        additionalInfo: true,
-        includeWebResults: false,
-        
-        // ===== ПРОИЗВОДИТЕЛЬНОСТЬ =====
-        maxConcurrency: 10,                     // Параллельных запросов
-        maxPageRetries: 5,                      // Попыток при ошибке
-        skipClosedPlaces: false,
-        
-        // Полные данные
-        allPlacesNoSearch: false,
-        oneReviewPerRow: false,
-        
-        // Глубина сканирования
-        deeperCityScrape: true,                 // Глубокое сканирование города
-        exportPlaceUrls: false,
-        
-        // ===== ДОПОЛНИТЕЛЬНЫЕ ПАРАМЕТРЫ ДЛЯ ОХВАТА =====
-        searchMatching: 'all',                  // Все совпадения, не только точные
-        forceEnglish: false,                    // Не форсировать английский
+        // Прокси (если есть)
+        // proxyConfig: { useApifyProxy: true },
       };
     
     case 'yandex':
@@ -509,6 +480,56 @@ async function saveRestaurant(source: SyncSource, data: any) {
 }
 
 /**
+ * Известные бренды/сети ресторанов для группировки
+ */
+const KNOWN_BRANDS = [
+  'McDonald\'s', 'McDonalds', 'Макдоналдс',
+  'KFC', 'КФС',
+  'Burger King', 'Бургер Кинг',
+  'Subway',
+  'Starbucks', 'Старбакс',
+  'Pizza Hut', 'Пицца Хат',
+  'Domino\'s', 'Доминос',
+  'Теремок',
+  'Шоколадница',
+  'Кофе Хауз',
+  'Coffee House',
+  'Му-Му',
+  'Тануки',
+  'Якитория',
+  'Чайхона №1',
+  'Чайхана',
+  'Евразия',
+  'IL Патио',
+  'Планета Суши',
+  'CZN Burak',
+  'Novikov',
+  'White Rabbit',
+  'Пушкин',
+];
+
+/**
+ * Извлекает бренд из названия ресторана
+ */
+function extractBrand(name: string): string | null {
+  const lowerName = name.toLowerCase();
+  
+  for (const brand of KNOWN_BRANDS) {
+    if (lowerName.includes(brand.toLowerCase())) {
+      return brand;
+    }
+  }
+  
+  // Пытаемся извлечь бренд из названия типа "Brand Name - Location"
+  const parts = name.split(/[-–—|]/);
+  if (parts.length > 1) {
+    return parts[0].trim();
+  }
+  
+  return null;
+}
+
+/**
  * Нормализует данные из разных источников
  */
 function normalizeData(source: SyncSource, data: any) {
@@ -516,11 +537,14 @@ function normalizeData(source: SyncSource, data: any) {
 
   switch (source) {
     case 'google': {
-      // Формат данных от compass/crawler-google-places
-      const name = data.title || data.name || 'Без названия';
-      const sourceId = data.placeId || data.cid || String(Date.now());
+      // Поддержка разных форматов Google Maps актёров
+      const name = data.title || data.name || data.searchString || 'Без названия';
+      const sourceId = data.placeId || data.place_id || data.cid || data.id || String(Date.now());
       
-      // Извлекаем фото
+      // Извлекаем бренд
+      const brand = extractBrand(name);
+      
+      // Извлекаем фото (разные форматы)
       let images: string[] = [];
       if (data.imageUrls && Array.isArray(data.imageUrls)) {
         images = data.imageUrls;
@@ -528,37 +552,60 @@ function normalizeData(source: SyncSource, data: any) {
         images = data.images.map((img: any) => typeof img === 'string' ? img : img.url || img.imageUrl);
       } else if (data.imageUrl) {
         images = [data.imageUrl];
+      } else if (data.thumbnail) {
+        images = [data.thumbnail];
+      } else if (data.photos && Array.isArray(data.photos)) {
+        images = data.photos.map((p: any) => typeof p === 'string' ? p : p.url);
       }
       
-      // Извлекаем категории
+      // Извлекаем категории (разные форматы)
       let cuisine: string[] = [];
       if (data.categories && Array.isArray(data.categories)) {
         cuisine = data.categories;
       } else if (data.categoryName) {
         cuisine = [data.categoryName];
       } else if (data.category) {
-        cuisine = [data.category];
+        cuisine = Array.isArray(data.category) ? data.category : [data.category];
+      } else if (data.type) {
+        cuisine = Array.isArray(data.type) ? data.type : [data.type];
+      }
+      
+      // Извлекаем координаты (разные форматы)
+      let lat = 0, lng = 0;
+      if (data.location?.lat) {
+        lat = data.location.lat;
+        lng = data.location.lng;
+      } else if (data.coordinates?.latitude) {
+        lat = data.coordinates.latitude;
+        lng = data.coordinates.longitude;
+      } else if (data.gps_coordinates?.latitude) {
+        lat = data.gps_coordinates.latitude;
+        lng = data.gps_coordinates.longitude;
+      } else {
+        lat = data.latitude || data.lat || 0;
+        lng = data.longitude || data.lng || 0;
       }
       
       return {
         ...base,
         name,
+        brand, // Новое поле для группировки
         slug: generateSlug(name, sourceId),
-        address: data.address || data.street || data.vicinity || '',
-        city: data.city || data.neighborhood || extractCity(data.address || ''),
-        latitude: data.location?.lat || data.latitude || data.lat || 0,
-        longitude: data.location?.lng || data.longitude || data.lng || 0,
-        phone: data.phone || data.phoneUnformatted || data.internationalPhoneNumber || null,
+        address: data.address || data.street || data.vicinity || data.formatted_address || '',
+        city: data.city || data.neighborhood || extractCity(data.address || data.formatted_address || ''),
+        latitude: lat,
+        longitude: lng,
+        phone: data.phone || data.phoneUnformatted || data.phone_number || data.internationalPhoneNumber || null,
         website: data.website || data.url || null,
-        rating: data.totalScore || data.rating || data.stars || null,
-        ratingCount: data.reviewsCount || data.userRatingsTotal || data.reviews?.length || 0,
-        priceRange: data.price || data.priceLevel ? '$'.repeat(data.priceLevel) : null,
+        rating: data.totalScore || data.rating || data.stars || data.overall_rating || null,
+        ratingCount: data.reviewsCount || data.userRatingsTotal || data.reviews_count || data.reviews?.length || 0,
+        priceRange: data.price || (data.priceLevel ? '$'.repeat(data.priceLevel) : null) || data.price_level || null,
         sourceId,
-        sourceUrl: data.url || data.googleMapsUrl || `https://www.google.com/maps/place/?q=place_id:${sourceId}`,
+        sourceUrl: data.url || data.link || data.googleMapsUrl || data.google_maps_url || `https://www.google.com/maps/place/?q=place_id:${sourceId}`,
         images: images.filter(Boolean).slice(0, 10),
         cuisine: cuisine.filter(Boolean),
         // Время работы будет обрабатываться отдельно
-        _openingHours: data.openingHours || data.workingHours || data.hours || null,
+        _openingHours: data.openingHours || data.workingHours || data.hours || data.opening_hours || null,
         // Отзывы - проверяем все возможные поля
         _reviews: extractReviews(data),
       };

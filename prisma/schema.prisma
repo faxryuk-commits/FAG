@@ -48,6 +48,9 @@ model Restaurant {
   sourceId    String   // ID из источника
   sourceUrl   String?  // URL источника
   
+  // Бренд/сеть для группировки
+  brand       String?  // McDonald's, KFC, etc.
+  
   // Статус
   isActive    Boolean  @default(true)
   isVerified  Boolean  @default(false)

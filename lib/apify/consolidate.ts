@@ -661,7 +661,7 @@ export async function saveWithConsolidation(
   options?: { incremental?: boolean }
 ): Promise<{ action: SaveAction; id: string; mergedWith?: string }> {
   // Извлекаем временные поля
-  const { name, latitude, longitude, sourceId, _openingHours, _reviews, cuisine: rawCuisine, ...rest } = data;
+  const { name, latitude, longitude, sourceId, _openingHours, _reviews, cuisine: rawCuisine, brand, ...rest } = data;
   
   if (!name || !latitude || !longitude) {
     throw new Error('Missing required fields for consolidation');
@@ -669,6 +669,9 @@ export async function saveWithConsolidation(
 
   // Нормализуем категории кухни
   const cuisine = normalizeCuisine(rawCuisine || [], name);
+  
+  // Сохраняем бренд если есть
+  const restaurantBrand = brand || null;
 
   // Инкрементальная проверка - пропускаем если данные не изменились
   if (options?.incremental) {
@@ -797,6 +800,7 @@ export async function saveWithConsolidation(
       latitude,
       longitude,
       cuisine,
+      brand: restaurantBrand, // Бренд/сеть для группировки
       source, 
       sourceId,
       // Время работы
