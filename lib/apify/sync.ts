@@ -69,7 +69,7 @@ export async function startSync(options: SyncOptions) {
 export async function getSyncResults(runId: string) {
   const run = await apifyClient.run(runId).get();
   
-  if (run.status === 'SUCCEEDED') {
+  if (run?.status === 'SUCCEEDED' && run.defaultDatasetId) {
     const dataset = await apifyClient.dataset(run.defaultDatasetId).listItems();
     return dataset.items;
   }
