@@ -55,11 +55,10 @@ export default function RestaurantPage() {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'info' | 'menu' | 'reviews'>('info');
+  const [isFavorite, setIsFavorite] = useState(false);
 
   useEffect(() => {
-    if (slug) {
-      fetchRestaurant();
-    }
+    if (slug) fetchRestaurant();
   }, [slug]);
 
   const fetchRestaurant = async () => {
@@ -78,10 +77,10 @@ export default function RestaurantPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-orange-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-6xl animate-bounce">🍽️</div>
-          <p className="mt-4 text-gray-500">Загрузка...</p>
+          <div className="text-7xl animate-bounce">🍽️</div>
+          <p className="mt-4 text-gray-500 font-medium">Загружаем вкусности...</p>
         </div>
       </div>
     );
@@ -89,12 +88,16 @@ export default function RestaurantPage() {
 
   if (!restaurant) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-orange-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-6xl mb-4">😕</div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Ресторан не найден</h1>
-          <Link href="/" className="text-red-600 hover:underline">
-            ← Вернуться на главную
+          <div className="text-7xl mb-4">🤔</div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Не нашли это место</h1>
+          <p className="text-gray-500 mb-6">Возможно, оно переехало или закрылось</p>
+          <Link 
+            href="/" 
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl font-medium"
+          >
+            ← Вернуться к поиску
           </Link>
         </div>
       </div>
@@ -102,9 +105,26 @@ export default function RestaurantPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      {/* Hero */}
-      <header className="relative h-80 bg-gradient-to-br from-red-500 to-orange-400">
+    <main className="min-h-screen bg-gradient-to-b from-orange-50 to-white">
+      {/* Header */}
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-orange-100">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2 text-gray-600 hover:text-orange-600 transition-colors">
+            <span>←</span>
+            <span className="font-medium">Назад</span>
+          </Link>
+          
+          <button 
+            onClick={() => setIsFavorite(!isFavorite)}
+            className={`p-2 rounded-full transition-all ${isFavorite ? 'text-red-500' : 'text-gray-400 hover:text-red-400'}`}
+          >
+            <span className="text-2xl">{isFavorite ? '❤️' : '🤍'}</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Hero Image */}
+      <section className="relative h-72 md:h-96 bg-gradient-to-br from-orange-200 to-amber-100">
         {restaurant.images?.[0] ? (
           <img
             src={restaurant.images[0]}
@@ -113,241 +133,265 @@ export default function RestaurantPage() {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <span className="text-9xl opacity-50">🍽️</span>
+            <span className="text-9xl opacity-30">🍽️</span>
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
         
-        {/* Back Button */}
-        <Link
-          href="/"
-          className="absolute top-6 left-6 bg-white/20 backdrop-blur-sm text-white px-4 py-2 rounded-full hover:bg-white/30 transition-colors"
-        >
-          ← Назад
-        </Link>
+        {/* Rating overlay */}
+        {restaurant.rating && (
+          <div className="absolute bottom-6 left-6 bg-white px-4 py-2 rounded-2xl shadow-xl flex items-center gap-2">
+            <span className="text-amber-500 text-xl">★</span>
+            <span className="text-2xl font-bold text-gray-800">{restaurant.rating.toFixed(1)}</span>
+            <span className="text-gray-400">({restaurant.ratingCount} отзывов)</span>
+          </div>
+        )}
+      </section>
 
-        {/* Restaurant Info */}
-        <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
-          <div className="max-w-5xl mx-auto">
-            <div className="flex items-center gap-3 mb-2">
-              {restaurant.cuisine?.slice(0, 3).map((c, i) => (
-                <span key={i} className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-full text-sm">
-                  {c}
-                </span>
-              ))}
-            </div>
-            <h1 className="text-4xl font-bold mb-2">{restaurant.name}</h1>
-            <div className="flex items-center gap-6 text-white/90">
-              <span className="flex items-center gap-1">
-                📍 {restaurant.address}
+      {/* Main Content */}
+      <div className="max-w-5xl mx-auto px-4 -mt-8 relative z-10">
+        {/* Info Card */}
+        <div className="bg-white rounded-3xl shadow-xl p-6 md:p-8 mb-6">
+          {/* Tags */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {restaurant.cuisine?.map((c, i) => (
+              <span
+                key={i}
+                className="px-3 py-1 bg-orange-100 text-orange-700 text-sm rounded-full font-medium"
+              >
+                {c}
               </span>
-              {restaurant.rating && (
-                <span className="flex items-center gap-1">
-                  <span className="text-amber-400">★</span>
-                  {restaurant.rating.toFixed(1)} ({restaurant.ratingCount} отзывов)
-                </span>
-              )}
-              {restaurant.priceRange && (
-                <span>{restaurant.priceRange}</span>
-              )}
-            </div>
+            ))}
+            {restaurant.priceRange && (
+              <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full font-medium">
+                {restaurant.priceRange}
+              </span>
+            )}
+          </div>
+          
+          <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-3">
+            {restaurant.name}
+          </h1>
+          
+          <p className="text-gray-500 flex items-center gap-2 mb-6">
+            <span>📍</span>
+            {restaurant.address}
+          </p>
+          
+          {/* Quick Actions */}
+          <div className="flex flex-wrap gap-3">
+            {restaurant.phone && (
+              <a
+                href={`tel:${restaurant.phone}`}
+                className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-medium hover:shadow-lg transition-all"
+              >
+                <span>📞</span>
+                Позвонить
+              </a>
+            )}
+            {restaurant.sourceUrl && (
+              <a
+                href={restaurant.sourceUrl}
+                target="_blank"
+                className="flex items-center gap-2 px-5 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-all"
+              >
+                <span>🗺️</span>
+                На карте
+              </a>
+            )}
+            {restaurant.website && (
+              <a
+                href={restaurant.website}
+                target="_blank"
+                className="flex items-center gap-2 px-5 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-all"
+              >
+                <span>🌐</span>
+                Сайт
+              </a>
+            )}
+            <button className="flex items-center gap-2 px-5 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-all">
+              <span>📤</span>
+              Поделиться
+            </button>
           </div>
         </div>
-      </header>
 
-      {/* Content */}
-      <div className="max-w-5xl mx-auto px-6 py-8">
         {/* Tabs */}
-        <div className="flex gap-2 mb-8 bg-white rounded-xl p-2 shadow-sm">
+        <div className="flex gap-2 mb-6 bg-white rounded-2xl p-2 shadow-sm">
           {(['info', 'menu', 'reviews'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-3 px-4 rounded-lg font-medium transition-colors ${
+              className={`flex-1 py-3 px-4 rounded-xl font-medium transition-all ${
                 activeTab === tab
-                  ? 'bg-red-600 text-white'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-md'
+                  : 'text-gray-600 hover:bg-orange-50'
               }`}
             >
-              {tab === 'info' && '📋 Информация'}
+              {tab === 'info' && '📋 Инфо'}
               {tab === 'menu' && '🍴 Меню'}
-              {tab === 'reviews' && `⭐ Отзывы (${restaurant.reviews?.length || 0})`}
+              {tab === 'reviews' && `💬 Отзывы (${restaurant.reviews?.length || 0})`}
             </button>
           ))}
         </div>
 
-        {/* Info Tab */}
-        {activeTab === 'info' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Contacts */}
-            <div className="bg-white rounded-2xl shadow-sm p-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">📞 Контакты</h2>
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 text-gray-600">
-                  <span className="text-2xl">📍</span>
-                  <div>
-                    <div className="text-sm text-gray-500">Адрес</div>
-                    <div className="font-medium">{restaurant.address}</div>
+        {/* Tab Content */}
+        <div className="pb-12">
+          {/* Info Tab */}
+          {activeTab === 'info' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Contact */}
+              <div className="bg-white rounded-3xl shadow-sm p-6">
+                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span>📞</span> Контакты
+                </h2>
+                <div className="space-y-4">
+                  {restaurant.phone && (
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600">📱</div>
+                      <div>
+                        <div className="text-sm text-gray-400">Телефон</div>
+                        <a href={`tel:${restaurant.phone}`} className="font-medium text-gray-800 hover:text-orange-600">
+                          {restaurant.phone}
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                  {restaurant.website && (
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">🌐</div>
+                      <div>
+                        <div className="text-sm text-gray-400">Сайт</div>
+                        <a href={restaurant.website} target="_blank" className="font-medium text-gray-800 hover:text-orange-600 truncate block max-w-[200px]">
+                          {restaurant.website}
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-600">📍</div>
+                    <div>
+                      <div className="text-sm text-gray-400">Адрес</div>
+                      <div className="font-medium text-gray-800">{restaurant.address}</div>
+                    </div>
                   </div>
                 </div>
-                {restaurant.phone && (
-                  <div className="flex items-center gap-3 text-gray-600">
-                    <span className="text-2xl">📱</span>
-                    <div>
-                      <div className="text-sm text-gray-500">Телефон</div>
-                      <a href={`tel:${restaurant.phone}`} className="font-medium text-red-600 hover:underline">
-                        {restaurant.phone}
-                      </a>
-                    </div>
+              </div>
+
+              {/* Working Hours */}
+              <div className="bg-white rounded-3xl shadow-sm p-6">
+                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span>🕐</span> Время работы
+                </h2>
+                {restaurant.workingHours?.length > 0 ? (
+                  <div className="space-y-2">
+                    {restaurant.workingHours
+                      .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+                      .map((h, i) => {
+                        const isToday = new Date().getDay() === h.dayOfWeek;
+                        return (
+                          <div
+                            key={i}
+                            className={`flex justify-between py-2.5 px-4 rounded-xl ${
+                              isToday ? 'bg-green-50 border border-green-200' : 'hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className={`font-medium ${isToday ? 'text-green-700' : 'text-gray-600'}`}>
+                              {DAYS[h.dayOfWeek]}
+                              {isToday && <span className="ml-2 text-xs">сегодня</span>}
+                            </span>
+                            <span className={h.isClosed ? 'text-red-500' : 'text-gray-800'}>
+                              {h.isClosed ? 'Закрыто' : `${h.openTime} – ${h.closeTime}`}
+                            </span>
+                          </div>
+                        );
+                      })}
                   </div>
-                )}
-                {restaurant.website && (
-                  <div className="flex items-center gap-3 text-gray-600">
-                    <span className="text-2xl">🌐</span>
-                    <div>
-                      <div className="text-sm text-gray-500">Сайт</div>
-                      <a href={restaurant.website} target="_blank" className="font-medium text-red-600 hover:underline">
-                        {restaurant.website}
-                      </a>
-                    </div>
-                  </div>
-                )}
-                {restaurant.sourceUrl && (
-                  <a
-                    href={restaurant.sourceUrl}
-                    target="_blank"
-                    className="inline-block mt-4 px-4 py-2 bg-gray-100 rounded-lg text-gray-700 hover:bg-gray-200 transition-colors"
-                  >
-                    Открыть в {restaurant.source === 'google' ? 'Google Maps' : restaurant.source} →
-                  </a>
+                ) : (
+                  <p className="text-gray-400 text-center py-4">Информация недоступна</p>
                 )}
               </div>
             </div>
+          )}
 
-            {/* Working Hours */}
-            <div className="bg-white rounded-2xl shadow-sm p-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">🕐 Время работы</h2>
-              {restaurant.workingHours?.length > 0 ? (
-                <div className="space-y-2">
-                  {restaurant.workingHours
-                    .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
-                    .map((h, i) => (
-                      <div
-                        key={i}
-                        className={`flex justify-between py-2 px-3 rounded-lg ${
-                          new Date().getDay() === h.dayOfWeek ? 'bg-green-50' : ''
-                        }`}
-                      >
-                        <span className="font-medium">{DAYS[h.dayOfWeek]}</span>
-                        <span className={h.isClosed ? 'text-red-500' : 'text-gray-600'}>
-                          {h.isClosed ? 'Закрыто' : `${h.openTime} - ${h.closeTime}`}
-                        </span>
+          {/* Menu Tab */}
+          {activeTab === 'menu' && (
+            <div className="bg-white rounded-3xl shadow-sm p-6">
+              {restaurant.menuItems?.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {restaurant.menuItems.map((item) => (
+                    <div key={item.id} className="flex gap-4 p-4 rounded-2xl bg-orange-50 hover:bg-orange-100 transition-colors">
+                      {item.image ? (
+                        <img src={item.image} alt={item.name} className="w-20 h-20 rounded-xl object-cover" />
+                      ) : (
+                        <div className="w-20 h-20 rounded-xl bg-orange-200 flex items-center justify-center text-3xl">🍽️</div>
+                      )}
+                      <div className="flex-1">
+                        <h3 className="font-bold text-gray-800">{item.name}</h3>
+                        {item.description && (
+                          <p className="text-sm text-gray-500 mt-1 line-clamp-2">{item.description}</p>
+                        )}
+                        {item.price && (
+                          <div className="mt-2 text-lg font-bold text-orange-600">{item.price} ₽</div>
+                        )}
                       </div>
-                    ))}
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <p className="text-gray-500">Информация о времени работы недоступна</p>
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">📋</div>
+                  <p className="text-gray-400">Меню пока не загружено</p>
+                </div>
               )}
             </div>
+          )}
 
-            {/* Map Placeholder */}
-            {restaurant.latitude && restaurant.longitude && (
-              <div className="md:col-span-2 bg-white rounded-2xl shadow-sm p-6">
-                <h2 className="text-xl font-bold text-gray-800 mb-4">🗺️ На карте</h2>
-                <div className="h-64 bg-gray-100 rounded-xl flex items-center justify-center">
-                  <a
-                    href={`https://www.google.com/maps?q=${restaurant.latitude},${restaurant.longitude}`}
-                    target="_blank"
-                    className="text-red-600 hover:underline"
-                  >
-                    Открыть в Google Maps →
-                  </a>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Menu Tab */}
-        {activeTab === 'menu' && (
-          <div className="bg-white rounded-2xl shadow-sm p-6">
-            {restaurant.menuItems?.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {restaurant.menuItems.map((item) => (
-                  <div key={item.id} className="flex gap-4 p-4 border border-gray-100 rounded-xl">
-                    {item.image ? (
-                      <img src={item.image} alt={item.name} className="w-24 h-24 rounded-lg object-cover" />
-                    ) : (
-                      <div className="w-24 h-24 rounded-lg bg-gray-100 flex items-center justify-center text-3xl">
-                        🍽️
+          {/* Reviews Tab */}
+          {activeTab === 'reviews' && (
+            <div className="space-y-4">
+              {restaurant.reviews?.length > 0 ? (
+                restaurant.reviews.map((review) => (
+                  <div key={review.id} className="bg-white rounded-3xl shadow-sm p-6">
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-red-400 rounded-full flex items-center justify-center text-white text-xl font-bold">
+                        {review.author[0]?.toUpperCase()}
                       </div>
-                    )}
-                    <div className="flex-1">
-                      <h3 className="font-bold text-gray-800">{item.name}</h3>
-                      {item.description && (
-                        <p className="text-sm text-gray-500 mt-1">{item.description}</p>
-                      )}
-                      {item.price && (
-                        <div className="mt-2 text-lg font-bold text-red-600">
-                          {item.price} ₽
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-gray-500">
-                <div className="text-5xl mb-4">🍴</div>
-                <p>Меню пока недоступно</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Reviews Tab */}
-        {activeTab === 'reviews' && (
-          <div className="bg-white rounded-2xl shadow-sm p-6">
-            {restaurant.reviews?.length > 0 ? (
-              <div className="space-y-4">
-                {restaurant.reviews.map((review) => (
-                  <div key={review.id} className="p-4 border border-gray-100 rounded-xl">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-red-400 to-orange-400 rounded-full flex items-center justify-center text-white font-bold">
-                          {review.author[0]?.toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="font-medium text-gray-800">{review.author}</div>
-                          <div className="text-sm text-gray-500">
-                            {new Date(review.date).toLocaleDateString('ru-RU')}
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <h4 className="font-bold text-gray-800">{review.author}</h4>
+                            <p className="text-sm text-gray-400">
+                              {new Date(review.date).toLocaleDateString('ru-RU', { 
+                                day: 'numeric', 
+                                month: 'long', 
+                                year: 'numeric' 
+                              })}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 bg-amber-100 px-3 py-1 rounded-full">
+                            <span className="text-amber-500">★</span>
+                            <span className="font-bold text-amber-700">{review.rating}</span>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1 text-amber-500">
-                        {[...Array(5)].map((_, i) => (
-                          <span key={i} className={i < review.rating ? '' : 'opacity-30'}>
-                            ★
-                          </span>
-                        ))}
+                        {review.text && (
+                          <p className="text-gray-600 leading-relaxed">{review.text}</p>
+                        )}
                       </div>
                     </div>
-                    {review.text && (
-                      <p className="text-gray-600 mt-3">{review.text}</p>
-                    )}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-gray-500">
-                <div className="text-5xl mb-4">💬</div>
-                <p>Отзывов пока нет</p>
-              </div>
-            )}
-          </div>
-        )}
+                ))
+              ) : (
+                <div className="bg-white rounded-3xl shadow-sm p-12 text-center">
+                  <div className="text-6xl mb-4">💬</div>
+                  <p className="text-gray-400">Пока нет отзывов</p>
+                  <p className="text-sm text-gray-300 mt-1">Будьте первым!</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );
 }
-

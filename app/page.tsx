@@ -23,31 +23,24 @@ interface PaginationInfo {
   pages: number;
 }
 
-// Популярные категории/теги
+// Категории с эмодзи
 const CUISINE_TAGS = [
-  { id: 'all', label: 'Все', icon: '🍽️' },
-  { id: 'restaurant', label: 'Рестораны', icon: '🏛️' },
-  { id: 'cafe', label: 'Кафе', icon: '☕' },
-  { id: 'fast_food', label: 'Фастфуд', icon: '🍔' },
-  { id: 'sushi', label: 'Суши', icon: '🍣' },
-  { id: 'pizza', label: 'Пицца', icon: '🍕' },
-  { id: 'asian', label: 'Азиатская', icon: '🥡' },
-  { id: 'european', label: 'Европейская', icon: '🥘' },
-  { id: 'bar', label: 'Бары', icon: '🍺' },
+  { id: 'all', label: 'Все', icon: '🍽️', color: 'from-orange-500 to-red-500' },
+  { id: 'restaurant', label: 'Рестораны', icon: '🏛️', color: 'from-amber-500 to-orange-500' },
+  { id: 'cafe', label: 'Кафе', icon: '☕', color: 'from-yellow-500 to-amber-500' },
+  { id: 'fast_food', label: 'Фастфуд', icon: '🍔', color: 'from-red-500 to-pink-500' },
+  { id: 'sushi', label: 'Суши', icon: '🍣', color: 'from-pink-500 to-rose-500' },
+  { id: 'pizza', label: 'Пицца', icon: '🍕', color: 'from-orange-500 to-amber-500' },
+  { id: 'asian', label: 'Азиатская', icon: '🥡', color: 'from-red-500 to-orange-500' },
+  { id: 'european', label: 'Европейская', icon: '🥘', color: 'from-amber-500 to-yellow-500' },
+  { id: 'dessert', label: 'Десерты', icon: '🍰', color: 'from-pink-400 to-rose-400' },
 ];
 
 const RATING_FILTERS = [
   { id: 'all', label: 'Любой', min: 0 },
-  { id: '4.5+', label: '4.5+', min: 4.5 },
-  { id: '4.0+', label: '4.0+', min: 4.0 },
-  { id: '3.5+', label: '3.5+', min: 3.5 },
-];
-
-const PRICE_FILTERS = [
-  { id: 'all', label: 'Любая', value: '' },
-  { id: '$', label: '$', value: '$' },
-  { id: '$$', label: '$$', value: '$$' },
-  { id: '$$$', label: '$$$', value: '$$$' },
+  { id: '4.5+', label: '4.5+ ⭐', min: 4.5 },
+  { id: '4.0+', label: '4.0+ ⭐', min: 4.0 },
+  { id: '3.5+', label: '3.5+ ⭐', min: 3.5 },
 ];
 
 export default function Home() {
@@ -55,17 +48,15 @@ export default function Home() {
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Фильтры
   const [search, setSearch] = useState('');
   const [city, setCity] = useState('');
   const [selectedCuisine, setSelectedCuisine] = useState('all');
   const [selectedRating, setSelectedRating] = useState('all');
-  const [selectedPrice, setSelectedPrice] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     fetchRestaurants();
-  }, [selectedCuisine, selectedRating, selectedPrice]);
+  }, [selectedCuisine, selectedRating]);
 
   const fetchRestaurants = async (page = 1) => {
     setLoading(true);
@@ -74,7 +65,6 @@ export default function Home() {
       if (search) params.set('search', search);
       if (city) params.set('city', city);
       
-      // Применяем фильтр по рейтингу
       const ratingFilter = RATING_FILTERS.find(r => r.id === selectedRating);
       if (ratingFilter && ratingFilter.min > 0) {
         params.set('minRating', String(ratingFilter.min));
@@ -88,16 +78,10 @@ export default function Home() {
       
       let filtered = data.restaurants || [];
       
-      // Фильтр по кухне (клиентская сторона)
       if (selectedCuisine !== 'all') {
         filtered = filtered.filter((r: Restaurant) => 
           r.cuisine?.some(c => c.toLowerCase().includes(selectedCuisine.toLowerCase()))
         );
-      }
-      
-      // Фильтр по цене
-      if (selectedPrice !== 'all') {
-        filtered = filtered.filter((r: Restaurant) => r.priceRange === selectedPrice);
       }
       
       setRestaurants(filtered);
@@ -119,219 +103,185 @@ export default function Home() {
     setCity('');
     setSelectedCuisine('all');
     setSelectedRating('all');
-    setSelectedPrice('all');
   };
 
-  const activeFiltersCount = [
-    selectedCuisine !== 'all',
-    selectedRating !== 'all',
-    selectedPrice !== 'all',
-    search !== '',
-    city !== '',
-  ].filter(Boolean).length;
-
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Hero Section */}
-      <header className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-purple-600/20 to-transparent"></div>
+    <main className="min-h-screen bg-gradient-to-b from-orange-50 via-white to-amber-50">
+      {/* Header */}
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-orange-100">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="text-3xl">🍽️</span>
+            <span className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-500 bg-clip-text text-transparent">
+              FoodGuide
+            </span>
+          </Link>
+          
+          <div className="flex items-center gap-3">
+            <Link 
+              href="/admin" 
+              className="px-4 py-2 text-sm text-gray-600 hover:text-orange-600 transition-colors"
+            >
+              Админ
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        {/* Background decoration */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-orange-200/50 to-transparent rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-amber-200/50 to-transparent rounded-full blur-3xl"></div>
         
-        <div className="relative max-w-7xl mx-auto px-6 py-12 md:py-20">
-          <div className="text-center">
-            <h1 className="text-4xl md:text-6xl font-bold mb-4 tracking-tight text-white">
-              🍽️ Справочник ресторанов
+        <div className="relative max-w-7xl mx-auto px-4 py-12 md:py-16">
+          <div className="text-center max-w-3xl mx-auto">
+            <h1 className="text-4xl md:text-6xl font-extrabold mb-4">
+              <span className="bg-gradient-to-r from-orange-600 via-red-500 to-pink-500 bg-clip-text text-transparent">
+                Найди своё
+              </span>
+              <br />
+              <span className="text-gray-800">идеальное место</span>
             </h1>
-            <p className="text-xl md:text-2xl text-white/70 mb-8 max-w-2xl mx-auto">
-              Найдите идеальное место для любого случая
+            <p className="text-lg text-gray-500 mb-8">
+              {pagination?.total || 0}+ ресторанов, кафе и баров в твоём городе
             </p>
             
-            {/* Search Form */}
-            <form onSubmit={handleSearch} className="max-w-3xl mx-auto mb-8">
-              <div className="flex flex-col md:flex-row gap-3">
-                <div className="flex-1 relative">
+            {/* Search */}
+            <form onSubmit={handleSearch} className="relative max-w-2xl mx-auto">
+              <div className="flex bg-white rounded-2xl shadow-xl shadow-orange-100 border border-orange-100 overflow-hidden">
+                <div className="flex-1 flex items-center px-5">
+                  <span className="text-gray-400 text-xl">🔍</span>
                   <input
                     type="text"
-                    placeholder="Поиск ресторанов..."
+                    placeholder="Найти ресторан, кухню или блюдо..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full px-6 py-4 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 text-white placeholder-white/50 text-lg focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/50"
+                    className="w-full px-4 py-4 text-gray-700 placeholder-gray-400 focus:outline-none"
                   />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50">🔍</span>
                 </div>
-                <input
-                  type="text"
-                  placeholder="Город"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  className="md:w-40 px-6 py-4 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 text-white placeholder-white/50 text-lg focus:outline-none focus:border-purple-500"
-                />
+                <div className="flex items-center border-l border-orange-100 px-4">
+                  <span className="text-gray-400">📍</span>
+                  <input
+                    type="text"
+                    placeholder="Город"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    className="w-28 px-2 py-4 text-gray-700 placeholder-gray-400 focus:outline-none"
+                  />
+                </div>
                 <button
                   type="submit"
-                  className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-2xl hover:opacity-90 transition-all"
+                  className="px-8 py-4 bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold hover:from-orange-600 hover:to-red-600 transition-all"
                 >
                   Найти
                 </button>
               </div>
             </form>
-
-            {/* Quick Stats */}
-            <div className="flex justify-center gap-8 text-white/60 text-sm">
-              <span>📍 {pagination?.total || 0} мест</span>
-              <span>⭐ Средний рейтинг 4.5</span>
-              <span>🔄 Обновлено сегодня</span>
-            </div>
           </div>
         </div>
-      </header>
+      </section>
 
-      {/* Cuisine Tags */}
-      <section className="max-w-7xl mx-auto px-6 py-6">
-        <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
+      {/* Category Tags */}
+      <section className="max-w-7xl mx-auto px-4 py-6">
+        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
           {CUISINE_TAGS.map(tag => (
             <button
               key={tag.id}
               onClick={() => setSelectedCuisine(tag.id)}
-              className={`flex items-center gap-2 px-5 py-3 rounded-full whitespace-nowrap transition-all ${
+              className={`flex items-center gap-2 px-5 py-3 rounded-2xl whitespace-nowrap transition-all font-medium ${
                 selectedCuisine === tag.id
-                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/30'
-                  : 'bg-white/5 text-white/70 hover:bg-white/10 border border-white/10'
+                  ? `bg-gradient-to-r ${tag.color} text-white shadow-lg`
+                  : 'bg-white text-gray-700 hover:bg-orange-50 border border-gray-100 shadow-sm'
               }`}
             >
-              <span>{tag.icon}</span>
-              <span className="font-medium">{tag.label}</span>
+              <span className="text-xl">{tag.icon}</span>
+              <span>{tag.label}</span>
             </button>
           ))}
         </div>
       </section>
 
-      {/* Filters Panel */}
-      <section className="max-w-7xl mx-auto px-6 mb-6">
-        <div className="flex items-center justify-between">
+      {/* Filters */}
+      <section className="max-w-7xl mx-auto px-4 mb-6">
+        <div className="flex items-center gap-4">
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 transition-colors"
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all ${
+              showFilters 
+                ? 'bg-orange-500 text-white' 
+                : 'bg-white text-gray-600 border border-gray-200 hover:border-orange-300'
+            }`}
           >
             <span>⚙️</span>
-            <span>Фильтры</span>
-            {activeFiltersCount > 0 && (
-              <span className="px-2 py-0.5 bg-purple-600 text-white text-xs rounded-full">
-                {activeFiltersCount}
-              </span>
-            )}
+            <span className="font-medium">Фильтры</span>
           </button>
           
-          {activeFiltersCount > 0 && (
+          {/* Rating Quick Filter */}
+          <div className="flex gap-2">
+            {RATING_FILTERS.slice(1).map(filter => (
+              <button
+                key={filter.id}
+                onClick={() => setSelectedRating(selectedRating === filter.id ? 'all' : filter.id)}
+                className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  selectedRating === filter.id
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-amber-300'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+          
+          {(selectedCuisine !== 'all' || selectedRating !== 'all' || search) && (
             <button
               onClick={clearFilters}
-              className="text-sm text-white/50 hover:text-white transition-colors"
+              className="ml-auto text-sm text-orange-600 hover:text-orange-700 font-medium"
             >
-              Сбросить все
+              ✕ Сбросить
             </button>
           )}
         </div>
-
-        {/* Expandable Filters */}
-        {showFilters && (
-          <div className="mt-4 p-6 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Rating Filter */}
-              <div>
-                <label className="block text-sm font-medium text-white/60 mb-3">⭐ Рейтинг</label>
-                <div className="flex flex-wrap gap-2">
-                  {RATING_FILTERS.map(filter => (
-                    <button
-                      key={filter.id}
-                      onClick={() => setSelectedRating(filter.id)}
-                      className={`px-4 py-2 rounded-lg text-sm transition-all ${
-                        selectedRating === filter.id
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-white/10 text-white/70 hover:bg-white/20'
-                      }`}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Price Filter */}
-              <div>
-                <label className="block text-sm font-medium text-white/60 mb-3">💰 Цена</label>
-                <div className="flex flex-wrap gap-2">
-                  {PRICE_FILTERS.map(filter => (
-                    <button
-                      key={filter.id}
-                      onClick={() => setSelectedPrice(filter.id)}
-                      className={`px-4 py-2 rounded-lg text-sm transition-all ${
-                        selectedPrice === filter.id
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-white/10 text-white/70 hover:bg-white/20'
-                      }`}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Sort */}
-              <div>
-                <label className="block text-sm font-medium text-white/60 mb-3">📊 Сортировка</label>
-                <select className="w-full px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white focus:outline-none focus:border-purple-500">
-                  <option value="rating">По рейтингу</option>
-                  <option value="reviews">По отзывам</option>
-                  <option value="name">По названию</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
       </section>
 
-      {/* Restaurant List */}
-      <section className="max-w-7xl mx-auto px-6 pb-12">
+      {/* Restaurant Grid */}
+      <section className="max-w-7xl mx-auto px-4 pb-16">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-white">
+          <h2 className="text-2xl font-bold text-gray-800">
             {selectedCuisine !== 'all' 
-              ? CUISINE_TAGS.find(t => t.id === selectedCuisine)?.label 
-              : 'Все заведения'}
+              ? `${CUISINE_TAGS.find(t => t.id === selectedCuisine)?.icon} ${CUISINE_TAGS.find(t => t.id === selectedCuisine)?.label}`
+              : '🔥 Популярное рядом'}
           </h2>
-          <span className="text-white/50">{restaurants.length} найдено</span>
+          <span className="text-gray-400">{restaurants.length} мест</span>
         </div>
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-white/5 rounded-3xl overflow-hidden animate-pulse">
-                <div className="h-48 bg-white/10"></div>
-                <div className="p-6">
-                  <div className="h-6 bg-white/10 rounded mb-3"></div>
-                  <div className="h-4 bg-white/10 rounded w-2/3"></div>
+              <div key={i} className="bg-white rounded-3xl overflow-hidden shadow-sm animate-pulse">
+                <div className="h-48 bg-gradient-to-r from-orange-100 to-amber-100"></div>
+                <div className="p-5">
+                  <div className="h-5 bg-gray-100 rounded-full mb-3 w-3/4"></div>
+                  <div className="h-4 bg-gray-100 rounded-full w-1/2"></div>
                 </div>
               </div>
             ))}
           </div>
         ) : restaurants.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="text-6xl mb-4">🍴</div>
-            <h3 className="text-2xl font-bold text-white mb-2">Ничего не найдено</h3>
-            <p className="text-white/50 mb-6">
-              Попробуйте изменить фильтры или запустите парсинг
+          <div className="text-center py-20">
+            <div className="text-8xl mb-6">🍳</div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">Пока пусто...</h3>
+            <p className="text-gray-500 mb-8 max-w-md mx-auto">
+              Здесь скоро появятся вкусные места! Запустите парсинг в админ-панели.
             </p>
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={clearFilters}
-                className="px-6 py-3 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors"
-              >
-                Сбросить фильтры
-              </button>
-              <Link
-                href="/admin"
-                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:opacity-90 transition-colors"
-              >
-                Открыть админ-панель
-              </Link>
-            </div>
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-orange-500 to-red-500 text-white font-semibold rounded-2xl hover:shadow-lg hover:shadow-orange-200 transition-all"
+            >
+              <span>🚀</span>
+              <span>Добавить рестораны</span>
+            </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -339,66 +289,67 @@ export default function Home() {
               <Link
                 key={restaurant.id}
                 href={`/restaurants/${restaurant.slug}`}
-                className="group bg-white/5 backdrop-blur-sm rounded-3xl overflow-hidden border border-white/10 hover:border-purple-500/50 hover:bg-white/10 transition-all hover:-translate-y-1"
+                className="group bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl hover:shadow-orange-100 transition-all duration-300 hover:-translate-y-1"
               >
                 {/* Image */}
-                <div className="h-48 bg-gradient-to-br from-purple-600/50 to-pink-600/50 relative overflow-hidden">
+                <div className="h-48 bg-gradient-to-br from-orange-200 to-amber-100 relative overflow-hidden">
                   {restaurant.images?.[0] ? (
                     <img
                       src={restaurant.images[0]}
                       alt={restaurant.name}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-6xl">
-                      🍽️
+                    <div className="w-full h-full flex items-center justify-center">
+                      <span className="text-7xl opacity-50">🍽️</span>
                     </div>
                   )}
                   
-                  {/* Rating Badge */}
+                  {/* Rating */}
                   {restaurant.rating && (
-                    <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-full flex items-center gap-1.5">
-                      <span className="text-amber-400">★</span>
-                      <span className="font-bold text-white">{restaurant.rating.toFixed(1)}</span>
+                    <div className="absolute top-3 left-3 bg-white px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                      <span className="text-amber-500 text-sm">★</span>
+                      <span className="font-bold text-gray-800">{restaurant.rating.toFixed(1)}</span>
+                      <span className="text-gray-400 text-sm">({restaurant.ratingCount})</span>
                     </div>
                   )}
                   
-                  {/* Price Badge */}
+                  {/* Price */}
                   {restaurant.priceRange && (
-                    <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-full text-white text-sm">
+                    <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-gray-600 text-sm font-medium shadow-md">
                       {restaurant.priceRange}
                     </div>
                   )}
+                  
+                  {/* Favorite button */}
+                  <button 
+                    onClick={(e) => { e.preventDefault(); }}
+                    className="absolute bottom-3 right-3 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md hover:scale-110 transition-transform"
+                  >
+                    <span className="text-gray-300 hover:text-red-500 transition-colors">♡</span>
+                  </button>
                 </div>
 
                 {/* Content */}
                 <div className="p-5">
-                  <h3 className="text-lg font-bold text-white mb-2 group-hover:text-purple-300 transition-colors line-clamp-1">
+                  <h3 className="text-lg font-bold text-gray-800 mb-1 line-clamp-1 group-hover:text-orange-600 transition-colors">
                     {restaurant.name}
                   </h3>
-                  <p className="text-white/50 text-sm mb-3 flex items-center gap-1 line-clamp-1">
-                    📍 {restaurant.address || restaurant.city}
-                  </p>
                   
                   {/* Tags */}
                   {restaurant.cuisine?.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-4">
+                    <div className="flex items-center gap-2 mb-3 text-sm text-gray-500">
                       {restaurant.cuisine.slice(0, 2).map((c, i) => (
-                        <span
-                          key={i}
-                          className="px-2 py-1 bg-purple-500/20 text-purple-300 text-xs rounded-lg"
-                        >
-                          {c}
+                        <span key={i}>
+                          {i > 0 && '•'} {c}
                         </span>
                       ))}
                     </div>
                   )}
                   
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-white/40">{restaurant.ratingCount} отзывов</span>
-                    <span className="text-purple-400 font-medium group-hover:translate-x-1 transition-transform">
-                      Подробнее →
-                    </span>
+                  <div className="flex items-center gap-2 text-gray-400 text-sm">
+                    <span>📍</span>
+                    <span className="line-clamp-1">{restaurant.address || restaurant.city}</span>
                   </div>
                 </div>
               </Link>
@@ -413,10 +364,10 @@ export default function Home() {
               <button
                 key={i}
                 onClick={() => fetchRestaurants(i + 1)}
-                className={`w-10 h-10 rounded-xl font-medium transition-colors ${
+                className={`w-11 h-11 rounded-xl font-medium transition-all ${
                   pagination.page === i + 1
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-white/10 text-white/70 hover:bg-white/20'
+                    ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg shadow-orange-200'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-orange-300'
                 }`}
               >
                 {i + 1}
@@ -427,17 +378,31 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/10 py-8">
-        <div className="max-w-7xl mx-auto px-6 text-center">
-          <div className="text-3xl mb-3">🍽️</div>
-          <p className="text-white/40 mb-4">Справочник ресторанов © 2024</p>
-          <div className="flex justify-center gap-6 text-sm">
-            <Link href="/admin" className="text-white/50 hover:text-white transition-colors">
-              Админ-панель
-            </Link>
-            <a href="#" className="text-white/50 hover:text-white transition-colors">
-              О проекте
-            </a>
+      <footer className="bg-white border-t border-gray-100 py-10">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-2">
+              <span className="text-3xl">🍽️</span>
+              <span className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-500 bg-clip-text text-transparent">
+                FoodGuide
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-8 text-sm text-gray-500">
+              <Link href="/admin" className="hover:text-orange-600 transition-colors">
+                Админ-панель
+              </Link>
+              <a href="#" className="hover:text-orange-600 transition-colors">
+                О проекте
+              </a>
+              <a href="#" className="hover:text-orange-600 transition-colors">
+                Контакты
+              </a>
+            </div>
+            
+            <div className="text-sm text-gray-400">
+              © 2024 FoodGuide
+            </div>
           </div>
         </div>
       </footer>
