@@ -4,11 +4,18 @@ import { prisma } from '@/lib/prisma';
 export type SyncSource = 'yandex' | 'google' | '2gis';
 
 // ID актеров в Apify
+// Можно использовать полное имя (username/actor-name) или ID
 const ACTOR_IDS = {
-  google: 'compass/crawler-google-places', // Популярный актер для Google Maps
-  yandex: 'apify/yandex-search',           // Для Яндекса (нужно найти подходящий)
-  '2gis': 'apify/web-scraper',             // Для 2ГИС (нужно создать свой)
+  google: 'compass/crawler-google-places', // Google Maps - работает отлично
+  yandex: 'apify/web-scraper',             // Яндекс.Карты через Web Scraper
+  '2gis': 'apify/web-scraper',             // 2ГИС через Web Scraper
 } as const;
+
+// Можно переопределить через env переменные
+const getActorId = (source: SyncSource): string => {
+  const envKey = `APIFY_ACTOR_${source.toUpperCase()}`;
+  return process.env[envKey] || ACTOR_IDS[source];
+};
 
 /**
  * Генерирует slug из названия
@@ -47,7 +54,7 @@ export async function startRestaurantSync(options: SyncOptions) {
   });
 
   try {
-    const finalActorId = actorId || ACTOR_IDS[source];
+    const finalActorId = actorId || getActorId(source);
     
     // Формируем input в зависимости от актера
     const input = getActorInput(source, searchQuery, location, maxResults);
