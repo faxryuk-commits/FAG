@@ -136,11 +136,20 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
       // compass/crawler-google-places - полная конфигурация с детальными отзывами
       console.log(`[Google Maps] Starting scrape with maxResults: ${maxResults}`);
       return {
-        searchStringsArray: [`${searchQuery} ${location}`],
-        maxCrawledPlacesPerSearch: maxResults,  // Количество мест
-        maxCrawledPlaces: maxResults,           // Альтернативный параметр
-        maxResults: maxResults,                  // Ещё один вариант
+        // Основной поисковый запрос - точный формат для актера
+        searchStringsArray: [`${searchQuery} in ${location}`],
+        
+        // ВСЕ параметры лимитов для полного охвата
+        maxCrawledPlacesPerSearch: maxResults,  // Главный параметр
+        maxCrawledPlaces: maxResults,           // Общий лимит
+        maxResults: maxResults,                  // Альтернативный
+        scrapeDirectories: false,               // Не парсить каталоги, только поиск
+        
+        // Язык и регион
         language: 'ru',
+        geolocation: {
+          country: 'RU',
+        },
         
         // ИЗОБРАЖЕНИЯ
         maxImages: 10,
@@ -165,17 +174,20 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
         
         // Дополнительная информация о месте
         additionalInfo: true,
-        scrapeDirectories: false,
         includeWebResults: false,
         
-        // Производительность
-        maxConcurrency: 10,
-        maxPageRetries: 3,
+        // Производительность - увеличиваем для большего охвата
+        maxConcurrency: 20,
+        maxPageRetries: 5,
         skipClosedPlaces: false,
         
         // Полные данные
         allPlacesNoSearch: false,
         oneReviewPerRow: false,
+        
+        // Глубина сканирования
+        deeperCityScrape: true,                  // Глубокое сканирование города
+        exportPlaceUrls: false,
       };
     
     case 'yandex':

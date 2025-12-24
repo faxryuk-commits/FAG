@@ -2,6 +2,79 @@
  * Конфигурация доступных скреперов
  */
 
+// Популярные города СНГ
+export const CITIES = [
+  // Россия
+  { value: 'Москва', label: '🇷🇺 Москва', country: 'RU' },
+  { value: 'Санкт-Петербург', label: '🇷🇺 Санкт-Петербург', country: 'RU' },
+  { value: 'Казань', label: '🇷🇺 Казань', country: 'RU' },
+  { value: 'Екатеринбург', label: '🇷🇺 Екатеринбург', country: 'RU' },
+  { value: 'Новосибирск', label: '🇷🇺 Новосибирск', country: 'RU' },
+  { value: 'Нижний Новгород', label: '🇷🇺 Нижний Новгород', country: 'RU' },
+  { value: 'Сочи', label: '🇷🇺 Сочи', country: 'RU' },
+  { value: 'Краснодар', label: '🇷🇺 Краснодар', country: 'RU' },
+  { value: 'Ростов-на-Дону', label: '🇷🇺 Ростов-на-Дону', country: 'RU' },
+  { value: 'Самара', label: '🇷🇺 Самара', country: 'RU' },
+  // Узбекистан
+  { value: 'Ташкент', label: '🇺🇿 Ташкент', country: 'UZ' },
+  { value: 'Самарканд', label: '🇺🇿 Самарканд', country: 'UZ' },
+  { value: 'Бухара', label: '🇺🇿 Бухара', country: 'UZ' },
+  { value: 'Фергана', label: '🇺🇿 Фергана', country: 'UZ' },
+  { value: 'Наманган', label: '🇺🇿 Наманган', country: 'UZ' },
+  { value: 'Андижан', label: '🇺🇿 Андижан', country: 'UZ' },
+  // Казахстан
+  { value: 'Алматы', label: '🇰🇿 Алматы', country: 'KZ' },
+  { value: 'Астана', label: '🇰🇿 Астана', country: 'KZ' },
+  { value: 'Шымкент', label: '🇰🇿 Шымкент', country: 'KZ' },
+  // Беларусь
+  { value: 'Минск', label: '🇧🇾 Минск', country: 'BY' },
+  // Грузия  
+  { value: 'Тбилиси', label: '🇬🇪 Тбилиси', country: 'GE' },
+  { value: 'Батуми', label: '🇬🇪 Батуми', country: 'GE' },
+  // Азербайджан
+  { value: 'Баку', label: '🇦🇿 Баку', country: 'AZ' },
+  // Армения
+  { value: 'Ереван', label: '🇦🇲 Ереван', country: 'AM' },
+  // Киргизия
+  { value: 'Бишкек', label: '🇰🇬 Бишкек', country: 'KG' },
+  // Таджикистан
+  { value: 'Душанбе', label: '🇹🇯 Душанбе', country: 'TJ' },
+  // Туркменистан
+  { value: 'Ашхабад', label: '🇹🇲 Ашхабад', country: 'TM' },
+];
+
+// Категории заведений
+export const CATEGORIES = [
+  { value: 'рестораны', label: '🍽️ Рестораны', icon: '🍽️' },
+  { value: 'кафе', label: '☕ Кафе', icon: '☕' },
+  { value: 'бары', label: '🍺 Бары и пабы', icon: '🍺' },
+  { value: 'фастфуд', label: '🍔 Фастфуд', icon: '🍔' },
+  { value: 'кофейни', label: '☕ Кофейни', icon: '☕' },
+  { value: 'пиццерии', label: '🍕 Пиццерии', icon: '🍕' },
+  { value: 'суши', label: '🍣 Суши и роллы', icon: '🍣' },
+  { value: 'шашлычные', label: '🥩 Шашлычные', icon: '🥩' },
+  { value: 'столовые', label: '🥘 Столовые', icon: '🥘' },
+  { value: 'кондитерские', label: '🧁 Кондитерские', icon: '🧁' },
+  { value: 'пекарни', label: '🥐 Пекарни', icon: '🥐' },
+  { value: 'чайханы', label: '🍵 Чайханы', icon: '🍵' },
+  { value: 'пловные', label: '🍚 Пловные', icon: '🍚' },
+  { value: 'узбекская кухня', label: '🥟 Узбекская кухня', icon: '🥟' },
+  { value: 'грузинская кухня', label: '🍖 Грузинская кухня', icon: '🍖' },
+  { value: 'итальянская кухня', label: '🍝 Итальянская кухня', icon: '🍝' },
+  { value: 'азиатская кухня', label: '🥢 Азиатская кухня', icon: '🥢' },
+  { value: 'европейская кухня', label: '🍷 Европейская кухня', icon: '🍷' },
+];
+
+// Количество записей
+export const RESULT_LIMITS = [
+  { value: 20, label: '20 мест (тест)' },
+  { value: 50, label: '50 мест' },
+  { value: 100, label: '100 мест' },
+  { value: 200, label: '200 мест' },
+  { value: 500, label: '500 мест' },
+  { value: 1000, label: '1000 мест (макс)' },
+];
+
 export interface ScraperField {
   key: string;
   label: string;
@@ -25,7 +98,7 @@ export interface ScraperConfig {
   inputFields: {
     key: string;
     label: string;
-    type: 'text' | 'number' | 'select';
+    type: 'text' | 'number' | 'select' | 'city' | 'category';
     placeholder?: string;
     options?: { value: string; label: string }[];
     default: any;
@@ -65,9 +138,9 @@ export const SCRAPERS: ScraperConfig[] = [
       skipClosedPlaces: false,
     },
     inputFields: [
-      { key: 'searchQuery', label: 'Что искать', type: 'text', placeholder: 'рестораны, кафе, суши...', default: 'рестораны' },
-      { key: 'location', label: 'Город/Район', type: 'text', placeholder: 'Москва, Центр...', default: 'Москва' },
-      { key: 'maxResults', label: 'Количество', type: 'number', default: 50 },
+      { key: 'searchQuery', label: 'Категория', type: 'category', placeholder: 'Что искать...', default: 'рестораны' },
+      { key: 'location', label: 'Город', type: 'city', placeholder: 'Выберите город', default: 'Ташкент' },
+      { key: 'maxResults', label: 'Количество', type: 'select', options: RESULT_LIMITS.map(l => ({ value: String(l.value), label: l.label })), default: 100 },
     ],
   },
   {
@@ -116,9 +189,9 @@ export const SCRAPERS: ScraperConfig[] = [
     ],
     defaultInput: { language: 'ru' },
     inputFields: [
-      { key: 'searchQuery', label: 'Что искать', type: 'text', placeholder: 'рестораны, кафе...', default: 'рестораны' },
-      { key: 'location', label: 'Город', type: 'text', placeholder: 'Москва', default: 'Москва' },
-      { key: 'maxResults', label: 'Количество', type: 'number', default: 50 },
+      { key: 'searchQuery', label: 'Категория', type: 'category', placeholder: 'Что искать...', default: 'рестораны' },
+      { key: 'location', label: 'Город', type: 'city', placeholder: 'Выберите город', default: 'Ташкент' },
+      { key: 'maxResults', label: 'Количество', type: 'select', options: RESULT_LIMITS.map(l => ({ value: String(l.value), label: l.label })), default: 100 },
     ],
   },
   {
@@ -144,9 +217,9 @@ export const SCRAPERS: ScraperConfig[] = [
     ],
     defaultInput: { language: 'ru' },
     inputFields: [
-      { key: 'searchQuery', label: 'Что искать', type: 'text', placeholder: 'рестораны, кафе...', default: 'рестораны' },
-      { key: 'location', label: 'Город', type: 'text', placeholder: 'Москва', default: 'Москва' },
-      { key: 'maxResults', label: 'Количество', type: 'number', default: 50 },
+      { key: 'searchQuery', label: 'Категория', type: 'category', placeholder: 'Что искать...', default: 'рестораны' },
+      { key: 'location', label: 'Город', type: 'city', placeholder: 'Выберите город', default: 'Ташкент' },
+      { key: 'maxResults', label: 'Количество', type: 'select', options: RESULT_LIMITS.map(l => ({ value: String(l.value), label: l.label })), default: 100 },
     ],
   },
 ];

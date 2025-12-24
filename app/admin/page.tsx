@@ -958,22 +958,148 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-5">
                   {selectedScraper.inputFields.map(field => (
                     <div key={field.key}>
                       <label className="block text-sm font-medium text-white/80 mb-2">
                         {field.label}
                       </label>
-                      <input
-                        type={field.type === 'number' ? 'number' : 'text'}
-                        value={inputValues[field.key] || ''}
-                        onChange={(e) => setInputValues({
-                          ...inputValues,
-                          [field.key]: field.type === 'number' ? Number(e.target.value) : e.target.value
-                        })}
-                        placeholder={field.placeholder}
-                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-purple-500"
-                      />
+                      
+                      {/* Выбор категории */}
+                      {field.type === 'category' && (
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              { value: 'рестораны', label: '🍽️ Рестораны' },
+                              { value: 'кафе', label: '☕ Кафе' },
+                              { value: 'бары', label: '🍺 Бары' },
+                              { value: 'фастфуд', label: '🍔 Фастфуд' },
+                              { value: 'суши', label: '🍣 Суши' },
+                              { value: 'пиццерии', label: '🍕 Пиццерии' },
+                              { value: 'кофейни', label: '☕ Кофейни' },
+                              { value: 'узбекская кухня', label: '🥟 Узбекская' },
+                              { value: 'грузинская кухня', label: '🍖 Грузинская' },
+                              { value: 'азиатская кухня', label: '🥢 Азиатская' },
+                              { value: 'столовые', label: '🥘 Столовые' },
+                              { value: 'чайханы', label: '🍵 Чайханы' },
+                            ].map(cat => (
+                              <button
+                                key={cat.value}
+                                type="button"
+                                onClick={() => setInputValues({
+                                  ...inputValues,
+                                  [field.key]: cat.value
+                                })}
+                                className={`px-3 py-2 rounded-lg text-sm transition-all ${
+                                  inputValues[field.key] === cat.value
+                                    ? 'bg-purple-500 text-white'
+                                    : 'bg-white/10 text-white/70 hover:bg-white/20'
+                                }`}
+                              >
+                                {cat.label}
+                              </button>
+                            ))}
+                          </div>
+                          <input
+                            type="text"
+                            value={inputValues[field.key] || ''}
+                            onChange={(e) => setInputValues({
+                              ...inputValues,
+                              [field.key]: e.target.value
+                            })}
+                            placeholder="Или введите свой запрос..."
+                            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-purple-500"
+                          />
+                        </div>
+                      )}
+                      
+                      {/* Выбор города */}
+                      {field.type === 'city' && (
+                        <div className="space-y-2">
+                          <select
+                            value={inputValues[field.key] || ''}
+                            onChange={(e) => setInputValues({
+                              ...inputValues,
+                              [field.key]: e.target.value
+                            })}
+                            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                          >
+                            <option value="" className="bg-[#1a1a2e]">Выберите город</option>
+                            <optgroup label="🇺🇿 Узбекистан" className="bg-[#1a1a2e]">
+                              <option value="Ташкент" className="bg-[#1a1a2e]">Ташкент</option>
+                              <option value="Самарканд" className="bg-[#1a1a2e]">Самарканд</option>
+                              <option value="Бухара" className="bg-[#1a1a2e]">Бухара</option>
+                              <option value="Фергана" className="bg-[#1a1a2e]">Фергана</option>
+                              <option value="Наманган" className="bg-[#1a1a2e]">Наманган</option>
+                            </optgroup>
+                            <optgroup label="🇷🇺 Россия" className="bg-[#1a1a2e]">
+                              <option value="Москва" className="bg-[#1a1a2e]">Москва</option>
+                              <option value="Санкт-Петербург" className="bg-[#1a1a2e]">Санкт-Петербург</option>
+                              <option value="Казань" className="bg-[#1a1a2e]">Казань</option>
+                              <option value="Екатеринбург" className="bg-[#1a1a2e]">Екатеринбург</option>
+                              <option value="Сочи" className="bg-[#1a1a2e]">Сочи</option>
+                            </optgroup>
+                            <optgroup label="🇰🇿 Казахстан" className="bg-[#1a1a2e]">
+                              <option value="Алматы" className="bg-[#1a1a2e]">Алматы</option>
+                              <option value="Астана" className="bg-[#1a1a2e]">Астана</option>
+                            </optgroup>
+                            <optgroup label="🌍 Другие" className="bg-[#1a1a2e]">
+                              <option value="Минск" className="bg-[#1a1a2e]">🇧🇾 Минск</option>
+                              <option value="Тбилиси" className="bg-[#1a1a2e]">🇬🇪 Тбилиси</option>
+                              <option value="Баку" className="bg-[#1a1a2e]">🇦🇿 Баку</option>
+                              <option value="Ереван" className="bg-[#1a1a2e]">🇦🇲 Ереван</option>
+                              <option value="Бишкек" className="bg-[#1a1a2e]">🇰🇬 Бишкек</option>
+                            </optgroup>
+                          </select>
+                          <input
+                            type="text"
+                            value={inputValues[field.key] || ''}
+                            onChange={(e) => setInputValues({
+                              ...inputValues,
+                              [field.key]: e.target.value
+                            })}
+                            placeholder="Или введите свой город/район..."
+                            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-purple-500"
+                          />
+                        </div>
+                      )}
+                      
+                      {/* Выпадающий список (select) */}
+                      {field.type === 'select' && field.options && (
+                        <div className="grid grid-cols-3 gap-2">
+                          {field.options.map(opt => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setInputValues({
+                                ...inputValues,
+                                [field.key]: Number(opt.value)
+                              })}
+                              className={`px-3 py-3 rounded-xl text-sm font-medium transition-all ${
+                                inputValues[field.key] === Number(opt.value)
+                                  ? 'bg-purple-500 text-white'
+                                  : 'bg-white/10 text-white/70 hover:bg-white/20'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Обычные текстовые поля */}
+                      {(field.type === 'text' || field.type === 'number') && (
+                        <input
+                          type={field.type === 'number' ? 'number' : 'text'}
+                          value={inputValues[field.key] || ''}
+                          onChange={(e) => setInputValues({
+                            ...inputValues,
+                            [field.key]: field.type === 'number' ? Number(e.target.value) : e.target.value
+                          })}
+                          placeholder={field.placeholder}
+                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-purple-500"
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
