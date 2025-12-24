@@ -540,47 +540,57 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // Комплексная сортировка:
-    // 1. Рейтинг (выше = лучше, null в конец)
-    // 2. Наличие фото (есть = лучше)
-    // 3. Количество отзывов (больше = лучше)
-    // 4. Расстояние (ближе = лучше)
-    // 5. Остальные
-    restaurants.sort((a, b) => {
-      // 1. Рейтинг: выше = лучше, null = в конец
-      const ratingA = a.rating ?? -1;
-      const ratingB = b.rating ?? -1;
-      if (ratingB !== ratingA) {
-        return ratingB - ratingA;
+    // Weighted Rating (как IMDB/Google/Yelp)
+    // Формула: WR = (v / (v + m)) * R + (m / (v + m)) * C
+    // v = количество отзывов
+    // m = минимум отзывов для "доверия" (25)
+    // R = рейтинг заведения
+    // C = средний рейтинг по базе (3.5)
+    
+    const MIN_REVIEWS = 25; // Минимум отзывов для полного доверия
+    const AVG_RATING = 3.5; // Средний рейтинг по умолчанию
+    
+    const calculateWeightedScore = (rating: number | null, reviewCount: number, hasPhotos: boolean, distance?: number) => {
+      // Если нет рейтинга - в конец
+      if (rating === null) return -1000;
+      
+      // Weighted Rating (IMDB formula)
+      const v = reviewCount;
+      const m = MIN_REVIEWS;
+      const R = rating;
+      const C = AVG_RATING;
+      const weightedRating = (v / (v + m)) * R + (m / (v + m)) * C;
+      
+      // Базовый score из weighted rating (0-5 → 0-100)
+      let score = weightedRating * 20;
+      
+      // Бонус за фото (+10)
+      if (hasPhotos) score += 10;
+      
+      // Бонус за количество отзывов (логарифмический, макс +15)
+      if (reviewCount > 0) {
+        score += Math.min(15, Math.log10(reviewCount + 1) * 5);
       }
       
-      // 2. Наличие фото: есть = лучше
+      // Бонус за близость (если есть геолокация, макс +10)
+      if (distance !== undefined && distance < 50) {
+        score += Math.max(0, 10 - distance * 0.2);
+      }
+      
+      return score;
+    };
+    
+    restaurants.sort((a, b) => {
       const photosA = (a.images as string[])?.length || 0;
       const photosB = (b.images as string[])?.length || 0;
-      const hasPhotosA = photosA > 0 ? 1 : 0;
-      const hasPhotosB = photosB > 0 ? 1 : 0;
-      if (hasPhotosB !== hasPhotosA) {
-        return hasPhotosB - hasPhotosA;
-      }
+      const distA = (a as any).distance;
+      const distB = (b as any).distance;
       
-      // 3. Количество отзывов: больше = лучше
-      const reviewsA = a.ratingCount || 0;
-      const reviewsB = b.ratingCount || 0;
-      if (reviewsB !== reviewsA) {
-        return reviewsB - reviewsA;
-      }
+      const scoreA = calculateWeightedScore(a.rating, a.ratingCount || 0, photosA > 0, distA);
+      const scoreB = calculateWeightedScore(b.rating, b.ratingCount || 0, photosB > 0, distB);
       
-      // 4. Расстояние: ближе = лучше (если есть геолокация)
-      if (userLat && userLng) {
-        const distA = (a as any).distance ?? Infinity;
-        const distB = (b as any).distance ?? Infinity;
-        if (distA !== distB) {
-          return distA - distB;
-        }
-      }
-      
-      // 5. По количеству фото (больше = лучше)
-      return photosB - photosA;
+      // Сортируем по score (выше = лучше)
+      return scoreB - scoreA;
     });
     
     // Применяем пагинацию
