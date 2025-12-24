@@ -1,5 +1,6 @@
 import apifyClient from './client';
 import { prisma } from '@/lib/prisma';
+import { saveWithConsolidation } from './consolidate';
 
 export type SyncSource = 'yandex' | 'google' | '2gis';
 
@@ -175,7 +176,7 @@ export async function fetchAndSaveResults(runId: string, jobId: string, source: 
 }
 
 /**
- * Сохраняет ресторан в БД
+ * Сохраняет ресторан в БД с консолидацией дубликатов
  */
 async function saveRestaurant(source: SyncSource, data: any) {
   const normalized = normalizeData(source, data);
@@ -184,20 +185,10 @@ async function saveRestaurant(source: SyncSource, data: any) {
     throw new Error('Missing required fields');
   }
 
-  const existing = await prisma.restaurant.findFirst({
-    where: { source, sourceId: normalized.sourceId },
-  });
-
-  if (existing) {
-    await prisma.restaurant.update({
-      where: { id: existing.id },
-      data: { ...normalized, lastSynced: new Date() },
-    });
-  } else {
-    await prisma.restaurant.create({
-      data: normalized,
-    });
-  }
+  // Используем консолидацию для объединения дубликатов
+  const result = await saveWithConsolidation(source, normalized);
+  
+  return result;
 }
 
 /**

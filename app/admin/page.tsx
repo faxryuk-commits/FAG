@@ -549,6 +549,31 @@ export default function AdminPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Consolidation */}
+              <div className="mt-6 pt-6 border-t border-white/10">
+                <h3 className="text-sm font-medium text-white/60 mb-3">🔄 Консолидация данных</h3>
+                <p className="text-xs text-white/40 mb-3">
+                  Объединяет дубликаты из разных источников (Google, Яндекс, 2ГИС)
+                </p>
+                <button
+                  onClick={async () => {
+                    if (!confirm('Запустить консолидацию? Это объединит похожие рестораны из разных источников.')) return;
+                    
+                    const res = await fetch('/api/consolidate', { method: 'POST' });
+                    const data = await res.json();
+                    
+                    if (res.ok) {
+                      alert(`✅ Консолидация завершена!\n\n${data.message}`);
+                    } else {
+                      alert(`❌ Ошибка: ${data.error}`);
+                    }
+                  }}
+                  className="w-full py-2.5 bg-purple-500/20 text-purple-300 text-sm rounded-lg hover:bg-purple-500/30 transition-colors font-medium"
+                >
+                  🔗 Объединить дубликаты
+                </button>
+              </div>
             </div>
           </div>
         </div>
