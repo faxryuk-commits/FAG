@@ -106,28 +106,25 @@ export default function Home() {
     );
   }, []);
 
-  // Текущие фильтры для loadMore
+  // Текущие фильтры и offset для loadMore
   const [currentFilters, setCurrentFilters] = useState<{
     search?: string;
     mood?: string;
     cuisineType?: string;
   }>({});
+  const [currentOffset, setCurrentOffset] = useState(0);
 
-  // Загрузка ресторанов
+  // Загрузка ресторанов (без restaurants.length в зависимостях!)
   const fetchRestaurants = useCallback(async (options?: { 
     search?: string; 
     mood?: string; 
     cuisineType?: string;
-  }, append = false) => {
-    if (append) {
-      setLoadingMore(true);
-    } else {
-      setLoading(true);
-    }
+  }) => {
+    setLoading(true);
     
     try {
       const params = new URLSearchParams();
-      const filters = append ? currentFilters : options || {};
+      const filters = options || {};
       
       if (filters.search) {
         params.set('search', filters.search);
@@ -149,39 +146,63 @@ export default function Home() {
       }
       
       params.set('limit', String(PAGE_SIZE));
-      params.set('offset', String(append ? restaurants.length : 0));
+      params.set('offset', '0');
       
       const res = await fetch(`/api/restaurants?${params}`);
       const data = await res.json();
       
       const newRestaurants = data.restaurants || [];
       
-      if (append) {
-        setRestaurants(prev => [...prev, ...newRestaurants]);
-      } else {
-        setRestaurants(newRestaurants);
-        setCurrentFilters(filters);
-      }
-      
+      setRestaurants(newRestaurants);
+      setCurrentFilters(filters);
+      setCurrentOffset(newRestaurants.length);
       setTotalCount(data.pagination?.total || data.total || 0);
       setHasMore(newRestaurants.length === PAGE_SIZE);
     } catch (error) {
       console.error('Error:', error);
-      if (!append) {
-        setRestaurants([]);
-      }
+      setRestaurants([]);
     } finally {
       setLoading(false);
+    }
+  }, [userLocation]); // Убрали restaurants.length!
+
+  // Загрузить ещё (отдельная функция)
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    
+    setLoadingMore(true);
+    
+    try {
+      const params = new URLSearchParams();
+      
+      if (currentFilters.search) params.set('search', currentFilters.search);
+      if (currentFilters.mood) params.set('mood', currentFilters.mood);
+      if (currentFilters.cuisineType) params.set('cuisineType', currentFilters.cuisineType);
+      
+      if (userLocation) {
+        params.set('lat', String(userLocation.lat));
+        params.set('lng', String(userLocation.lng));
+        params.set('sortBy', 'distance');
+        params.set('maxDistance', '30');
+      }
+      
+      params.set('limit', String(PAGE_SIZE));
+      params.set('offset', String(currentOffset));
+      
+      const res = await fetch(`/api/restaurants?${params}`);
+      const data = await res.json();
+      
+      const newRestaurants = data.restaurants || [];
+      
+      setRestaurants(prev => [...prev, ...newRestaurants]);
+      setCurrentOffset(prev => prev + newRestaurants.length);
+      setHasMore(newRestaurants.length === PAGE_SIZE);
+    } catch (error) {
+      console.error('Error loading more:', error);
+    } finally {
       setLoadingMore(false);
     }
-  }, [userLocation, currentFilters, restaurants.length]);
-
-  // Загрузить ещё
-  const loadMore = useCallback(() => {
-    if (!loadingMore && hasMore) {
-      fetchRestaurants(undefined, true);
-    }
-  }, [fetchRestaurants, loadingMore, hasMore]);
+  }, [currentFilters, currentOffset, userLocation, loadingMore, hasMore]);
 
   // Начальная загрузка
   useEffect(() => {
