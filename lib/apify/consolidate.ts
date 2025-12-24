@@ -17,40 +17,53 @@ const SOURCE_PRIORITY: Record<string, number> = {
  * Справочник известных сетей и франшиз
  * Ключ - нормализованное название бренда
  * Значение - массив ключевых слов для распознавания
+ * 
+ * ВАЖНО: Ключевые слова должны быть уникальными для бренда!
+ * Не включать общие термины типа "milliy", "national", "чайхона"
  */
 export const KNOWN_CHAINS: Record<string, { keywords: string[]; type: 'franchise' | 'chain' | 'group' }> = {
-  // Международные франшизы
-  'McDonald\'s': { keywords: ['mcdonald', 'макдональдс', 'мак', 'mcdonalds'], type: 'franchise' },
-  'KFC': { keywords: ['kfc', 'kentucky', 'кфс', 'кентуки'], type: 'franchise' },
+  // === Международные франшизы ===
+  'McDonald\'s': { keywords: ['mcdonald', 'макдональдс', 'mcdonalds'], type: 'franchise' },
+  'KFC': { keywords: ['kfc', 'kentucky fried'], type: 'franchise' },
   'Burger King': { keywords: ['burger king', 'бургер кинг'], type: 'franchise' },
-  'Subway': { keywords: ['subway', 'сабвей', 'сабвэй'], type: 'franchise' },
+  'Subway': { keywords: ['subway', 'сабвей'], type: 'franchise' },
   'Pizza Hut': { keywords: ['pizza hut', 'пицца хат'], type: 'franchise' },
-  'Domino\'s': { keywords: ['domino', 'домино'], type: 'franchise' },
+  'Domino\'s Pizza': { keywords: ["domino's", 'dominos pizza'], type: 'franchise' },
   'Starbucks': { keywords: ['starbucks', 'старбакс'], type: 'franchise' },
-  'Costa Coffee': { keywords: ['costa coffee', 'коста кофе'], type: 'franchise' },
+  'Baskin Robbins': { keywords: ['baskin robbins', 'баскин роббинс'], type: 'franchise' },
   
-  // Локальные сети Узбекистана
-  'Evos': { keywords: ['evos', 'эвос'], type: 'chain' },
-  'Dodo Pizza': { keywords: ['dodo', 'додо'], type: 'chain' },
-  'Bellissimo': { keywords: ['bellissimo', 'беллиссимо'], type: 'chain' },
-  'Les Ailes': { keywords: ['les ailes', 'лез эйлс', 'лэз эйлз'], type: 'chain' },
-  'Safia': { keywords: ['safia', 'сафия'], type: 'chain' },
-  'Baskin Robbins': { keywords: ['baskin', 'баскин', 'robbins', 'роббинс'], type: 'franchise' },
-  'Chopar Pizza': { keywords: ['chopar', 'чопар'], type: 'chain' },
-  'Max Way': { keywords: ['max way', 'макс вей', 'maxway'], type: 'chain' },
-  'Chicken House': { keywords: ['chicken house', 'чикен хаус'], type: 'chain' },
-  'Oqtepa Lavash': { keywords: ['oqtepa', 'оқтепа', 'октепа', 'лаваш'], type: 'chain' },
+  // === Фастфуд сети Узбекистана ===
+  'Evos': { keywords: ['evos'], type: 'chain' },  // ~80+ точек
+  'Oqtepa Lavash': { keywords: ['oqtepa', 'оқтепа', 'oq tepa'], type: 'chain' },  // ~100+ точек
+  'Max Way': { keywords: ['max way', 'maxway', 'макс вей'], type: 'chain' },  // ~20+ точек
+  'Les Ailes': { keywords: ['les ailes'], type: 'chain' },
+  'Chicken House': { keywords: ['chicken house'], type: 'chain' },
+  
+  // === Пиццерии ===
+  'Dodo Pizza': { keywords: ['dodo pizza', 'додо пицца', 'dodo pitstsa'], type: 'chain' },  // ~15+ точек
+  'Bellissimo Pizza': { keywords: ['bellissimo'], type: 'chain' },  // ~30+ точек
+  'Chopar Pizza': { keywords: ['chopar'], type: 'chain' },
+  
+  // === Национальные рестораны (конкретные бренды) ===
+  'Rayhon': { keywords: ['rayhon', 'райхон'], type: 'chain' },
+  "G'ijduvon": { keywords: ["g'ijduvon", 'gijduvon', 'гижду', 'гиждувон'], type: 'chain' },
   'Afandi': { keywords: ['afandi', 'афанди'], type: 'chain' },
+  'Caravan': { keywords: ['caravan group', 'караван групп'], type: 'group' },
+  
+  // === Суши и азиатская кухня ===
   'Sushi Master': { keywords: ['sushi master', 'суши мастер'], type: 'chain' },
   'Tekit': { keywords: ['tekit', 'текит'], type: 'chain' },
-  'National': { keywords: ['national', 'националь'], type: 'chain' },
-  'Caravan': { keywords: ['caravan', 'караван', 'karavan'], type: 'chain' },
-  'Chaykhona': { keywords: ['choyxona', 'чайхона', 'чайхана', 'chaykhona'], type: 'chain' },
-  'Milliy Taomlar': { keywords: ['milliy', 'миллий', 'таомлар'], type: 'chain' },
+  'Yakitori': { keywords: ['yakitori', 'якитори'], type: 'chain' },
+  'Sushi Box': { keywords: ['sushi box', 'суши бокс'], type: 'chain' },
   
-  // Группы компаний
-  'Рони': { keywords: ['roni', 'рони'], type: 'group' },
-  'Fish & Bread': { keywords: ['fish and bread', 'fish & bread', 'фиш энд брэд'], type: 'chain' },
+  // === Кофейни ===
+  'Safia': { keywords: ['safia', 'сафия'], type: 'chain' },
+  'Coffee Samarkand': { keywords: ['coffee samarkand'], type: 'chain' },
+  'Mocca': { keywords: ['mocca'], type: 'chain' },
+  
+  // === Группы компаний ===
+  'Рони': { keywords: ['roni pizza', 'рони пицца'], type: 'group' },
+  'Fish & Bread': { keywords: ['fish & bread', 'fish and bread'], type: 'chain' },
 };
 
 /**

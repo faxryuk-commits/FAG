@@ -97,8 +97,9 @@ export async function GET(request: NextRequest) {
     const cuisine = searchParams.get('cuisine');
     const minRating = searchParams.get('minRating');
     const priceRange = searchParams.get('priceRange');
-    const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
+    const offset = parseInt(searchParams.get('offset') || '0');
+    const page = searchParams.get('page') ? parseInt(searchParams.get('page')!) : Math.floor(offset / limit) + 1;
     
     // Новые параметры для категорий
     const moodId = searchParams.get('mood'); // ID настроения (romantic, business, etc.)
@@ -203,7 +204,7 @@ export async function GET(request: NextRequest) {
     let restaurants = await prisma.restaurant.findMany({
       where,
       orderBy: sortBy === 'distance' ? undefined : { rating: 'desc' },
-      skip: needsPostFilter || sortBy === 'distance' ? 0 : (page - 1) * limit,
+      skip: needsPostFilter || sortBy === 'distance' ? 0 : offset,
       take: needsPostFilter || sortBy === 'distance' ? 500 : limit,
       include: {
         reviews: {
@@ -271,9 +272,9 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => b.relevanceScore - a.relevanceScore);
     }
     
-    // Применяем лимит после фильтрации
+    // Применяем пагинацию после фильтрации
     if (needsPostFilter && !sortBy) {
-      restaurants = restaurants.slice(0, limit);
+      restaurants = restaurants.slice(offset, offset + limit);
     }
     
     // Если сортируем по расстоянию - вычисляем и сортируем
@@ -288,7 +289,7 @@ export async function GET(request: NextRequest) {
         }))
         .filter(r => r.distance <= maxDistance)
         .sort((a, b) => a.distance - b.distance)
-        .slice((page - 1) * limit, page * limit);
+        .slice(offset, offset + limit);
     }
     
     const total = search ? restaurants.length : await prisma.restaurant.count({ where });
