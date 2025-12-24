@@ -141,7 +141,7 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
         
         // ИЗОБРАЖЕНИЯ
         maxImages: 10,
-        placeMinimumStars: 0,
+        placeMinimumStars: '',  // пустая строка = любой рейтинг
         
         // ДЕТАЛЬНЫЕ ОТЗЫВЫ - все поля
         maxReviews: 20,                          // Больше отзывов
