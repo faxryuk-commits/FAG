@@ -462,6 +462,25 @@ export default function AdminPage() {
                           {job.error}
                         </div>
                       )}
+                      
+                      {/* Кнопка проверки статуса */}
+                      {job.status === 'running' && (
+                        <button
+                          onClick={async () => {
+                            const res = await fetch(`/api/sync?jobId=${job.id}`);
+                            const data = await res.json();
+                            if (data.results) {
+                              alert(`✅ Данные загружены!\n\nОбработано: ${data.results.processed}\nОшибок: ${data.results.errors}\nВсего: ${data.results.total}`);
+                            } else if (data.job?.status === 'running') {
+                              alert('⏳ Парсинг ещё выполняется...\n\nПроверьте Apify Console для деталей:\nconsole.apify.com');
+                            }
+                            fetchJobs();
+                          }}
+                          className="mt-2 w-full py-2 bg-blue-500/20 text-blue-300 text-xs rounded-lg hover:bg-blue-500/30 transition-colors"
+                        >
+                          🔍 Проверить и загрузить данные
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
