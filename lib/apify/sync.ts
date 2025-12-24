@@ -417,7 +417,8 @@ function normalizeData(source: SyncSource, data: any) {
         cuisine: cuisine.filter(Boolean),
         // Время работы будет обрабатываться отдельно
         _openingHours: data.openingHours || data.workingHours || data.hours || null,
-        _reviews: data.reviews || [],
+        // Отзывы могут быть в разных полях
+        _reviews: data.reviews || data.reviewsData || data.reviewsList || data.userReviews || [],
       };
     }
 
@@ -464,7 +465,7 @@ function normalizeData(source: SyncSource, data: any) {
         cuisine: cuisine.filter(Boolean),
         priceRange: data.priceCategory || data.price || null,
         _openingHours: data.workingHours || data.openingHours || data.schedule || null,
-        _reviews: data.reviews || [],
+        _reviews: data.reviews || data.reviewsData || data.comments || [],
       };
     }
 

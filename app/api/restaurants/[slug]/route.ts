@@ -18,7 +18,7 @@ export async function GET(
         },
         reviews: {
           orderBy: { date: 'desc' },
-          take: 10,
+          take: 50, // Увеличили лимит отзывов
         },
       },
     });

@@ -427,7 +427,7 @@ function parseReviews(reviews: any[], source: string): ParsedReview[] {
       sourceId,
       sourceUrl,
     };
-  }).filter(r => r.text); // Только с текстом
+  }).filter(r => r.text || r.rating); // С текстом или рейтингом
 }
 
 /**
@@ -530,6 +530,28 @@ export async function saveWithConsolidation(
       await prisma.workingHours.createMany({
         data: workingHours.map(h => ({ ...h, restaurantId: existing.id })),
       });
+    }
+    
+    // Добавляем новые отзывы
+    if (reviews.length > 0) {
+      for (const review of reviews) {
+        // Проверяем дубликат отзыва
+        const exists = await prisma.review.findFirst({
+          where: { 
+            restaurantId: existing.id, 
+            author: review.author,
+            OR: [
+              { text: review.text },
+              { sourceId: review.sourceId },
+            ]
+          },
+        });
+        if (!exists) {
+          await prisma.review.create({
+            data: { ...review, restaurantId: existing.id },
+          });
+        }
+      }
     }
     
     return { action: 'updated', id: existing.id };
