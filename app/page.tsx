@@ -341,7 +341,7 @@ export default function Home() {
       initialLoadDone.current = true;
       fetchRestaurants({});
     }
-  }, []);
+  }, [fetchRestaurants]);
 
   // Обработка выбора настроения
   const handleMoodSelect = (mood: typeof MOOD_CATEGORIES[0]) => {
