@@ -435,78 +435,55 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0f0f1a] via-[#1a1a2e] to-[#16213e]">
-      {/* Header */}
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/30 border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🍽️</span>
-            <span className="font-black text-xl bg-gradient-to-r from-orange-400 to-pink-500 bg-clip-text text-transparent">
-              FoodGuide
-            </span>
-          </Link>
-          
-          <div className="flex items-center gap-4">
-            {/* Кнопка геолокации */}
-            <button
-              onClick={requestLocation}
-              disabled={locationStatus === 'loading'}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all ${
-                locationStatus === 'success'
-                  ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                  : locationStatus === 'error'
-                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                  : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/10'
-              }`}
-            >
-              {locationStatus === 'loading' ? (
-                <span className="animate-spin">⏳</span>
-              ) : locationStatus === 'success' ? (
-                <span>📍</span>
-              ) : (
-                <span>📍</span>
-              )}
-              <span className="hidden sm:inline">
-                {locationStatus === 'success' ? 'Рядом с вами' : locationStatus === 'error' ? 'Нет доступа' : 'Найти рядом'}
+      {/* Compact Header + Search */}
+      <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/50 border-b border-white/5">
+        <div className="max-w-6xl mx-auto px-4 py-2">
+          {/* Верхняя строка: лого + действия */}
+          <div className="flex items-center justify-between gap-4 mb-2">
+            <Link href="/" className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xl">🍽️</span>
+              <span className="font-bold text-lg bg-gradient-to-r from-orange-400 to-pink-500 bg-clip-text text-transparent hidden sm:inline">
+                FoodGuide
               </span>
-            </button>
-            
-            <Link 
-              href="/admin" 
-              className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-white/60 hover:text-white text-sm transition-all border border-white/10"
-            >
-              Админ
             </Link>
-          </div>
-        </div>
-      </header>
-
-      {/* Hero */}
-      <section className="relative px-4 pt-12 pb-8">
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-1/4 w-[500px] h-[500px] bg-orange-500/10 rounded-full blur-[150px]"></div>
-          <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-purple-500/10 rounded-full blur-[150px]"></div>
-        </div>
-        
-        <div className="relative max-w-4xl mx-auto text-center">
-          {/* Приветствие */}
-          <div className="inline-flex items-center gap-3 px-5 py-2.5 bg-white/5 backdrop-blur rounded-2xl mb-8 border border-white/10">
-            <span className="text-3xl">{greeting.emoji}</span>
-            <div className="text-left">
-              <span className="text-white/50 text-sm">{greeting.text}</span>
-              <span className="block text-white font-semibold">{greeting.meal}</span>
+            
+            {/* Приветствие - компактное */}
+            <div className="hidden md:flex items-center gap-2 text-sm">
+              <span>{greeting.emoji}</span>
+              <span className="text-white/50">{greeting.text},</span>
+              <span className="text-white/80">{greeting.meal}</span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={requestLocation}
+                disabled={locationStatus === 'loading'}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all ${
+                  locationStatus === 'success'
+                    ? 'bg-green-500/20 text-green-400'
+                    : locationStatus === 'error'
+                    ? 'bg-red-500/20 text-red-400'
+                    : 'bg-white/5 text-white/50 hover:bg-white/10'
+                }`}
+              >
+                {locationStatus === 'loading' ? '⏳' : '📍'}
+                <span className="hidden sm:inline">
+                  {locationStatus === 'success' ? 'Рядом' : locationStatus === 'error' ? 'Нет GPS' : 'Рядом'}
+                </span>
+              </button>
+              
+              <Link 
+                href="/admin" 
+                className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-white/50 hover:text-white text-xs transition-all"
+              >
+                ⚙️
+              </Link>
             </div>
           </div>
           
-          <h1 className="text-4xl sm:text-6xl font-black mb-6">
-            <span className="text-white">Найди своё </span>
-            <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">
-              идеальное место
-            </span>
-          </h1>
-          
-          {/* Поиск с подсказками */}
-          <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-8 relative">
-            <div className="flex gap-2 p-2 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
+          {/* Строка поиска */}
+          <form onSubmit={handleSearch} className="relative">
+            <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10">
               <div className="relative flex-1">
                 <input
                   ref={searchInputRef}
@@ -515,138 +492,95 @@ export default function Home() {
                   onChange={(e) => setSearch(e.target.value)}
                   onFocus={() => setShowSuggestions(true)}
                   onKeyDown={handleSearchKeyDown}
-                  placeholder="Название, кухня или блюдо..."
-                  className="w-full px-4 py-3 bg-transparent text-white placeholder-white/30 focus:outline-none"
+                  placeholder="🔍 Поиск по названию, кухне или блюду..."
+                  className="w-full px-3 py-2 bg-transparent text-white text-sm placeholder-white/30 focus:outline-none"
                   autoComplete="off"
                 />
-                
-                {/* Индикатор автопоиска */}
-                {search.length >= 2 && (
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Автопоиск"></div>
-                  </div>
-                )}
               </div>
               
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch('');
-                    setShowSuggestions(false);
-                    fetchRestaurants({});
-                  }}
-                  className="px-3 text-white/40 hover:text-white/70 transition-colors"
-                >
-                  ✕
-                </button>
-              )}
-              
-              <button
-                type="submit"
-                className="px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-500 rounded-xl font-semibold text-white hover:opacity-90 transition-opacity"
-              >
-                🔍
-              </button>
+              {/* Индикатор + кнопки */}
+              <div className="flex items-center gap-1 pr-2">
+                {search.length >= 2 && (
+                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" title="Автопоиск"></span>
+                )}
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch('');
+                      setShowSuggestions(false);
+                      fetchRestaurants({});
+                    }}
+                    className="p-1 text-white/30 hover:text-white/60 transition-colors"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
             
             {/* Выпадающий список подсказок */}
             {showSuggestions && suggestions.length > 0 && (
               <div 
                 ref={suggestionsRef}
-                className="absolute top-full left-0 right-0 mt-2 bg-[#1a1a2e]/95 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl"
+                className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a2e]/98 backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden z-50 shadow-2xl"
               >
-                {/* Заголовок секции */}
-                <div className="px-4 py-2 border-b border-white/10 flex justify-between items-center">
+                <div className="px-3 py-1.5 border-b border-white/10 flex justify-between items-center">
                   <span className="text-xs text-white/40">
-                    {search ? '💡 Подсказки' : '🕐 Недавние / 🔥 Популярные'}
+                    {search ? '💡 Подсказки' : '🕐 Недавние'}
                   </span>
                   {searchHistory.length > 0 && !search && (
-                    <button
-                      type="button"
-                      onClick={handleClearHistory}
-                      className="text-xs text-white/30 hover:text-red-400 transition-colors"
-                    >
-                      Очистить историю
+                    <button type="button" onClick={handleClearHistory} className="text-xs text-white/30 hover:text-red-400">
+                      Очистить
                     </button>
                   )}
                 </div>
                 
-                {suggestions.map((suggestion, index) => {
-                  const isFromHistory = searchHistory.includes(suggestion);
-                  return (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      onClick={() => handleSelectSuggestion(suggestion)}
-                      className={`w-full px-4 py-3 text-left flex items-center gap-3 transition-colors ${
-                        highlightedIndex === index 
-                          ? 'bg-orange-500/20 text-white' 
-                          : 'text-white/70 hover:bg-white/5 hover:text-white'
-                      }`}
-                    >
-                      <span className="text-white/40">
-                        {isFromHistory ? '🕐' : '🔍'}
-                      </span>
-                      <span className="flex-1">{suggestion}</span>
-                      {isFromHistory && (
-                        <span className="text-xs text-white/30">из истории</span>
-                      )}
-                    </button>
-                  );
-                })}
-                
-                {/* Подсказка про горячие клавиши */}
-                <div className="px-4 py-2 border-t border-white/10 text-xs text-white/30 flex gap-4">
-                  <span>↑↓ навигация</span>
-                  <span>Enter выбор</span>
-                  <span>Esc закрыть</span>
-                </div>
+                {suggestions.slice(0, 6).map((suggestion, index) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => handleSelectSuggestion(suggestion)}
+                    className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors ${
+                      highlightedIndex === index 
+                        ? 'bg-orange-500/20 text-white' 
+                        : 'text-white/60 hover:bg-white/5'
+                    }`}
+                  >
+                    <span className="text-white/30 text-xs">{searchHistory.includes(suggestion) ? '🕐' : '🔍'}</span>
+                    <span>{suggestion}</span>
+                  </button>
+                ))}
               </div>
             )}
           </form>
           
-          {/* Индикатор результатов поиска */}
+          {/* Индикатор результатов - компактный */}
           {(search || selectedMood || selectedCuisine) && (
-            <div className="mt-4 flex items-center justify-center gap-3 text-sm">
+            <div className="mt-2 flex items-center justify-center gap-2 text-xs">
               {loading ? (
-                <span className="text-white/50 flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin"></span>
+                <span className="text-white/40 flex items-center gap-1">
+                  <span className="w-3 h-3 border border-orange-500/30 border-t-orange-500 rounded-full animate-spin"></span>
                   Ищем...
                 </span>
+              ) : restaurants.length > 0 ? (
+                <span className="text-white/50">
+                  Найдено: <span className="text-orange-400">{restaurants.length}</span>
+                  {totalCount > restaurants.length && <span className="text-white/30"> / {totalCount}</span>}
+                </span>
               ) : (
-                <>
-                  <span className="text-white/70">
-                    {restaurants.length > 0 ? (
-                      <>
-                        Найдено: <span className="text-orange-400 font-semibold">{restaurants.length}</span>
-                        {totalCount > restaurants.length && (
-                          <span className="text-white/40"> из {totalCount}</span>
-                        )}
-                      </>
-                    ) : (
-                      <span className="text-red-400">Ничего не найдено</span>
-                    )}
-                  </span>
-                  {(search || selectedMood || selectedCuisine) && (
-                    <button
-                      onClick={() => {
-                        setSearch('');
-                        setSelectedMood(null);
-                        setSelectedCuisine(null);
-                        fetchRestaurants({});
-                      }}
-                      className="text-white/40 hover:text-white/70 underline"
-                    >
-                      Сбросить
-                    </button>
-                  )}
-                </>
+                <span className="text-red-400/70">Не найдено</span>
               )}
+              <button
+                onClick={() => { setSearch(''); setSelectedMood(null); setSelectedCuisine(null); fetchRestaurants({}); }}
+                className="text-white/30 hover:text-white/60"
+              >
+                ✕ сброс
+              </button>
             </div>
           )}
         </div>
-      </section>
+      </header>
 
       {/* Категории - скрываем при активном поиске */}
       {!search && (
