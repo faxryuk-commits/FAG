@@ -684,7 +684,7 @@ function DuplicatesModal({
 
       if (res.ok) {
         alert(`✅ ${data.message}`);
-        fetchDuplicates();
+        fetchDuplicates(0, true);
         onMerged();
       } else {
         alert(`❌ Ошибка: ${data.error}`);
