@@ -82,9 +82,12 @@ interface RestaurantItem {
   id: string;
   name: string;
   address: string;
+  city: string;
+  country: string | null;
   source: string;
   rating: number | null;
   cuisine: string[];
+  isArchived: boolean;
 }
 
 // Компонент таймера с реалтайм прогрессом
@@ -178,7 +181,7 @@ function JobTimer({
   );
 }
 
-// Модальное окно выборочного удаления
+// Модальное окно выборочного удаления и архивирования
 function SelectiveDeleteModal({ 
   isOpen, 
   onClose,
@@ -191,23 +194,30 @@ function SelectiveDeleteModal({
   const [restaurants, setRestaurants] = useState<RestaurantItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [deleting, setDeleting] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [search, setSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState<string>('');
+  const [cityFilter, setCityFilter] = useState<string>('');
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedCount, setArchivedCount] = useState(0);
 
   useEffect(() => {
     if (isOpen) {
       fetchRestaurants();
       setSelected(new Set());
     }
-  }, [isOpen]);
+  }, [isOpen, showArchived]);
 
   const fetchRestaurants = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/restaurants?limit=500');
+      const url = showArchived 
+        ? '/api/restaurants?limit=1000&includeArchived=true'
+        : '/api/restaurants?limit=1000';
+      const res = await fetch(url);
       const data = await res.json();
       setRestaurants(data.restaurants || []);
+      setArchivedCount(data.archivedCount || 0);
     } catch (error) {
       console.error('Error fetching restaurants:', error);
     } finally {
@@ -234,11 +244,69 @@ function SelectiveDeleteModal({
     }
   };
 
+  // Архивирование выбранных
+  const archiveSelected = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`Архивировать ${selected.size} ресторанов?\n\nОни будут скрыты, но не удалены.`)) return;
+    
+    setProcessing(true);
+    try {
+      const res = await fetch('/api/restaurants/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selected), archive: true }),
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        alert(`✅ ${data.message}`);
+        setSelected(new Set());
+        fetchRestaurants();
+        onDeleted();
+      } else {
+        alert(`❌ Ошибка: ${data.error}`);
+      }
+    } catch (error) {
+      alert(`❌ Ошибка: ${error}`);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Восстановление из архива
+  const restoreSelected = async () => {
+    if (selected.size === 0) return;
+    
+    setProcessing(true);
+    try {
+      const res = await fetch('/api/restaurants/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'restore', ids: Array.from(selected) }),
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        alert(`✅ ${data.message}`);
+        setSelected(new Set());
+        fetchRestaurants();
+        onDeleted();
+      } else {
+        alert(`❌ Ошибка: ${data.error}`);
+      }
+    } catch (error) {
+      alert(`❌ Ошибка: ${error}`);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Удаление выбранных
   const deleteSelected = async () => {
     if (selected.size === 0) return;
-    if (!confirm(`Удалить ${selected.size} ресторанов?\n\nЭто действие нельзя отменить!`)) return;
+    if (!confirm(`⚠️ УДАЛИТЬ ${selected.size} ресторанов НАВСЕГДА?\n\nЭто действие нельзя отменить!`)) return;
     
-    setDeleting(true);
+    setProcessing(true);
     try {
       const res = await fetch('/api/restaurants/delete', {
         method: 'DELETE',
@@ -258,7 +326,7 @@ function SelectiveDeleteModal({
     } catch (error) {
       alert(`❌ Ошибка: ${error}`);
     } finally {
-      setDeleting(false);
+      setProcessing(false);
     }
   };
 
@@ -267,47 +335,84 @@ function SelectiveDeleteModal({
       r.name.toLowerCase().includes(search.toLowerCase()) ||
       r.address.toLowerCase().includes(search.toLowerCase());
     const matchesSource = !sourceFilter || r.source === sourceFilter;
-    return matchesSearch && matchesSource;
+    const matchesCity = !cityFilter || r.city === cityFilter;
+    const matchesArchived = showArchived ? r.isArchived : !r.isArchived;
+    return matchesSearch && matchesSource && matchesCity && matchesArchived;
   });
 
   const sources = [...new Set(restaurants.map(r => r.source))];
+  const cities = [...new Set(restaurants.map(r => r.city))].sort();
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-4xl max-h-[90vh] bg-gradient-to-br from-[#1a1a2e] to-[#16213e] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col">
+      <div className="w-full max-w-5xl max-h-[90vh] bg-gradient-to-br from-[#1a1a2e] to-[#16213e] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between flex-shrink-0">
           <div>
-            <h2 className="text-xl font-bold text-white">🗑️ Выборочное удаление</h2>
-            <p className="text-sm text-white/50">Выберите рестораны для удаления</p>
+            <h2 className="text-xl font-bold text-white">
+              {showArchived ? '📦 Архив' : '🗂️ Управление данными'}
+            </h2>
+            <p className="text-sm text-white/50">
+              {showArchived ? 'Восстановите или удалите архивированные записи' : 'Архивируйте или удалите ненужные данные'}
+            </p>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors flex items-center justify-center"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Toggle Archived */}
+            <button
+              onClick={() => {
+                setShowArchived(!showArchived);
+                setSelected(new Set());
+              }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                showArchived 
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+                  : 'bg-white/10 text-white/70 hover:bg-white/20'
+              }`}
+            >
+              📦 Архив {archivedCount > 0 && `(${archivedCount})`}
+            </button>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors flex items-center justify-center"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
-        <div className="px-6 py-3 border-b border-white/10 flex gap-3 flex-shrink-0">
+        <div className="px-6 py-3 border-b border-white/10 flex flex-wrap gap-3 flex-shrink-0">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="🔍 Поиск по названию..."
-            className="flex-1 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+            className="flex-1 min-w-[200px] px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-white/30"
           />
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
             className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-white/30"
           >
-            <option value="">Все источники</option>
+            <option value="" className="bg-[#1a1a2e]">📍 Все источники</option>
             {sources.map(s => (
-              <option key={s} value={s}>{s === 'google' ? '🗺️ Google' : s === 'yandex' ? '🔴 Яндекс' : '🟢 2ГИС'}</option>
+              <option key={s} value={s} className="bg-[#1a1a2e]">
+                {s === 'google' ? '🗺️ Google' : s === 'yandex' ? '🔴 Яндекс' : '🟢 2ГИС'}
+              </option>
+            ))}
+          </select>
+          <select
+            value={cityFilter}
+            onChange={(e) => setCityFilter(e.target.value)}
+            className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-white/30"
+          >
+            <option value="" className="bg-[#1a1a2e]">🏙️ Все города ({cities.length})</option>
+            {cities.map(city => (
+              <option key={city} value={city} className="bg-[#1a1a2e]">
+                {city}
+              </option>
             ))}
           </select>
         </div>
@@ -340,8 +445,8 @@ function SelectiveDeleteModal({
             </div>
           ) : filteredRestaurants.length === 0 ? (
             <div className="text-center py-12 text-white/40">
-              <div className="text-4xl mb-2">📭</div>
-              <p>Рестораны не найдены</p>
+              <div className="text-4xl mb-2">{showArchived ? '📭' : '✨'}</div>
+              <p>{showArchived ? 'Архив пуст' : 'Рестораны не найдены'}</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -350,7 +455,7 @@ function SelectiveDeleteModal({
                   key={restaurant.id}
                   className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-colors ${
                     selected.has(restaurant.id)
-                      ? 'bg-red-500/20 border-red-500/50'
+                      ? showArchived ? 'bg-amber-500/20 border-amber-500/50' : 'bg-red-500/20 border-red-500/50'
                       : 'bg-white/5 border-white/10 hover:border-white/20'
                   }`}
                 >
@@ -358,14 +463,21 @@ function SelectiveDeleteModal({
                     type="checkbox"
                     checked={selected.has(restaurant.id)}
                     onChange={() => toggleSelect(restaurant.id)}
-                    className="w-5 h-5 rounded border-white/30 bg-white/10 text-red-500 focus:ring-red-500"
+                    className={`w-5 h-5 rounded border-white/30 bg-white/10 focus:ring-purple-500 ${
+                      showArchived ? 'text-amber-500' : 'text-red-500'
+                    }`}
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-white truncate">{restaurant.name}</span>
                       <span className="text-xs px-2 py-0.5 rounded bg-white/10 text-white/50">
                         {restaurant.source === 'google' ? '🗺️' : restaurant.source === 'yandex' ? '🔴' : '🟢'}
                       </span>
+                      {restaurant.city && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">
+                          📍 {restaurant.city}
+                        </span>
+                      )}
                       {restaurant.rating && (
                         <span className="text-xs text-amber-400">★ {restaurant.rating.toFixed(1)}</span>
                       )}
@@ -384,24 +496,50 @@ function SelectiveDeleteModal({
             onClick={onClose}
             className="px-6 py-2 text-white/70 hover:text-white transition-colors"
           >
-            Отмена
+            Закрыть
           </button>
-          <button
-            onClick={deleteSelected}
-            disabled={selected.size === 0 || deleting}
-            className="px-6 py-2 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {deleting ? (
+          
+          <div className="flex items-center gap-3">
+            {showArchived ? (
               <>
-                <span className="animate-spin">⏳</span>
-                Удаление...
+                {/* Режим архива - восстановление и удаление */}
+                <button
+                  onClick={restoreSelected}
+                  disabled={selected.size === 0 || processing}
+                  className="px-5 py-2 bg-green-500 text-white font-medium rounded-xl hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {processing ? <span className="animate-spin">⏳</span> : '↩️'} 
+                  Восстановить ({selected.size})
+                </button>
+                <button
+                  onClick={deleteSelected}
+                  disabled={selected.size === 0 || processing}
+                  className="px-5 py-2 bg-red-600 text-white font-medium rounded-xl hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  🗑️ Удалить навсегда
+                </button>
               </>
             ) : (
               <>
-                🗑️ Удалить ({selected.size})
+                {/* Обычный режим - архивирование и удаление */}
+                <button
+                  onClick={archiveSelected}
+                  disabled={selected.size === 0 || processing}
+                  className="px-5 py-2 bg-amber-500 text-white font-medium rounded-xl hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {processing ? <span className="animate-spin">⏳</span> : '📦'} 
+                  Архивировать ({selected.size})
+                </button>
+                <button
+                  onClick={deleteSelected}
+                  disabled={selected.size === 0 || processing}
+                  className="px-5 py-2 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  🗑️ Удалить ({selected.size})
+                </button>
               </>
             )}
-          </button>
+          </div>
         </div>
       </div>
     </div>

@@ -110,9 +110,17 @@ export async function GET(request: NextRequest) {
     const sortBy = searchParams.get('sortBy');
     const maxDistance = parseFloat(searchParams.get('maxDistance') || '50'); // км
     
+    // Параметр для включения архивированных
+    const includeArchived = searchParams.get('includeArchived') === 'true';
+    
     const where: any = {
       isActive: true,
     };
+    
+    // По умолчанию не показываем архивированные
+    if (!includeArchived) {
+      where.isArchived = false;
+    }
     
     // Условия AND
     const andConditions: any[] = [];
@@ -285,8 +293,12 @@ export async function GET(request: NextRequest) {
     
     const total = search ? restaurants.length : await prisma.restaurant.count({ where });
     
+    // Считаем архивированные для отображения в UI
+    const archivedCount = await prisma.restaurant.count({ where: { isArchived: true } });
+    
     return NextResponse.json({
       restaurants,
+      archivedCount,
       pagination: {
         page,
         limit,

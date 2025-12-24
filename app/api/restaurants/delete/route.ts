@@ -2,17 +2,48 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 /**
- * DELETE /api/restaurants/delete - Удаление ресторанов
+ * DELETE /api/restaurants/delete - Удаление или архивирование ресторанов
  * 
  * Параметры:
  * - source: удалить только из определённого источника (google, yandex, 2gis)
  * - all: true для удаления всех данных
  * - ids: массив ID для точечного удаления
+ * - archive: true для архивирования вместо удаления
  */
 export async function DELETE(request: NextRequest) {
   try {
     const body = await request.json();
-    const { source, all, ids } = body;
+    const { source, all, ids, archive } = body;
+    
+    // Режим архивирования
+    if (archive) {
+      let archivedCount = 0;
+      
+      if (ids && Array.isArray(ids) && ids.length > 0) {
+        const result = await prisma.restaurant.updateMany({
+          where: { id: { in: ids } },
+          data: { isArchived: true },
+        });
+        archivedCount = result.count;
+      } else if (source) {
+        const result = await prisma.restaurant.updateMany({
+          where: { source },
+          data: { isArchived: true },
+        });
+        archivedCount = result.count;
+      } else if (all === true) {
+        const result = await prisma.restaurant.updateMany({
+          data: { isArchived: true },
+        });
+        archivedCount = result.count;
+      }
+      
+      return NextResponse.json({
+        success: true,
+        message: `Архивировано ${archivedCount} ресторанов`,
+        archived: archivedCount,
+      });
+    }
     
     let deletedCount = 0;
     let deletedReviews = 0;
@@ -143,20 +174,48 @@ export async function DELETE(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
+    // Статистика по источникам
     const stats = await prisma.restaurant.groupBy({
       by: ['source'],
+      where: { isArchived: false },
       _count: true,
     });
     
-    const total = await prisma.restaurant.count();
+    // Статистика по городам
+    const cityStats = await prisma.restaurant.groupBy({
+      by: ['city'],
+      where: { isArchived: false },
+      _count: true,
+      orderBy: { _count: { city: 'desc' } },
+      take: 50,
+    });
+    
+    // Статистика по странам
+    const countryStats = await prisma.restaurant.groupBy({
+      by: ['country'],
+      where: { isArchived: false },
+      _count: true,
+    });
+    
+    const total = await prisma.restaurant.count({ where: { isArchived: false } });
+    const archivedCount = await prisma.restaurant.count({ where: { isArchived: true } });
     const reviewsCount = await prisma.review.count();
     const hoursCount = await prisma.workingHours.count();
     
     return NextResponse.json({
       total,
+      archived: archivedCount,
       bySource: stats.map(s => ({
         source: s.source,
         count: s._count,
+      })),
+      byCity: cityStats.map(c => ({
+        city: c.city || 'Неизвестно',
+        count: c._count,
+      })),
+      byCountry: countryStats.map(c => ({
+        country: c.country || 'Неизвестно',
+        count: c._count,
       })),
       relatedData: {
         reviews: reviewsCount,
@@ -167,6 +226,57 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching delete stats:', error);
     return NextResponse.json(
       { error: 'Failed to fetch stats' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST /api/restaurants/delete - Восстановление архивированных ресторанов
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { action, ids, source, all } = body;
+    
+    if (action === 'restore') {
+      let restoredCount = 0;
+      
+      if (ids && Array.isArray(ids) && ids.length > 0) {
+        const result = await prisma.restaurant.updateMany({
+          where: { id: { in: ids }, isArchived: true },
+          data: { isArchived: false },
+        });
+        restoredCount = result.count;
+      } else if (source) {
+        const result = await prisma.restaurant.updateMany({
+          where: { source, isArchived: true },
+          data: { isArchived: false },
+        });
+        restoredCount = result.count;
+      } else if (all === true) {
+        const result = await prisma.restaurant.updateMany({
+          where: { isArchived: true },
+          data: { isArchived: false },
+        });
+        restoredCount = result.count;
+      }
+      
+      return NextResponse.json({
+        success: true,
+        message: `Восстановлено ${restoredCount} ресторанов`,
+        restored: restoredCount,
+      });
+    }
+    
+    return NextResponse.json(
+      { error: 'Unknown action' },
+      { status: 400 }
+    );
+  } catch (error) {
+    console.error('Error in POST /api/restaurants/delete:', error);
+    return NextResponse.json(
+      { error: 'Failed to process request' },
       { status: 500 }
     );
   }

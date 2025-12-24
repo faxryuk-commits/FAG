@@ -51,6 +51,10 @@ model Restaurant {
   // Статус
   isActive    Boolean  @default(true)
   isVerified  Boolean  @default(false)
+  isArchived  Boolean  @default(false) // Архивированные (скрытые) записи
+  
+  // Страна для фильтрации
+  country     String?  // UZ, RU, KZ, и т.д.
   
   // Временные метки
   createdAt   DateTime @default(now())
