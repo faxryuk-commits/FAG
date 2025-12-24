@@ -90,6 +90,30 @@ interface RestaurantItem {
   isArchived: boolean;
 }
 
+// Интерфейс для дубликатов
+interface DuplicateRestaurant {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  source: string;
+  rating: number | null;
+  ratingCount: number;
+  images: string[];
+  latitude: number;
+  longitude: number;
+  phone: string | null;
+  website: string | null;
+}
+
+interface DuplicateGroup {
+  id: string;
+  restaurants: DuplicateRestaurant[];
+  similarity: number;
+  distance: number;
+  reason: string;
+}
+
 // Компонент таймера с реалтайм прогрессом
 function JobTimer({ 
   startedAt, 
@@ -538,6 +562,264 @@ function SelectiveDeleteModal({
   );
 }
 
+// Модальное окно просмотра и объединения дубликатов
+function DuplicatesModal({ 
+  isOpen, 
+  onClose,
+  onMerged,
+}: { 
+  isOpen: boolean; 
+  onClose: () => void;
+  onMerged: () => void;
+}) {
+  const [groups, setGroups] = useState<DuplicateGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [merging, setMerging] = useState<string | null>(null);
+  const [selectedKeep, setSelectedKeep] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchDuplicates();
+    }
+  }, [isOpen]);
+
+  const fetchDuplicates = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/duplicates');
+      const data = await res.json();
+      setGroups(data.groups || []);
+      
+      // По умолчанию выбираем Google > Yandex > 2GIS
+      const defaults: Record<string, string> = {};
+      for (const group of data.groups || []) {
+        const priority = ['google', 'yandex', '2gis'];
+        const sorted = [...group.restaurants].sort(
+          (a, b) => priority.indexOf(a.source) - priority.indexOf(b.source)
+        );
+        defaults[group.id] = sorted[0]?.id || group.restaurants[0]?.id;
+      }
+      setSelectedKeep(defaults);
+    } catch (error) {
+      console.error('Error fetching duplicates:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const mergeGroup = async (groupId: string) => {
+    const group = groups.find(g => g.id === groupId);
+    if (!group) return;
+
+    const keepId = selectedKeep[groupId];
+    if (!keepId) {
+      alert('Выберите какой ресторан оставить');
+      return;
+    }
+
+    const mergeIds = group.restaurants.filter(r => r.id !== keepId).map(r => r.id);
+    
+    if (!confirm(`Объединить ${group.restaurants.length} ресторанов?\n\nБудет оставлен: ${group.restaurants.find(r => r.id === keepId)?.name}\nБудут удалены: ${mergeIds.length} записей`)) {
+      return;
+    }
+
+    setMerging(groupId);
+    try {
+      const res = await fetch('/api/duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keepId, mergeIds }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        alert(`✅ ${data.message}`);
+        fetchDuplicates();
+        onMerged();
+      } else {
+        alert(`❌ Ошибка: ${data.error}`);
+      }
+    } catch (error) {
+      alert(`❌ Ошибка: ${error}`);
+    } finally {
+      setMerging(null);
+    }
+  };
+
+  const getSourceIcon = (source: string) => {
+    switch (source) {
+      case 'google': return '🗺️';
+      case 'yandex': return '🔴';
+      case '2gis': return '🟢';
+      default: return '📍';
+    }
+  };
+
+  const getSourceColor = (source: string) => {
+    switch (source) {
+      case 'google': return 'border-blue-500/50 bg-blue-500/10';
+      case 'yandex': return 'border-red-500/50 bg-red-500/10';
+      case '2gis': return 'border-green-500/50 bg-green-500/10';
+      default: return 'border-white/20 bg-white/5';
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-6xl max-h-[90vh] bg-gradient-to-br from-[#1a1a2e] to-[#16213e] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between flex-shrink-0">
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              🔍 Потенциальные дубликаты
+            </h2>
+            <p className="text-sm text-white/50">
+              {groups.length} групп найдено • Выберите какой ресторан оставить в каждой группе
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors flex items-center justify-center"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-4xl animate-spin">⏳</div>
+            </div>
+          ) : groups.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">✨</div>
+              <h3 className="text-xl font-bold text-white mb-2">Дубликатов не найдено!</h3>
+              <p className="text-white/50">Все рестораны уникальны</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {groups.map((group, idx) => (
+                <div key={group.id} className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+                  {/* Group Header */}
+                  <div className="px-4 py-3 bg-white/5 border-b border-white/10 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">🔗</span>
+                      <div>
+                        <div className="text-white font-medium">
+                          Группа #{idx + 1} • {group.restaurants.length} ресторанов
+                        </div>
+                        <div className="text-sm text-amber-400">{group.reason}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => mergeGroup(group.id)}
+                      disabled={merging === group.id}
+                      className="px-4 py-2 bg-purple-500 text-white text-sm font-medium rounded-lg hover:bg-purple-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {merging === group.id ? (
+                        <>
+                          <span className="animate-spin">⏳</span>
+                          Объединяю...
+                        </>
+                      ) : (
+                        <>
+                          🔗 Объединить
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Restaurants in group */}
+                  <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {group.restaurants.map(restaurant => {
+                      const isSelected = selectedKeep[group.id] === restaurant.id;
+                      return (
+                        <button
+                          key={restaurant.id}
+                          onClick={() => setSelectedKeep({ ...selectedKeep, [group.id]: restaurant.id })}
+                          className={`p-4 rounded-xl border-2 text-left transition-all ${
+                            isSelected 
+                              ? 'border-green-500 bg-green-500/20 ring-2 ring-green-500/30' 
+                              : `${getSourceColor(restaurant.source)} hover:border-white/40`
+                          }`}
+                        >
+                          {/* Selection indicator */}
+                          <div className="flex items-center justify-between mb-3">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              restaurant.source === 'google' ? 'bg-blue-500/30 text-blue-300' :
+                              restaurant.source === 'yandex' ? 'bg-red-500/30 text-red-300' :
+                              'bg-green-500/30 text-green-300'
+                            }`}>
+                              {getSourceIcon(restaurant.source)} {restaurant.source}
+                            </span>
+                            {isSelected && (
+                              <span className="px-2 py-0.5 bg-green-500 text-white text-xs rounded font-medium">
+                                ✓ Оставить
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Image */}
+                          {restaurant.images[0] && (
+                            <div className="w-full h-24 rounded-lg overflow-hidden mb-3 bg-black/20">
+                              <img 
+                                src={restaurant.images[0]} 
+                                alt={restaurant.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          {/* Info */}
+                          <h4 className="text-white font-medium mb-1 truncate">{restaurant.name}</h4>
+                          <p className="text-sm text-white/50 truncate mb-2">{restaurant.address}</p>
+                          
+                          {/* Stats */}
+                          <div className="flex items-center gap-3 text-xs text-white/40">
+                            {restaurant.rating && (
+                              <span className="flex items-center gap-1">
+                                <span className="text-amber-400">★</span>
+                                {restaurant.rating.toFixed(1)}
+                                <span className="text-white/30">({restaurant.ratingCount})</span>
+                              </span>
+                            )}
+                            {restaurant.phone && <span>📞</span>}
+                            {restaurant.website && <span>🌐</span>}
+                            <span>{restaurant.images.length} 📷</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-white/10 flex items-center justify-between flex-shrink-0">
+          <div className="text-white/50 text-sm">
+            💡 Выберите ресторан для сохранения в каждой группе. Данные из остальных будут объединены.
+          </div>
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors"
+          >
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Модальное окно мониторинга парсинга
 function ParsingMonitorModal({ 
   isOpen, 
@@ -786,6 +1068,7 @@ export default function AdminPage() {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [activeSource, setActiveSource] = useState<string>('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
 
   // Загрузка использования Apify
   const fetchApifyUsage = async () => {
@@ -1038,7 +1321,12 @@ export default function AdminPage() {
                           </span>
                         ))}
                         {dbStats.potentialDuplicates > 0 && (
-                          <span className="text-amber-400">⚠️ ~{dbStats.potentialDuplicates} возможных дубликатов</span>
+                          <button 
+                            onClick={() => setShowDuplicatesModal(true)}
+                            className="text-amber-400 hover:text-amber-300 hover:underline transition-colors"
+                          >
+                            ⚠️ ~{dbStats.potentialDuplicates} возможных дубликатов
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1603,7 +1891,13 @@ export default function AdminPage() {
                   }}
                   className="w-full py-2.5 bg-purple-500/20 text-purple-300 text-sm rounded-lg hover:bg-purple-500/30 transition-colors font-medium"
                 >
-                  🔗 Объединить дубликаты
+                  🔗 Авто-объединение
+                </button>
+                <button
+                  onClick={() => setShowDuplicatesModal(true)}
+                  className="w-full mt-2 py-2.5 bg-amber-500/20 text-amber-300 text-sm rounded-lg hover:bg-amber-500/30 transition-colors font-medium"
+                >
+                  🔍 Просмотр дубликатов
                 </button>
               </div>
 
@@ -1713,6 +2007,19 @@ export default function AdminPage() {
         onClose={() => setShowDeleteModal(false)}
         onDeleted={() => {
           // Обновляем статистику после удаления
+          fetch('/api/consolidate')
+            .then(res => res.json())
+            .then(data => setDbStats(data))
+            .catch(console.error);
+        }}
+      />
+
+      {/* Модальное окно дубликатов */}
+      <DuplicatesModal
+        isOpen={showDuplicatesModal}
+        onClose={() => setShowDuplicatesModal(false)}
+        onMerged={() => {
+          // Обновляем статистику после объединения
           fetch('/api/consolidate')
             .then(res => res.json())
             .then(data => setDbStats(data))
