@@ -1,0 +1,199 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { ApifyClient } from 'apify-client';
+
+const client = new ApifyClient({
+  token: process.env.APIFY_API_TOKEN,
+});
+
+// GET - получить статистику неполных записей
+export async function GET() {
+  try {
+    // Записи без фото
+    const noImages = await prisma.restaurant.count({
+      where: {
+        OR: [
+          { images: { equals: [] } },
+          { images: { equals: null } },
+        ],
+        isArchived: false,
+      },
+    });
+
+    // Записи без рейтинга
+    const noRating = await prisma.restaurant.count({
+      where: {
+        rating: null,
+        isArchived: false,
+      },
+    });
+
+    // Записи без рабочих часов
+    const noHours = await prisma.restaurant.count({
+      where: {
+        workingHours: { none: {} },
+        isArchived: false,
+      },
+    });
+
+    // Записи без отзывов
+    const noReviews = await prisma.restaurant.count({
+      where: {
+        reviews: { none: {} },
+        isArchived: false,
+      },
+    });
+
+    // Всего активных
+    const total = await prisma.restaurant.count({
+      where: { isArchived: false },
+    });
+
+    // Записи из импорта (sourceId начинается с "import-")
+    const importedCount = await prisma.restaurant.count({
+      where: {
+        sourceId: { startsWith: 'import-' },
+        isArchived: false,
+      },
+    });
+
+    // Неполные записи (импорт без фото)
+    const incompleteImports = await prisma.restaurant.count({
+      where: {
+        sourceId: { startsWith: 'import-' },
+        OR: [
+          { images: { equals: [] } },
+          { images: { equals: null } },
+        ],
+        isArchived: false,
+      },
+    });
+
+    return NextResponse.json({
+      total,
+      stats: {
+        noImages,
+        noRating,
+        noHours,
+        noReviews,
+        importedCount,
+        incompleteImports,
+      },
+      needsEnrichment: incompleteImports,
+    });
+  } catch (error) {
+    console.error('Error getting enrich stats:', error);
+    return NextResponse.json({ error: 'Failed to get stats' }, { status: 500 });
+  }
+}
+
+// POST - запустить обогащение данных
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { batchSize = 50, mode = 'incomplete' } = body;
+
+    // Получить записи для обогащения
+    let restaurants;
+    
+    if (mode === 'incomplete') {
+      // Только импортированные без фото
+      restaurants = await prisma.restaurant.findMany({
+        where: {
+          sourceId: { startsWith: 'import-' },
+          OR: [
+            { images: { equals: [] } },
+            { images: { equals: null } },
+          ],
+          isArchived: false,
+        },
+        take: batchSize,
+        select: {
+          id: true,
+          name: true,
+          address: true,
+          city: true,
+          latitude: true,
+          longitude: true,
+        },
+      });
+    } else {
+      // Все без фото
+      restaurants = await prisma.restaurant.findMany({
+        where: {
+          OR: [
+            { images: { equals: [] } },
+            { images: { equals: null } },
+          ],
+          isArchived: false,
+        },
+        take: batchSize,
+        select: {
+          id: true,
+          name: true,
+          address: true,
+          city: true,
+          latitude: true,
+          longitude: true,
+        },
+      });
+    }
+
+    if (restaurants.length === 0) {
+      return NextResponse.json({
+        message: 'Нет записей для обогащения',
+        processed: 0,
+      });
+    }
+
+    // Создать поисковые запросы для Apify
+    const searchQueries = restaurants.map(r => {
+      // Формируем точный поисковый запрос
+      const query = `${r.name} ${r.city || 'Tashkent'}`;
+      return query;
+    });
+
+    // Запустить Apify для обогащения
+    const run = await client.actor('compass/crawler-google-places').call({
+      searchStringsArray: searchQueries.slice(0, 20), // Макс 20 за раз
+      maxCrawledPlacesPerSearch: 1, // Только 1 результат на запрос
+      language: 'ru',
+      maxImages: 10,
+      maxReviews: 10,
+      scrapeReviewerName: true,
+      scrapeReviewerId: true,
+      scrapeResponseFromOwnerText: true,
+      additionalInfo: true,
+    });
+
+    // Создать задачу синхронизации
+    const job = await prisma.syncJob.create({
+      data: {
+        source: 'google',
+        status: 'running',
+        startedAt: new Date(),
+        stats: {
+          runId: run.id,
+          mode: 'enrich',
+          targetIds: restaurants.map(r => r.id),
+          searchQueries: searchQueries.slice(0, 20),
+        },
+      },
+    });
+
+    return NextResponse.json({
+      message: `Запущено обогащение ${Math.min(restaurants.length, 20)} записей`,
+      jobId: job.id,
+      runId: run.id,
+      targetCount: Math.min(restaurants.length, 20),
+      totalIncomplete: restaurants.length,
+    });
+  } catch (error) {
+    console.error('Error starting enrichment:', error);
+    return NextResponse.json(
+      { error: 'Failed to start enrichment' },
+      { status: 500 }
+    );
+  }
+}
+

@@ -114,6 +114,20 @@ interface DuplicateGroup {
   reason: string;
 }
 
+// Интерфейс для статистики обогащения
+interface EnrichStats {
+  total: number;
+  stats: {
+    noImages: number;
+    noRating: number;
+    noHours: number;
+    noReviews: number;
+    importedCount: number;
+    incompleteImports: number;
+  };
+  needsEnrichment: number;
+}
+
 // Компонент таймера с реалтайм прогрессом
 function JobTimer({ 
   startedAt, 
@@ -816,6 +830,133 @@ function DuplicatesModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Секция обогащения данных
+function EnrichSection() {
+  const [stats, setStats] = useState<EnrichStats | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+  const [result, setResult] = useState<{ jobId?: string; message?: string; error?: string } | null>(null);
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/enrich');
+      const data = await res.json();
+      setStats(data);
+    } catch (error) {
+      console.error('Error fetching enrich stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startEnrichment = async (batchSize: number) => {
+    if (!confirm(`Запустить обогащение ${batchSize} записей?\n\nЭто использует Apify кредиты.`)) return;
+    
+    setEnriching(true);
+    setResult(null);
+    
+    try {
+      const res = await fetch('/api/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchSize, mode: 'incomplete' }),
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        setResult({ message: data.message, jobId: data.jobId });
+      } else {
+        setResult({ error: data.error || 'Ошибка запуска' });
+      }
+    } catch (error) {
+      setResult({ error: 'Сетевая ошибка' });
+    } finally {
+      setEnriching(false);
+      fetchStats();
+    }
+  };
+
+  return (
+    <div className="mt-6 pt-6 border-t border-white/10">
+      <h3 className="text-sm font-medium text-white/60 mb-3">🔄 Актуализация данных</h3>
+      <p className="text-xs text-white/40 mb-3">
+        Обогатить неполные записи (фото, рейтинги, отзывы) через Google Maps
+      </p>
+      
+      {loading ? (
+        <div className="text-center py-4 text-white/40">Загрузка...</div>
+      ) : stats ? (
+        <div className="space-y-3">
+          {/* Статистика */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-white/5 rounded-lg p-2">
+              <div className="text-white/40">Без фото</div>
+              <div className="text-orange-400 font-bold text-lg">{stats.stats.noImages}</div>
+            </div>
+            <div className="bg-white/5 rounded-lg p-2">
+              <div className="text-white/40">Без рейтинга</div>
+              <div className="text-yellow-400 font-bold text-lg">{stats.stats.noRating}</div>
+            </div>
+            <div className="bg-white/5 rounded-lg p-2">
+              <div className="text-white/40">Импортировано</div>
+              <div className="text-blue-400 font-bold text-lg">{stats.stats.importedCount}</div>
+            </div>
+            <div className="bg-white/5 rounded-lg p-2">
+              <div className="text-white/40">Требует обогащения</div>
+              <div className="text-red-400 font-bold text-lg">{stats.needsEnrichment}</div>
+            </div>
+          </div>
+          
+          {/* Кнопки обогащения */}
+          {stats.needsEnrichment > 0 && (
+            <div className="space-y-2">
+              <button
+                onClick={() => startEnrichment(20)}
+                disabled={enriching}
+                className="w-full py-2.5 bg-green-500/20 text-green-300 text-sm rounded-lg hover:bg-green-500/30 transition-colors font-medium disabled:opacity-50"
+              >
+                {enriching ? '⏳ Запуск...' : '🚀 Обогатить 20 записей (~$0.20)'}
+              </button>
+              <button
+                onClick={() => startEnrichment(50)}
+                disabled={enriching}
+                className="w-full py-2.5 bg-blue-500/20 text-blue-300 text-sm rounded-lg hover:bg-blue-500/30 transition-colors font-medium disabled:opacity-50"
+              >
+                {enriching ? '⏳ Запуск...' : '🚀 Обогатить 50 записей (~$0.50)'}
+              </button>
+            </div>
+          )}
+          
+          {/* Результат */}
+          {result && (
+            <div className={`p-3 rounded-lg text-sm ${result.error ? 'bg-red-500/20 text-red-300' : 'bg-green-500/20 text-green-300'}`}>
+              {result.error || result.message}
+              {result.jobId && (
+                <div className="text-xs mt-1 text-white/50">
+                  Job ID: {result.jobId}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {stats.needsEnrichment === 0 && (
+            <div className="text-center py-4 text-green-400 text-sm">
+              ✅ Все записи актуальны!
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-center py-4 text-red-400">Ошибка загрузки статистики</div>
+      )}
     </div>
   );
 }
@@ -1977,6 +2118,9 @@ export default function AdminPage() {
                   </span>
                 </label>
               </div>
+
+              {/* Enrich Data Section */}
+              <EnrichSection />
 
               {/* Delete Data Section */}
               <div className="mt-6 pt-6 border-t border-white/10">
