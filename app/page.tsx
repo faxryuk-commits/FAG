@@ -132,9 +132,12 @@ export default function Home() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      
+      // Поиск
       if (search) params.set('search', search);
       if (city) params.set('city', city);
       
+      // Фильтр по рейтингу
       const ratingFilter = RATING_FILTERS.find(r => r.id === selectedRating);
       if (ratingFilter && ratingFilter.min > 0) {
         params.set('minRating', String(ratingFilter.min));
@@ -144,6 +147,11 @@ export default function Home() {
       const budgetFilter = BUDGET_FILTERS.find(b => b.id === selectedBudget);
       if (budgetFilter && budgetFilter.price) {
         params.set('priceRange', budgetFilter.price);
+      }
+      
+      // Фильтр по кухне - передаём на сервер
+      if (selectedCuisine !== 'all') {
+        params.set('cuisine', selectedCuisine);
       }
       
       // Геолокация - сортировка по расстоянию
@@ -156,19 +164,14 @@ export default function Home() {
       params.set('page', String(page));
       params.set('limit', '12');
 
+      console.log('Fetching with params:', params.toString()); // Debug
+
       const res = await fetch(`/api/restaurants?${params}`);
       const data = await res.json();
       
-      let filtered = data.restaurants || [];
+      console.log('Received:', data.restaurants?.length, 'restaurants'); // Debug
       
-      // Фильтр по кухне на клиенте
-      if (selectedCuisine !== 'all') {
-        filtered = filtered.filter((r: Restaurant) => 
-          r.cuisine?.some(c => c.toLowerCase().includes(selectedCuisine.toLowerCase()))
-        );
-      }
-      
-      setRestaurants(filtered);
+      setRestaurants(data.restaurants || []);
       setPagination(data.pagination);
     } catch (error) {
       console.error('Error fetching restaurants:', error);

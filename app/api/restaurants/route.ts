@@ -41,28 +41,55 @@ export async function GET(request: NextRequest) {
       isActive: true,
     };
     
+    // Условия AND
+    const andConditions: any[] = [];
+    
+    // Город
     if (city) {
-      where.city = { contains: city, mode: 'insensitive' };
+      andConditions.push({ city: { contains: city, mode: 'insensitive' } });
     }
     
+    // Поиск по названию или адресу
     if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { address: { contains: search, mode: 'insensitive' } },
-      ];
+      andConditions.push({
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { address: { contains: search, mode: 'insensitive' } },
+        ],
+      });
     }
     
+    // Фильтр по кухне - ищем частичное совпадение
+    // hasSome ищет точное совпадение, для частичного нужен raw query или фильтр на клиенте
     if (cuisine) {
-      where.cuisine = { has: cuisine };
+      // Для Prisma с массивами используем hasSome с разными вариантами
+      const cuisineVariants = [
+        cuisine,
+        cuisine.charAt(0).toUpperCase() + cuisine.slice(1), // С большой буквы
+        cuisine.toLowerCase(),
+        cuisine.toUpperCase(),
+      ];
+      andConditions.push({ cuisine: { hasSome: cuisineVariants } });
     }
     
+    // Фильтр по рейтингу
     if (minRating) {
-      where.rating = { gte: parseFloat(minRating) };
+      andConditions.push({ rating: { gte: parseFloat(minRating) } });
     }
     
     // Фильтр по бюджету (цене)
     if (priceRange) {
-      where.priceRange = priceRange;
+      andConditions.push({
+        OR: [
+          { priceRange: priceRange },
+          { priceRange: { startsWith: priceRange } },
+        ],
+      });
+    }
+    
+    // Собираем все условия
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
     
     // Если есть координаты - фильтруем по области (примерно)
