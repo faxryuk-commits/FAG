@@ -588,36 +588,72 @@ function DuplicatesModal({
 }) {
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [merging, setMerging] = useState<string | null>(null);
   const [selectedKeep, setSelectedKeep] = useState<Record<string, string>>({});
+  const [totalGroups, setTotalGroups] = useState(0);
+  const [totalRestaurants, setTotalRestaurants] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const LIMIT = 20;
 
   useEffect(() => {
     if (isOpen) {
-      fetchDuplicates();
+      setGroups([]);
+      setOffset(0);
+      fetchDuplicates(0, true);
     }
   }, [isOpen]);
 
-  const fetchDuplicates = async () => {
-    setLoading(true);
+  const fetchDuplicates = async (newOffset: number, reset = false) => {
+    if (reset) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+    
     try {
-      const res = await fetch('/api/duplicates');
+      const res = await fetch(`/api/duplicates?limit=${LIMIT}&offset=${newOffset}`);
       const data = await res.json();
-      setGroups(data.groups || []);
       
-      // По умолчанию выбираем Google > Yandex > 2GIS
-      const defaults: Record<string, string> = {};
-      for (const group of data.groups || []) {
-        const priority = ['google', 'yandex', '2gis'];
-        const sorted = [...group.restaurants].sort(
-          (a, b) => priority.indexOf(a.source) - priority.indexOf(b.source)
-        );
-        defaults[group.id] = sorted[0]?.id || group.restaurants[0]?.id;
+      const newGroups = data.groups || [];
+      
+      if (reset) {
+        setGroups(newGroups);
+      } else {
+        setGroups(prev => [...prev, ...newGroups]);
+      }
+      
+      setTotalGroups(data.total || 0);
+      setTotalRestaurants(data.totalRestaurants || 0);
+      setHasMore(data.pagination?.hasMore || false);
+      setOffset(newOffset + LIMIT);
+      
+      // По умолчанию выбираем с наибольшим рейтингом или фото
+      const defaults: Record<string, string> = { ...selectedKeep };
+      for (const group of newGroups) {
+        if (!defaults[group.id]) {
+          // Приоритет: есть фото > есть рейтинг > первый
+          const sorted = [...group.restaurants].sort((a, b) => {
+            const aScore = (a.images?.length || 0) * 10 + (a.rating || 0);
+            const bScore = (b.images?.length || 0) * 10 + (b.rating || 0);
+            return bScore - aScore;
+          });
+          defaults[group.id] = sorted[0]?.id || group.restaurants[0]?.id;
+        }
       }
       setSelectedKeep(defaults);
     } catch (error) {
       console.error('Error fetching duplicates:', error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const loadMore = () => {
+    if (!loadingMore && hasMore) {
+      fetchDuplicates(offset);
     }
   };
 
@@ -690,15 +726,27 @@ function DuplicatesModal({
               🔍 Потенциальные дубликаты
             </h2>
             <p className="text-sm text-white/50">
-              {groups.length} групп найдено • Выберите какой ресторан оставить в каждой группе
+              {totalGroups} групп • {totalRestaurants} ресторанов • Показано {groups.length}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors flex items-center justify-center"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setGroups([]);
+                setOffset(0);
+                fetchDuplicates(0, true);
+              }}
+              className="px-3 py-1.5 bg-white/10 text-white/70 text-sm rounded-lg hover:bg-white/20 transition-colors"
+            >
+              🔄 Обновить
+            </button>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors flex items-center justify-center"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -813,6 +861,28 @@ function DuplicatesModal({
                   </div>
                 </div>
               ))}
+              
+              {/* Load More Button */}
+              {hasMore && (
+                <div className="flex justify-center pt-4">
+                  <button
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="px-6 py-3 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {loadingMore ? (
+                      <>
+                        <span className="animate-spin">⏳</span>
+                        Загрузка...
+                      </>
+                    ) : (
+                      <>
+                        📥 Загрузить ещё ({totalGroups - groups.length} осталось)
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -73,8 +73,12 @@ interface DuplicateGroup {
 /**
  * GET - Получить список потенциальных дубликатов
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const offset = parseInt(searchParams.get('offset') || '0');
+
     const restaurants = await prisma.restaurant.findMany({
       where: { isArchived: false },
       select: {
@@ -114,7 +118,7 @@ export async function GET() {
         const r2 = restaurants[j];
         
         if (processed.has(r2.id)) continue;
-        if (r1.source === r2.source) continue; // Дубликаты только из разных источников
+        // Убрали ограничение: теперь находим дубликаты и из одного источника тоже
 
         const distance = calculateDistance(r1.latitude, r1.longitude, r2.latitude, r2.longitude);
         const nameSimilarity = stringSimilarity(r1.name, r2.name);
@@ -162,10 +166,18 @@ export async function GET() {
     // Сортируем по количеству дубликатов
     duplicateGroups.sort((a, b) => b.restaurants.length - a.restaurants.length);
 
+    // Пагинация
+    const paginatedGroups = duplicateGroups.slice(offset, offset + limit);
+
     return NextResponse.json({
       total: duplicateGroups.length,
       totalRestaurants: duplicateGroups.reduce((sum, g) => sum + g.restaurants.length, 0),
-      groups: duplicateGroups,
+      groups: paginatedGroups,
+      pagination: {
+        limit,
+        offset,
+        hasMore: offset + limit < duplicateGroups.length,
+      },
     });
   } catch (error) {
     console.error('Error finding duplicates:', error);
