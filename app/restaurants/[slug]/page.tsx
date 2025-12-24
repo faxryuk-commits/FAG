@@ -39,7 +39,7 @@ interface Restaurant {
   }[];
   reviews: {
     id: string;
-    author: string;
+    author: string | null;
     authorAvatar: string | null;
     authorUrl: string | null;
     authorLevel: string | null;
@@ -48,7 +48,7 @@ interface Restaurant {
     rating: number;
     text: string | null;
     date: string;
-    photos: string[];
+    photos: string[] | null;
     ownerResponse: string | null;
     ownerResponseDate: string | null;
     likesCount: number;
@@ -453,12 +453,12 @@ export default function RestaurantPage() {
                             {review.authorAvatar ? (
                               <img 
                                 src={review.authorAvatar} 
-                                alt={review.author}
+                                alt={review.author || 'Автор'}
                                 className="w-12 h-12 rounded-full object-cover"
                               />
                             ) : (
                               <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-pink-500 rounded-full flex items-center justify-center text-white text-xl font-bold">
-                                {review.author[0]?.toUpperCase()}
+                                {review.author?.[0]?.toUpperCase() || '?'}
                               </div>
                             )}
                           </div>
@@ -474,10 +474,10 @@ export default function RestaurantPage() {
                                       target="_blank"
                                       className="font-bold text-white hover:text-orange-400 transition-colors"
                                     >
-                                      {review.author}
+                                      {review.author || 'Аноним'}
                                     </a>
                                   ) : (
-                                    <span className="font-bold text-white">{review.author}</span>
+                                    <span className="font-bold text-white">{review.author || 'Аноним'}</span>
                                   )}
                                   {review.isLocalGuide && (
                                     <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 text-xs rounded-full">
@@ -512,7 +512,7 @@ export default function RestaurantPage() {
                             )}
                             
                             {/* Review Photos */}
-                            {review.photos && review.photos.length > 0 && (
+                            {review.photos && Array.isArray(review.photos) && review.photos.length > 0 && (
                               <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
                                 {review.photos.map((photo, idx) => (
                                   <img 
