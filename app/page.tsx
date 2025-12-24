@@ -440,11 +440,19 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 py-3">
           {/* Верхняя строка: лого + действия */}
           <div className="flex items-center justify-between gap-4 mb-2">
-            <Link href="/" className="flex items-center gap-1.5 shrink-0">
-              <span className="text-xl">🍽️</span>
-              <span className="font-bold text-lg bg-gradient-to-r from-orange-400 to-pink-500 bg-clip-text text-transparent hidden sm:inline">
-                FoodGuide
-              </span>
+            <Link href="/" className="flex items-center gap-2 shrink-0">
+              {/* Delever Logo */}
+              <div className="w-8 h-8 bg-gradient-to-br from-red-500 to-orange-500 rounded-lg flex items-center justify-center shadow-lg shadow-red-500/20">
+                <span className="text-white font-black text-sm">D</span>
+              </div>
+              <div className="hidden sm:flex flex-col leading-none">
+                <span className="font-bold text-base text-white">
+                  Delever
+                </span>
+                <span className="text-[10px] text-white/50 tracking-wider uppercase">
+                  Food Map
+                </span>
+              </div>
             </Link>
             
             {/* Приветствие - компактное */}
@@ -846,8 +854,14 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-white/5 py-8">
         <div className="max-w-6xl mx-auto px-4 text-center">
-          <div className="text-2xl mb-2">🍽️</div>
-          <p className="text-white/30 text-sm">FoodGuide — найди своё место</p>
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <div className="w-6 h-6 bg-gradient-to-br from-red-500 to-orange-500 rounded-md flex items-center justify-center">
+              <span className="text-white font-black text-xs">D</span>
+            </div>
+            <span className="font-bold text-white/80">Delever Food Map</span>
+          </div>
+          <p className="text-white/30 text-sm">Карта ресторанов и доставка еды</p>
+          <p className="text-white/20 text-xs mt-2">© 2025 Delever. Все права защищены.</p>
         </div>
       </footer>
     </div>

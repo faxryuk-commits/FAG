@@ -5,8 +5,14 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin', 'cyrillic'] });
 
 export const metadata: Metadata = {
-  title: 'Справочник ресторанов',
-  description: 'Найдите лучшие рестораны в вашем городе',
+  title: 'Delever Food Map — Карта ресторанов',
+  description: 'Найдите лучшие рестораны, кафе и заведения в вашем городе. Рейтинги, отзывы, меню и доставка через Delever.',
+  keywords: 'рестораны, кафе, доставка еды, Delever, Ташкент, еда, меню',
+  openGraph: {
+    title: 'Delever Food Map',
+    description: 'Карта ресторанов и заведений с доставкой',
+    siteName: 'Delever Food Map',
+  },
 };
 
 export default function RootLayout({
