@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { startRestaurantSync, checkSyncStatus, fetchAndSaveResults } from '@/lib/apify/sync';
+import { startRestaurantSync, checkSyncStatus, fetchAndSaveResults, abortSync } from '@/lib/apify/sync';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -86,6 +86,56 @@ export async function GET(request: NextRequest) {
     console.error('Get sync status error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to get status' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/sync?jobId=xxx - Остановка/отмена синхронизации
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const jobId = searchParams.get('jobId');
+
+    if (!jobId) {
+      return NextResponse.json({ error: 'jobId is required' }, { status: 400 });
+    }
+
+    const job = await prisma.syncJob.findUnique({
+      where: { id: jobId },
+    });
+
+    if (!job) {
+      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    }
+
+    if (job.status !== 'running' && job.status !== 'pending') {
+      return NextResponse.json({ error: 'Job is not running' }, { status: 400 });
+    }
+
+    // Отменяем задачу в Apify
+    const stats = job.stats as { runId?: string };
+    if (stats?.runId) {
+      await abortSync(stats.runId);
+    }
+
+    // Обновляем статус в базе
+    await prisma.syncJob.update({
+      where: { id: jobId },
+      data: { 
+        status: 'cancelled',
+        completedAt: new Date(),
+        error: 'Отменено пользователем',
+      },
+    });
+
+    return NextResponse.json({ success: true, message: 'Синхронизация отменена' });
+  } catch (error) {
+    console.error('Abort sync error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to abort sync' },
       { status: 500 }
     );
   }

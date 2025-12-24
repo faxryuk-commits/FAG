@@ -250,6 +250,19 @@ export async function checkSyncStatus(runId: string) {
 }
 
 /**
+ * Отменяет выполнение актера
+ */
+export async function abortSync(runId: string) {
+  try {
+    await apifyClient.run(runId).abort();
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to abort run:', error);
+    return { success: false, error };
+  }
+}
+
+/**
  * Получает результаты и сохраняет в БД
  */
 export async function fetchAndSaveResults(runId: string, jobId: string, source: SyncSource) {

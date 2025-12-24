@@ -209,8 +209,20 @@ export default function AdminPage() {
       running: 'bg-blue-100 text-blue-700 animate-pulse',
       completed: 'bg-green-100 text-green-700',
       failed: 'bg-red-100 text-red-700',
+      cancelled: 'bg-orange-100 text-orange-700',
     };
     return styles[status] || styles.pending;
+  };
+
+  const getStatusText = (status: string) => {
+    const texts: Record<string, string> = {
+      pending: 'ожидание',
+      running: 'выполняется',
+      completed: 'завершено',
+      failed: 'ошибка',
+      cancelled: 'отменено',
+    };
+    return texts[status] || status;
   };
 
   return (
@@ -589,7 +601,7 @@ export default function AdminPage() {
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-white font-medium capitalize">{job.source}</span>
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusBadge(job.status)}`}>
-                          {job.status}
+                          {getStatusText(job.status)}
                         </span>
                       </div>
                       <div className="text-xs text-white/40">
@@ -613,21 +625,39 @@ export default function AdminPage() {
                             startedAt={job.startedAt} 
                             estimatedSeconds={100} // ~100 секунд для 50 записей
                           />
-                          <button
-                            onClick={async () => {
-                              const res = await fetch(`/api/sync?jobId=${job.id}`);
-                              const data = await res.json();
-                              if (data.results) {
-                                alert(`✅ Данные загружены!\n\nОбработано: ${data.results.processed}\nОшибок: ${data.results.errors}\nВсего: ${data.results.total}`);
-                              } else if (data.job?.status === 'running') {
-                                alert('⏳ Парсинг ещё выполняется...\n\nПроверьте Apify Console для деталей:\nconsole.apify.com');
-                              }
-                              fetchJobs();
-                            }}
-                            className="mt-3 w-full py-2 bg-blue-500/20 text-blue-300 text-xs rounded-lg hover:bg-blue-500/30 transition-colors"
-                          >
-                            🔍 Проверить и загрузить данные
-                          </button>
+                          <div className="flex gap-2 mt-3">
+                            <button
+                              onClick={async () => {
+                                const res = await fetch(`/api/sync?jobId=${job.id}`);
+                                const data = await res.json();
+                                if (data.results) {
+                                  alert(`✅ Данные загружены!\n\nОбработано: ${data.results.processed}\nОшибок: ${data.results.errors}\nВсего: ${data.results.total}`);
+                                } else if (data.job?.status === 'running') {
+                                  alert('⏳ Парсинг ещё выполняется...\n\nПроверьте Apify Console для деталей:\nconsole.apify.com');
+                                }
+                                fetchJobs();
+                              }}
+                              className="flex-1 py-2 bg-blue-500/20 text-blue-300 text-xs rounded-lg hover:bg-blue-500/30 transition-colors"
+                            >
+                              🔍 Проверить
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!confirm('Остановить парсинг? Уже полученные данные могут быть потеряны.')) return;
+                                const res = await fetch(`/api/sync?jobId=${job.id}`, { method: 'DELETE' });
+                                const data = await res.json();
+                                if (data.success) {
+                                  alert('🛑 Парсинг остановлен');
+                                } else {
+                                  alert(`❌ Ошибка: ${data.error}`);
+                                }
+                                fetchJobs();
+                              }}
+                              className="flex-1 py-2 bg-red-500/20 text-red-300 text-xs rounded-lg hover:bg-red-500/30 transition-colors"
+                            >
+                              🛑 Остановить
+                            </button>
+                          </div>
                         </>
                       )}
                     </div>
