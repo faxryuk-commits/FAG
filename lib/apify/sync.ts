@@ -3,6 +3,13 @@ import { prisma } from '@/lib/prisma';
 
 export type SyncSource = 'yandex' | 'google' | '2gis';
 
+// ID актеров в Apify
+const ACTOR_IDS = {
+  google: 'compass/crawler-google-places', // Популярный актер для Google Maps
+  yandex: 'apify/yandex-search',           // Для Яндекса (нужно найти подходящий)
+  '2gis': 'apify/web-scraper',             // Для 2ГИС (нужно создать свой)
+} as const;
+
 /**
  * Генерирует slug из названия
  */
@@ -13,25 +20,25 @@ function generateSlug(name: string, sourceId: string): string {
     .replace(/\s+/g, '-')
     .substring(0, 50);
   
-  // Добавляем часть sourceId для уникальности
   const suffix = sourceId.substring(0, 8);
   return `${base}-${suffix}`;
 }
 
 interface SyncOptions {
   source: SyncSource;
-  city?: string;
+  searchQuery?: string;
+  location?: string;
+  maxResults?: number;
   actorId?: string;
-  input?: Record<string, any>;
 }
 
 /**
- * Запускает синхронизацию данных через Apify
+ * Запускает синхронизацию ресторанов через Apify
  */
-export async function startSync(options: SyncOptions) {
-  const { source, city, actorId, input } = options;
+export async function startRestaurantSync(options: SyncOptions) {
+  const { source, searchQuery = 'рестораны', location = 'Москва', maxResults = 50, actorId } = options;
 
-  // Создаем запись о задаче синхронизации
+  // Создаем запись о задаче
   const syncJob = await prisma.syncJob.create({
     data: {
       source,
@@ -40,30 +47,29 @@ export async function startSync(options: SyncOptions) {
   });
 
   try {
-    // Определяем actor ID если не указан
-    const finalActorId = actorId || getDefaultActorId(source);
+    const finalActorId = actorId || ACTOR_IDS[source];
+    
+    // Формируем input в зависимости от актера
+    const input = getActorInput(source, searchQuery, location, maxResults);
 
     // Запускаем актера
-    const run = await apifyClient.actor(finalActorId).start({
-      ...input,
-      city: city || 'Москва',
+    const run = await apifyClient.actor(finalActorId).call(input, {
+      waitSecs: 0, // Не ждем завершения
     });
 
-    // Обновляем статус задачи
     await prisma.syncJob.update({
       where: { id: syncJob.id },
       data: {
         status: 'running',
         startedAt: new Date(),
-        stats: {
-          runId: run.id,
-        },
+        stats: { runId: run.id },
       },
     });
 
     return {
       jobId: syncJob.id,
       runId: run.id,
+      status: 'running',
     };
   } catch (error) {
     await prisma.syncJob.update({
@@ -73,57 +79,86 @@ export async function startSync(options: SyncOptions) {
         error: error instanceof Error ? error.message : 'Unknown error',
       },
     });
-
     throw error;
   }
 }
 
 /**
- * Получает результаты выполнения актера
+ * Формирует input для актера в зависимости от источника
  */
-export async function getSyncResults(runId: string) {
-  const run = await apifyClient.run(runId).get();
-  
-  if (run?.status === 'SUCCEEDED' && run.defaultDatasetId) {
-    const dataset = await apifyClient.dataset(run.defaultDatasetId).listItems();
-    return dataset.items;
+function getActorInput(source: SyncSource, searchQuery: string, location: string, maxResults: number) {
+  switch (source) {
+    case 'google':
+      return {
+        searchStringsArray: [`${searchQuery} ${location}`],
+        maxCrawledPlacesPerSearch: maxResults,
+        language: 'ru',
+        deeperCityScrape: false,
+        skipClosedPlaces: false,
+      };
+    
+    case 'yandex':
+      return {
+        text: `${searchQuery} ${location}`,
+        yandex_domain: 'yandex.ru',
+        lang: 'ru',
+        max_pages: Math.ceil(maxResults / 10),
+      };
+    
+    case '2gis':
+      return {
+        startUrls: [`https://2gis.ru/${location}/search/${encodeURIComponent(searchQuery)}`],
+        maxRequestsPerCrawl: maxResults,
+      };
+    
+    default:
+      return {};
   }
-
-  return null;
 }
 
 /**
- * Обрабатывает данные из Apify и сохраняет в БД
+ * Проверяет статус выполнения актера
  */
-export async function processSyncResults(
-  source: SyncSource,
-  results: any[],
-  jobId: string
-) {
+export async function checkSyncStatus(runId: string) {
+  const run = await apifyClient.run(runId).get();
+  return {
+    status: run?.status,
+    isFinished: ['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'].includes(run?.status || ''),
+  };
+}
+
+/**
+ * Получает результаты и сохраняет в БД
+ */
+export async function fetchAndSaveResults(runId: string, jobId: string, source: SyncSource) {
+  const run = await apifyClient.run(runId).get();
+  
+  if (run?.status !== 'SUCCEEDED' || !run.defaultDatasetId) {
+    throw new Error(`Run not successful: ${run?.status}`);
+  }
+
+  const dataset = await apifyClient.dataset(run.defaultDatasetId).listItems();
+  const results = dataset.items;
+
   let processed = 0;
   let errors = 0;
 
   for (const item of results) {
     try {
-      await processRestaurantData(source, item);
+      await saveRestaurant(source, item);
       processed++;
     } catch (error) {
-      console.error(`Error processing restaurant:`, error);
+      console.error('Error saving restaurant:', error);
       errors++;
     }
   }
 
-  // Обновляем статистику задачи
   await prisma.syncJob.update({
     where: { id: jobId },
     data: {
       status: 'completed',
       completedAt: new Date(),
-      stats: {
-        processed,
-        errors,
-        total: results.length,
-      },
+      stats: { processed, errors, total: results.length },
     },
   });
 
@@ -131,31 +166,25 @@ export async function processSyncResults(
 }
 
 /**
- * Обрабатывает данные одного ресторана
+ * Сохраняет ресторан в БД
  */
-async function processRestaurantData(source: SyncSource, data: any) {
-  // Нормализуем данные в зависимости от источника
-  const normalized = normalizeRestaurantData(source, data);
+async function saveRestaurant(source: SyncSource, data: any) {
+  const normalized = normalizeData(source, data);
+  
+  if (!normalized.sourceId || !normalized.name) {
+    throw new Error('Missing required fields');
+  }
 
-  // Проверяем, существует ли ресторан
   const existing = await prisma.restaurant.findFirst({
-    where: {
-      source,
-      sourceId: normalized.sourceId,
-    },
+    where: { source, sourceId: normalized.sourceId },
   });
 
   if (existing) {
-    // Обновляем существующий
     await prisma.restaurant.update({
       where: { id: existing.id },
-      data: {
-        ...normalized,
-        lastSynced: new Date(),
-      },
+      data: { ...normalized, lastSynced: new Date() },
     });
   } else {
-    // Создаем новый
     await prisma.restaurant.create({
       data: normalized,
     });
@@ -163,28 +192,50 @@ async function processRestaurantData(source: SyncSource, data: any) {
 }
 
 /**
- * Нормализует данные ресторана из разных источников
+ * Нормализует данные из разных источников
  */
-function normalizeRestaurantData(source: SyncSource, data: any) {
-  // Базовая структура
-  const base = {
-    source,
-    lastSynced: new Date(),
-  };
+function normalizeData(source: SyncSource, data: any) {
+  const base = { source, lastSynced: new Date() };
 
   switch (source) {
-    case 'yandex': {
-      const name = data.name || data.title || 'Без названия';
-      const sourceId = data.id || data.placeId || String(Date.now());
+    case 'google': {
+      // Формат данных от compass/crawler-google-places
+      const name = data.title || data.name || 'Без названия';
+      const sourceId = data.placeId || data.cid || String(Date.now());
+      
       return {
         ...base,
         name,
         slug: generateSlug(name, sourceId),
-        address: data.address || data.formattedAddress || '',
+        address: data.address || data.street || '',
+        city: data.city || extractCity(data.address || ''),
+        latitude: data.location?.lat || data.latitude || 0,
+        longitude: data.location?.lng || data.longitude || 0,
+        phone: data.phone || data.phoneUnformatted || null,
+        website: data.website || null,
+        rating: data.totalScore || data.rating || null,
+        ratingCount: data.reviewsCount || 0,
+        priceRange: data.price || null,
+        sourceId,
+        sourceUrl: data.url || null,
+        images: data.imageUrls || data.images || [],
+        cuisine: data.categories || data.categoryName ? [data.categoryName] : [],
+      };
+    }
+
+    case 'yandex': {
+      const name = data.title || data.name || 'Без названия';
+      const sourceId = data.id || data.url || String(Date.now());
+      
+      return {
+        ...base,
+        name,
+        slug: generateSlug(name, sourceId),
+        address: data.address || '',
         city: extractCity(data.address || ''),
-        latitude: data.coordinates?.lat || data.lat || 0,
-        longitude: data.coordinates?.lon || data.lng || 0,
-        phone: data.phones?.[0] || null,
+        latitude: data.coordinates?.lat || 0,
+        longitude: data.coordinates?.lon || 0,
+        phone: data.phone || null,
         website: data.url || null,
         rating: data.rating || null,
         ratingCount: data.reviewsCount || 0,
@@ -195,42 +246,20 @@ function normalizeRestaurantData(source: SyncSource, data: any) {
       };
     }
 
-    case 'google': {
-      const name = data.name || 'Без названия';
-      const sourceId = data.place_id || String(Date.now());
-      return {
-        ...base,
-        name,
-        slug: generateSlug(name, sourceId),
-        address: data.formatted_address || '',
-        city: extractCity(data.formatted_address || ''),
-        latitude: data.geometry?.location?.lat || 0,
-        longitude: data.geometry?.location?.lng || 0,
-        phone: data.formatted_phone_number || null,
-        website: data.website || null,
-        rating: data.rating || null,
-        ratingCount: data.user_ratings_total || 0,
-        priceRange: data.price_level ? '$'.repeat(data.price_level) : null,
-        sourceId,
-        sourceUrl: data.url || null,
-        images: data.photos?.map((p: any) => p.photo_reference) || [],
-        cuisine: data.types || [],
-      };
-    }
-
     case '2gis': {
       const name = data.name || 'Без названия';
       const sourceId = data.id || String(Date.now());
+      
       return {
         ...base,
         name,
         slug: generateSlug(name, sourceId),
-        address: data.address_name || '',
+        address: data.address_name || data.address || '',
         city: data.city || extractCity(data.address_name || ''),
-        latitude: data.point?.lat || 0,
-        longitude: data.point?.lon || 0,
-        phone: data.contacts?.phones?.[0]?.formatted || null,
-        website: data.url || null,
+        latitude: data.point?.lat || data.lat || 0,
+        longitude: data.point?.lon || data.lng || 0,
+        phone: data.contacts?.phones?.[0]?.formatted || data.phone || null,
+        website: data.website || null,
         rating: data.rating || null,
         ratingCount: data.reviews_count || 0,
         sourceId,
@@ -246,23 +275,20 @@ function normalizeRestaurantData(source: SyncSource, data: any) {
 }
 
 function extractCity(address: string): string {
-  // Простая логика извлечения города из адреса
-  // Можно улучшить с помощью геокодинга
+  if (!address) return 'Неизвестно';
+  
+  // Пытаемся извлечь город из адреса
+  const cityPatterns = [
+    /^([^,]+),/,           // Первая часть до запятой
+    /г\.\s*([^,]+)/,       // "г. Москва"
+    /город\s+([^,]+)/i,    // "город Москва"
+  ];
+  
+  for (const pattern of cityPatterns) {
+    const match = address.match(pattern);
+    if (match) return match[1].trim();
+  }
+  
   const parts = address.split(',');
-  return parts[parts.length - 1]?.trim() || 'Неизвестно';
+  return parts[0]?.trim() || 'Неизвестно';
 }
-
-// TODO: Реализовать обработку времени работы и отзывов
-// после создания ресторана через отдельные запросы
-
-function getDefaultActorId(source: SyncSource): string {
-  // Здесь должны быть ID ваших актеров в Apify
-  const actorIds = {
-    yandex: 'your-yandex-actor-id',
-    google: 'your-google-actor-id',
-    '2gis': 'your-2gis-actor-id',
-  };
-
-  return actorIds[source];
-}
-
