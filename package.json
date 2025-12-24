@@ -5,10 +5,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
+    "postinstall": "prisma generate",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy"
   },
   "dependencies": {
     "next": "^14.0.4",
