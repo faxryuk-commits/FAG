@@ -270,7 +270,7 @@ function parseWorkingHours(hours: any): Array<{ dayOfWeek: number; openTime: str
 /**
  * Парсит отзывы в формат для БД
  */
-function parseReviews(reviews: any[]): Array<{ author: string; text: string; rating: number; date: Date }> {
+function parseReviews(reviews: any[], source: string): Array<{ author: string; text: string; rating: number; date: Date; source: string }> {
   if (!Array.isArray(reviews)) return [];
   
   return reviews.slice(0, 10).map(r => ({
@@ -278,6 +278,7 @@ function parseReviews(reviews: any[]): Array<{ author: string; text: string; rat
     text: r.text || r.comment || r.review || r.content || '',
     rating: r.rating || r.stars || r.score || 5,
     date: r.date ? new Date(r.date) : new Date(),
+    source: source,
   })).filter(r => r.text); // Только с текстом
 }
 
@@ -317,7 +318,7 @@ export async function saveWithConsolidation(
 
   // Парсим время работы и отзывы
   const workingHours = parseWorkingHours(_openingHours);
-  const reviews = parseReviews(_reviews);
+  const reviews = parseReviews(_reviews, source);
 
   // Ищем существующий дубликат
   const duplicate = await findDuplicate(name, latitude, longitude, source, sourceId);
