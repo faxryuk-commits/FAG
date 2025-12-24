@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 /**
+ * Вычисляет расстояние между двумя точками (формула Haversine)
+ */
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Радиус Земли в км
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/**
  * GET /api/restaurants - Получение списка ресторанов
  */
 export async function GET(request: NextRequest) {
@@ -12,8 +27,15 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const cuisine = searchParams.get('cuisine');
     const minRating = searchParams.get('minRating');
+    const priceRange = searchParams.get('priceRange');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
+    
+    // Геолокация
+    const lat = searchParams.get('lat');
+    const lng = searchParams.get('lng');
+    const sortBy = searchParams.get('sortBy');
+    const maxDistance = parseFloat(searchParams.get('maxDistance') || '50'); // км
     
     const where: any = {
       isActive: true,
@@ -38,21 +60,53 @@ export async function GET(request: NextRequest) {
       where.rating = { gte: parseFloat(minRating) };
     }
     
-    const [restaurants, total] = await Promise.all([
-      prisma.restaurant.findMany({
-        where,
-        orderBy: { rating: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-        include: {
-          reviews: {
-            take: 3,
-            orderBy: { date: 'desc' },
-          },
+    // Фильтр по бюджету (цене)
+    if (priceRange) {
+      where.priceRange = priceRange;
+    }
+    
+    // Если есть координаты - фильтруем по области (примерно)
+    // 1 градус широты ≈ 111 км
+    if (lat && lng) {
+      const userLat = parseFloat(lat);
+      const userLng = parseFloat(lng);
+      const latDelta = maxDistance / 111;
+      const lngDelta = maxDistance / (111 * Math.cos(userLat * Math.PI / 180));
+      
+      where.latitude = { gte: userLat - latDelta, lte: userLat + latDelta };
+      where.longitude = { gte: userLng - lngDelta, lte: userLng + lngDelta };
+    }
+    
+    let restaurants = await prisma.restaurant.findMany({
+      where,
+      orderBy: sortBy === 'distance' ? undefined : { rating: 'desc' },
+      skip: sortBy === 'distance' ? 0 : (page - 1) * limit,
+      take: sortBy === 'distance' ? 500 : limit, // Для сортировки по расстоянию берём больше
+      include: {
+        reviews: {
+          take: 3,
+          orderBy: { date: 'desc' },
         },
-      }),
-      prisma.restaurant.count({ where }),
-    ]);
+        workingHours: true,
+      },
+    });
+    
+    // Если сортируем по расстоянию - вычисляем и сортируем
+    if (sortBy === 'distance' && lat && lng) {
+      const userLat = parseFloat(lat);
+      const userLng = parseFloat(lng);
+      
+      restaurants = restaurants
+        .map(r => ({
+          ...r,
+          distance: calculateDistance(userLat, userLng, r.latitude, r.longitude),
+        }))
+        .filter(r => r.distance <= maxDistance)
+        .sort((a, b) => a.distance - b.distance)
+        .slice((page - 1) * limit, page * limit);
+    }
+    
+    const total = await prisma.restaurant.count({ where });
     
     return NextResponse.json({
       restaurants,

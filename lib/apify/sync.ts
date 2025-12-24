@@ -139,31 +139,34 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
         maxCrawledPlacesPerSearch: maxResults,
         language: 'ru',
         
-        // Расширенные данные
-        scrapeDirectories: false,
+        // ИЗОБРАЖЕНИЯ - важные настройки
+        maxImages: 10,                   // До 10 фото
+        placeMinimumStars: 0,            // Не фильтруем по рейтингу
+        
+        // Отзывы
+        maxReviews: 10,
+        reviewsSort: 'newest',
+        reviewsTranslation: 'originalAndTranslated',
         scrapeReviewerName: true,
-        scrapeReviewerId: false,
-        scrapeReviewerUrl: false,
         scrapeReviewId: false,
         scrapeReviewUrl: false,
-        scrapeResponseFromOwnerText: false,
+        scrapeReviewerId: false,
+        scrapeReviewerUrl: false,
+        scrapeResponseFromOwnerText: true,
         
-        // Включаем все нужные данные
-        maxImages: 5,                    // Количество фото
-        maxReviews: 10,                  // Количество отзывов
-        reviewsSort: 'newest',           // Сортировка отзывов
-        reviewsTranslation: 'originalAndTranslated',
-        
-        // Дополнительные поля
-        additionalInfo: true,            // Время работы и доп. инфо
+        // Дополнительная информация
+        additionalInfo: true,            // Время работы, описание и т.д.
+        scrapeDirectories: false,
         includeWebResults: false,
         
         // Производительность
         maxConcurrency: 10,
         maxPageRetries: 3,
-        
-        // Не пропускать закрытые места
         skipClosedPlaces: false,
+        
+        // Полные данные о месте
+        allPlacesNoSearch: false,
+        oneReviewPerRow: false,
       };
     
     case 'yandex':

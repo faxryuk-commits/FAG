@@ -14,6 +14,9 @@ interface Restaurant {
   images: string[];
   cuisine: string[];
   priceRange: string | null;
+  distance?: number; // км от пользователя
+  latitude: number;
+  longitude: number;
 }
 
 interface PaginationInfo {
@@ -43,6 +46,15 @@ const RATING_FILTERS = [
   { id: '3.5+', label: '3.5+ ⭐', min: 3.5 },
 ];
 
+// Фильтры по бюджету
+const BUDGET_FILTERS = [
+  { id: 'all', label: 'Любой бюджет', icon: '💰', price: null },
+  { id: 'cheap', label: 'Бюджетно', icon: '💵', price: '$', maxPrice: 500 },
+  { id: 'medium', label: 'Средний', icon: '💵💵', price: '$$', maxPrice: 1500 },
+  { id: 'expensive', label: 'Дорого', icon: '💵💵💵', price: '$$$', maxPrice: 5000 },
+  { id: 'luxury', label: 'Премиум', icon: '💎', price: '$$$$', maxPrice: null },
+];
+
 export default function Home() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
@@ -52,11 +64,69 @@ export default function Home() {
   const [city, setCity] = useState('');
   const [selectedCuisine, setSelectedCuisine] = useState('all');
   const [selectedRating, setSelectedRating] = useState('all');
+  const [selectedBudget, setSelectedBudget] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Геолокация
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [nearbyMode, setNearbyMode] = useState(false);
+
+  // Определение геолокации
+  const detectLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Геолокация не поддерживается браузером');
+      return;
+    }
+    
+    setLocationLoading(true);
+    setLocationError(null);
+    
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setUserLocation({ lat: latitude, lng: longitude });
+        setNearbyMode(true);
+        setLocationLoading(false);
+        
+        // Попробуем определить город по координатам
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+          );
+          const data = await res.json();
+          const detectedCity = data.address?.city || data.address?.town || data.address?.village || '';
+          if (detectedCity) {
+            setCity(detectedCity);
+          }
+        } catch (e) {
+          console.log('Could not detect city name');
+        }
+      },
+      (error) => {
+        setLocationLoading(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError('Доступ к геолокации запрещён');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setLocationError('Местоположение недоступно');
+            break;
+          case error.TIMEOUT:
+            setLocationError('Время ожидания истекло');
+            break;
+          default:
+            setLocationError('Не удалось определить местоположение');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   useEffect(() => {
     fetchRestaurants();
-  }, [selectedCuisine, selectedRating]);
+  }, [selectedCuisine, selectedRating, selectedBudget, nearbyMode]);
 
   const fetchRestaurants = async (page = 1) => {
     setLoading(true);
@@ -70,6 +140,19 @@ export default function Home() {
         params.set('minRating', String(ratingFilter.min));
       }
       
+      // Фильтр по бюджету
+      const budgetFilter = BUDGET_FILTERS.find(b => b.id === selectedBudget);
+      if (budgetFilter && budgetFilter.price) {
+        params.set('priceRange', budgetFilter.price);
+      }
+      
+      // Геолокация - сортировка по расстоянию
+      if (nearbyMode && userLocation) {
+        params.set('lat', String(userLocation.lat));
+        params.set('lng', String(userLocation.lng));
+        params.set('sortBy', 'distance');
+      }
+      
       params.set('page', String(page));
       params.set('limit', '12');
 
@@ -78,6 +161,7 @@ export default function Home() {
       
       let filtered = data.restaurants || [];
       
+      // Фильтр по кухне на клиенте
       if (selectedCuisine !== 'all') {
         filtered = filtered.filter((r: Restaurant) => 
           r.cuisine?.some(c => c.toLowerCase().includes(selectedCuisine.toLowerCase()))
@@ -103,6 +187,9 @@ export default function Home() {
     setCity('');
     setSelectedCuisine('all');
     setSelectedRating('all');
+    setSelectedBudget('all');
+    setNearbyMode(false);
+    setUserLocation(null);
   };
 
   return (
@@ -160,11 +247,27 @@ export default function Home() {
                     className="w-full px-4 py-4 text-gray-700 placeholder-gray-400 focus:outline-none"
                   />
                 </div>
-                <div className="flex items-center border-l border-orange-100 px-4">
-                  <span className="text-gray-400">📍</span>
+                <div className="flex items-center border-l border-orange-100 px-2">
+                  <button
+                    type="button"
+                    onClick={detectLocation}
+                    disabled={locationLoading}
+                    className={`p-2 rounded-lg transition-colors ${
+                      nearbyMode 
+                        ? 'bg-orange-100 text-orange-600' 
+                        : 'text-gray-400 hover:text-orange-500 hover:bg-orange-50'
+                    }`}
+                    title={nearbyMode ? 'Рядом со мной активно' : 'Найти рядом со мной'}
+                  >
+                    {locationLoading ? (
+                      <span className="animate-spin">⏳</span>
+                    ) : (
+                      <span>{nearbyMode ? '📍' : '🎯'}</span>
+                    )}
+                  </button>
                   <input
                     type="text"
-                    placeholder="Город"
+                    placeholder={nearbyMode ? 'Рядом со мной' : 'Город'}
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     className="w-28 px-2 py-4 text-gray-700 placeholder-gray-400 focus:outline-none"
@@ -204,7 +307,22 @@ export default function Home() {
 
       {/* Filters */}
       <section className="max-w-7xl mx-auto px-4 mb-6">
-        <div className="flex items-center gap-4">
+        {/* Location status */}
+        {(nearbyMode || locationError) && (
+          <div className={`mb-4 px-4 py-2 rounded-xl text-sm ${
+            nearbyMode 
+              ? 'bg-green-50 text-green-700 border border-green-200' 
+              : 'bg-red-50 text-red-600 border border-red-200'
+          }`}>
+            {nearbyMode ? (
+              <span>📍 Показываем места рядом с вами • <button onClick={() => { setNearbyMode(false); setUserLocation(null); }} className="underline">Отключить</button></span>
+            ) : (
+              <span>⚠️ {locationError}</span>
+            )}
+          </div>
+        )}
+        
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all ${
@@ -234,12 +352,30 @@ export default function Home() {
             ))}
           </div>
           
-          {(selectedCuisine !== 'all' || selectedRating !== 'all' || search) && (
+          {/* Budget Quick Filter */}
+          <div className="flex gap-2">
+            {BUDGET_FILTERS.slice(1).map(filter => (
+              <button
+                key={filter.id}
+                onClick={() => setSelectedBudget(selectedBudget === filter.id ? 'all' : filter.id)}
+                className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  selectedBudget === filter.id
+                    ? 'bg-green-500 text-white'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-green-300'
+                }`}
+                title={filter.label}
+              >
+                {filter.icon}
+              </button>
+            ))}
+          </div>
+          
+          {(selectedCuisine !== 'all' || selectedRating !== 'all' || selectedBudget !== 'all' || search || nearbyMode) && (
             <button
               onClick={clearFilters}
               className="ml-auto text-sm text-orange-600 hover:text-orange-700 font-medium"
             >
-              ✕ Сбросить
+              ✕ Сбросить всё
             </button>
           )}
         </div>
@@ -314,12 +450,21 @@ export default function Home() {
                     </div>
                   )}
                   
-                  {/* Price */}
-                  {restaurant.priceRange && (
-                    <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-gray-600 text-sm font-medium shadow-md">
-                      {restaurant.priceRange}
-                    </div>
-                  )}
+                  {/* Price & Distance */}
+                  <div className="absolute top-3 right-3 flex flex-col gap-2">
+                    {restaurant.priceRange && (
+                      <div className="bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-gray-600 text-sm font-medium shadow-md">
+                        {restaurant.priceRange}
+                      </div>
+                    )}
+                    {restaurant.distance !== undefined && (
+                      <div className="bg-green-500 text-white px-3 py-1.5 rounded-full text-sm font-medium shadow-md">
+                        📍 {restaurant.distance < 1 
+                          ? `${Math.round(restaurant.distance * 1000)}м` 
+                          : `${restaurant.distance.toFixed(1)}км`}
+                      </div>
+                    )}
+                  </div>
                   
                   {/* Favorite button */}
                   <button 
