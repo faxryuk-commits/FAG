@@ -76,6 +76,16 @@ interface ApifyUsage {
   usagePercent: number;
 }
 
+// Интерфейс для ресторана (для удаления)
+interface RestaurantItem {
+  id: string;
+  name: string;
+  address: string;
+  source: string;
+  rating: number | null;
+  cuisine: string[];
+}
+
 // Компонент таймера с реалтайм прогрессом
 function JobTimer({ 
   startedAt, 
@@ -162,6 +172,236 @@ function JobTimer({
       <div className="flex justify-between text-xs text-white/50">
         <span>⏱️ {formatTime(elapsed)} прошло</span>
         <span>~{formatTime(remaining)} осталось</span>
+      </div>
+    </div>
+  );
+}
+
+// Модальное окно выборочного удаления
+function SelectiveDeleteModal({ 
+  isOpen, 
+  onClose,
+  onDeleted,
+}: { 
+  isOpen: boolean; 
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [restaurants, setRestaurants] = useState<RestaurantItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<string>('');
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchRestaurants();
+      setSelected(new Set());
+    }
+  }, [isOpen]);
+
+  const fetchRestaurants = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/restaurants?limit=500');
+      const data = await res.json();
+      setRestaurants(data.restaurants || []);
+    } catch (error) {
+      console.error('Error fetching restaurants:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelected(newSelected);
+  };
+
+  const selectAll = () => {
+    const filtered = filteredRestaurants;
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map(r => r.id)));
+    }
+  };
+
+  const deleteSelected = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`Удалить ${selected.size} ресторанов?\n\nЭто действие нельзя отменить!`)) return;
+    
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/restaurants/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selected) }),
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        alert(`✅ ${data.message}`);
+        setSelected(new Set());
+        fetchRestaurants();
+        onDeleted();
+      } else {
+        alert(`❌ Ошибка: ${data.error}`);
+      }
+    } catch (error) {
+      alert(`❌ Ошибка: ${error}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const filteredRestaurants = restaurants.filter(r => {
+    const matchesSearch = !search || 
+      r.name.toLowerCase().includes(search.toLowerCase()) ||
+      r.address.toLowerCase().includes(search.toLowerCase());
+    const matchesSource = !sourceFilter || r.source === sourceFilter;
+    return matchesSearch && matchesSource;
+  });
+
+  const sources = [...new Set(restaurants.map(r => r.source))];
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-4xl max-h-[90vh] bg-gradient-to-br from-[#1a1a2e] to-[#16213e] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between flex-shrink-0">
+          <div>
+            <h2 className="text-xl font-bold text-white">🗑️ Выборочное удаление</h2>
+            <p className="text-sm text-white/50">Выберите рестораны для удаления</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors flex items-center justify-center"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="px-6 py-3 border-b border-white/10 flex gap-3 flex-shrink-0">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="🔍 Поиск по названию..."
+            className="flex-1 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+          />
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-white/30"
+          >
+            <option value="">Все источники</option>
+            {sources.map(s => (
+              <option key={s} value={s}>{s === 'google' ? '🗺️ Google' : s === 'yandex' ? '🔴 Яндекс' : '🟢 2ГИС'}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Select All Bar */}
+        <div className="px-6 py-2 border-b border-white/10 flex items-center justify-between bg-white/5 flex-shrink-0">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={selected.size === filteredRestaurants.length && filteredRestaurants.length > 0}
+              onChange={selectAll}
+              className="w-5 h-5 rounded border-white/30 bg-white/10 text-purple-500 focus:ring-purple-500"
+            />
+            <span className="text-white/70">
+              Выбрать все ({filteredRestaurants.length})
+            </span>
+          </label>
+          {selected.size > 0 && (
+            <span className="text-purple-300 font-medium">
+              Выбрано: {selected.size}
+            </span>
+          )}
+        </div>
+
+        {/* Restaurant List */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-4xl animate-spin">⏳</div>
+            </div>
+          ) : filteredRestaurants.length === 0 ? (
+            <div className="text-center py-12 text-white/40">
+              <div className="text-4xl mb-2">📭</div>
+              <p>Рестораны не найдены</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredRestaurants.map(restaurant => (
+                <label
+                  key={restaurant.id}
+                  className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-colors ${
+                    selected.has(restaurant.id)
+                      ? 'bg-red-500/20 border-red-500/50'
+                      : 'bg-white/5 border-white/10 hover:border-white/20'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(restaurant.id)}
+                    onChange={() => toggleSelect(restaurant.id)}
+                    className="w-5 h-5 rounded border-white/30 bg-white/10 text-red-500 focus:ring-red-500"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-white truncate">{restaurant.name}</span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-white/10 text-white/50">
+                        {restaurant.source === 'google' ? '🗺️' : restaurant.source === 'yandex' ? '🔴' : '🟢'}
+                      </span>
+                      {restaurant.rating && (
+                        <span className="text-xs text-amber-400">★ {restaurant.rating.toFixed(1)}</span>
+                      )}
+                    </div>
+                    <p className="text-sm text-white/40 truncate">{restaurant.address}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-white/10 flex items-center justify-between flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 text-white/70 hover:text-white transition-colors"
+          >
+            Отмена
+          </button>
+          <button
+            onClick={deleteSelected}
+            disabled={selected.size === 0 || deleting}
+            className="px-6 py-2 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {deleting ? (
+              <>
+                <span className="animate-spin">⏳</span>
+                Удаление...
+              </>
+            ) : (
+              <>
+                🗑️ Удалить ({selected.size})
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -387,6 +627,7 @@ export default function AdminPage() {
   const [showMonitor, setShowMonitor] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [activeSource, setActiveSource] = useState<string>('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Загрузка использования Apify
   const fetchApifyUsage = async () => {
@@ -1083,6 +1324,15 @@ export default function AdminPage() {
                   Удалить спарсенные данные (рестораны, отзывы, время работы)
                 </p>
                 
+                {/* Selective Delete Button */}
+                <button
+                  onClick={() => setShowDeleteModal(true)}
+                  className="w-full mb-3 py-2.5 bg-orange-500/20 text-orange-300 text-sm rounded-lg hover:bg-orange-500/30 transition-colors font-medium flex items-center justify-center gap-2"
+                >
+                  <span>✏️</span>
+                  <span>Выборочное удаление</span>
+                </button>
+                
                 <div className="space-y-2">
                   {/* Delete by source */}
                   {dbStats?.bySource && dbStats.bySource.map(source => (
@@ -1165,6 +1415,19 @@ export default function AdminPage() {
         }}
         jobId={activeJobId}
         source={activeSource}
+      />
+
+      {/* Модальное окно выборочного удаления */}
+      <SelectiveDeleteModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onDeleted={() => {
+          // Обновляем статистику после удаления
+          fetch('/api/consolidate')
+            .then(res => res.json())
+            .then(data => setDbStats(data))
+            .catch(console.error);
+        }}
       />
     </main>
   );
