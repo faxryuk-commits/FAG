@@ -59,6 +59,23 @@ interface JobStats {
   processedItems?: Array<{ name: string; status: 'success' | 'error'; error?: string }>;
 }
 
+// Интерфейс для использования Apify
+interface ApifyUsage {
+  currentUsage: {
+    totalUsd: number;
+    actorComputeUnits: number;
+    dataTransferGb: number;
+    proxyGb: number;
+    storageGb: number;
+  };
+  limits: {
+    maxMonthlyUsd: number;
+    usedUsd: number;
+    remainingUsd: number;
+  };
+  usagePercent: number;
+}
+
 // Компонент таймера с реалтайм прогрессом
 function JobTimer({ 
   startedAt, 
@@ -159,6 +176,20 @@ export default function AdminPage() {
   const [syncing, setSyncing] = useState(false);
   const [step, setStep] = useState<'select' | 'configure' | 'fields' | 'confirm'>('select');
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
+  const [apifyUsage, setApifyUsage] = useState<ApifyUsage | null>(null);
+
+  // Загрузка использования Apify
+  const fetchApifyUsage = async () => {
+    try {
+      const res = await fetch('/api/apify-usage');
+      if (res.ok) {
+        const data = await res.json();
+        setApifyUsage(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch Apify usage:', error);
+    }
+  };
 
   // Загрузка скреперов и статистики
   useEffect(() => {
@@ -173,9 +204,16 @@ export default function AdminPage() {
       .then(data => setDbStats(data))
       .catch(console.error);
     
+    // Загрузка использования Apify
+    fetchApifyUsage();
+    
     fetchJobs();
     const interval = setInterval(fetchJobs, 5000);
-    return () => clearInterval(interval);
+    const usageInterval = setInterval(fetchApifyUsage, 30000); // Обновляем каждые 30 сек
+    return () => {
+      clearInterval(interval);
+      clearInterval(usageInterval);
+    };
   }, []);
 
   const fetchJobs = async () => {
@@ -309,6 +347,58 @@ export default function AdminPage() {
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Apify Usage Banner */}
+        {apifyUsage && (
+          <div className="mb-6 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-orange-500/20 backdrop-blur-xl rounded-2xl border border-purple-500/30 p-4">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">💳</span>
+                <div>
+                  <div className="text-white font-bold">Apify Usage</div>
+                  <div className="text-white/60 text-sm">Месячное использование</div>
+                </div>
+              </div>
+              
+              <div className="flex-1 max-w-md mx-4">
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-white/70">
+                    ${apifyUsage.limits.usedUsd.toFixed(2)} / ${apifyUsage.limits.maxMonthlyUsd.toFixed(2)}
+                  </span>
+                  <span className={`font-medium ${apifyUsage.usagePercent > 80 ? 'text-red-400' : apifyUsage.usagePercent > 50 ? 'text-yellow-400' : 'text-green-400'}`}>
+                    {apifyUsage.usagePercent.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-500 ${
+                      apifyUsage.usagePercent > 80 
+                        ? 'bg-gradient-to-r from-red-500 to-orange-500' 
+                        : apifyUsage.usagePercent > 50 
+                          ? 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                          : 'bg-gradient-to-r from-green-500 to-emerald-500'
+                    }`}
+                    style={{ width: `${Math.min(100, apifyUsage.usagePercent)}%` }}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-green-400">${apifyUsage.limits.remainingUsd.toFixed(2)}</div>
+                  <div className="text-xs text-white/50">Осталось</div>
+                </div>
+                <button
+                  onClick={fetchApifyUsage}
+                  className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+                  title="Обновить"
+                >
+                  🔄
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           
           {/* Main Panel */}
