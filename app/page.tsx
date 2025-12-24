@@ -103,13 +103,25 @@ export default function Home() {
   }, []);
 
   // Загрузка ресторанов
-  const fetchRestaurants = useCallback(async (searchQuery?: string) => {
+  const fetchRestaurants = useCallback(async (options?: { 
+    search?: string; 
+    mood?: string; 
+    cuisineType?: string;
+  }) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       
-      if (searchQuery) {
-        params.set('search', searchQuery);
+      if (options?.search) {
+        params.set('search', options.search);
+      }
+      
+      if (options?.mood) {
+        params.set('mood', options.mood);
+      }
+      
+      if (options?.cuisineType) {
+        params.set('cuisineType', options.cuisineType);
       }
       
       if (userLocation) {
@@ -134,7 +146,7 @@ export default function Home() {
 
   // Начальная загрузка
   useEffect(() => {
-    fetchRestaurants();
+    fetchRestaurants({});
   }, [fetchRestaurants]);
 
   // Обработка выбора настроения
@@ -142,11 +154,11 @@ export default function Home() {
     if (selectedMood === mood.id) {
       setSelectedMood(null);
       setSelectedCuisine(null);
-      fetchRestaurants();
+      fetchRestaurants({});
     } else {
       setSelectedMood(mood.id);
       setSelectedCuisine(null);
-      fetchRestaurants(mood.query);
+      fetchRestaurants({ mood: mood.id });
     }
   };
 
@@ -155,11 +167,11 @@ export default function Home() {
     if (selectedCuisine === cuisine.id) {
       setSelectedCuisine(null);
       setSelectedMood(null);
-      fetchRestaurants();
+      fetchRestaurants({});
     } else {
       setSelectedCuisine(cuisine.id);
       setSelectedMood(null);
-      fetchRestaurants(cuisine.query);
+      fetchRestaurants({ cuisineType: cuisine.id });
     }
   };
 
@@ -168,7 +180,7 @@ export default function Home() {
     e.preventDefault();
     setSelectedMood(null);
     setSelectedCuisine(null);
-    fetchRestaurants(search);
+    fetchRestaurants({ search });
   };
 
   const displayedRestaurants = showAll ? restaurants : restaurants.slice(0, 9);
