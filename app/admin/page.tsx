@@ -905,6 +905,458 @@ function DuplicatesModal({
 }
 
 // Секция сетей и франшиз
+// Редактор ресторана
+function RestaurantEditor({ 
+  restaurantId, 
+  onClose, 
+  onSaved 
+}: { 
+  restaurantId: string; 
+  onClose: () => void; 
+  onSaved: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [restaurant, setRestaurant] = useState<any>(null);
+  const [menuItems, setMenuItems] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'info' | 'menu' | 'hours'>('info');
+
+  useEffect(() => {
+    fetchRestaurant();
+  }, [restaurantId]);
+
+  const fetchRestaurant = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/restaurants/${restaurantId}`);
+      const data = await res.json();
+      setRestaurant(data.restaurant);
+      
+      // Загружаем меню
+      const menuRes = await fetch(`/api/restaurants/${restaurantId}/menu`);
+      const menuData = await menuRes.json();
+      setMenuItems(menuData.items || []);
+    } catch (error) {
+      console.error('Error fetching restaurant:', error);
+    }
+    setLoading(false);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      // Сохраняем основные данные
+      const res = await fetch(`/api/restaurants/${restaurantId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(restaurant)
+      });
+
+      if (!res.ok) throw new Error('Failed to save');
+
+      // Сохраняем меню
+      await fetch(`/api/restaurants/${restaurantId}/menu`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: menuItems })
+      });
+
+      alert('✅ Сохранено!');
+      onSaved();
+    } catch (error) {
+      alert('❌ Ошибка сохранения');
+    }
+    setSaving(false);
+  };
+
+  const updateField = (field: string, value: any) => {
+    setRestaurant((prev: any) => ({ ...prev, [field]: value }));
+  };
+
+  const addMenuItem = () => {
+    setMenuItems([...menuItems, { name: '', price: '', category: '', description: '' }]);
+  };
+
+  const updateMenuItem = (index: number, field: string, value: any) => {
+    const updated = [...menuItems];
+    updated[index] = { ...updated[index], [field]: value };
+    setMenuItems(updated);
+  };
+
+  const removeMenuItem = (index: number) => {
+    setMenuItems(menuItems.filter((_, i) => i !== index));
+  };
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+        <div className="text-white">Загрузка...</div>
+      </div>
+    );
+  }
+
+  if (!restaurant) {
+    return (
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+        <div className="text-white">Ресторан не найден</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-[#1a1a2e] rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Хедер */}
+        <div className="p-4 border-b border-white/10 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white">✏️ Редактирование</h2>
+            <p className="text-sm text-white/50">{restaurant.name}</p>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-2xl">×</button>
+        </div>
+
+        {/* Табы */}
+        <div className="flex border-b border-white/10">
+          {[
+            { id: 'info', label: '📋 Информация' },
+            { id: 'menu', label: '🍽️ Меню' },
+            { id: 'hours', label: '🕐 Время работы' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`px-6 py-3 text-sm font-medium transition-colors ${
+                activeTab === tab.id
+                  ? 'text-cyan-400 border-b-2 border-cyan-400'
+                  : 'text-white/50 hover:text-white/80'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Контент */}
+        <div className="flex-1 overflow-auto p-4">
+          {activeTab === 'info' && (
+            <div className="space-y-4">
+              {/* Название */}
+              <div>
+                <label className="block text-sm text-white/60 mb-1">Название</label>
+                <input
+                  type="text"
+                  value={restaurant.name || ''}
+                  onChange={(e) => updateField('name', e.target.value)}
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                />
+              </div>
+
+              {/* Описание */}
+              <div>
+                <label className="block text-sm text-white/60 mb-1">Описание</label>
+                <textarea
+                  value={restaurant.description || ''}
+                  onChange={(e) => updateField('description', e.target.value)}
+                  rows={3}
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white resize-none"
+                />
+              </div>
+
+              {/* Адрес */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-white/60 mb-1">Адрес</label>
+                  <input
+                    type="text"
+                    value={restaurant.address || ''}
+                    onChange={(e) => updateField('address', e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-white/60 mb-1">Город</label>
+                  <input
+                    type="text"
+                    value={restaurant.city || ''}
+                    onChange={(e) => updateField('city', e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Контакты */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-white/60 mb-1">Телефон</label>
+                  <input
+                    type="text"
+                    value={restaurant.phone || ''}
+                    onChange={(e) => updateField('phone', e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-white/60 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={restaurant.email || ''}
+                    onChange={(e) => updateField('email', e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Ссылки */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-white/60 mb-1">Сайт</label>
+                  <input
+                    type="url"
+                    value={restaurant.website || ''}
+                    onChange={(e) => updateField('website', e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-white/60 mb-1">Ссылка на меню</label>
+                  <input
+                    type="url"
+                    value={restaurant.menuUrl || ''}
+                    onChange={(e) => updateField('menuUrl', e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Ценовая категория и кухня */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-white/60 mb-1">Ценовая категория</label>
+                  <select
+                    value={restaurant.priceRange || ''}
+                    onChange={(e) => updateField('priceRange', e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                  >
+                    <option value="">Не указано</option>
+                    <option value="$">$ — Бюджетно</option>
+                    <option value="$$">$$ — Средне</option>
+                    <option value="$$$">$$$ — Выше среднего</option>
+                    <option value="$$$$">$$$$ — Премиум</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-white/60 mb-1">Бренд/Сеть</label>
+                  <input
+                    type="text"
+                    value={restaurant.brand || ''}
+                    onChange={(e) => updateField('brand', e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                    placeholder="McDonald's, KFC..."
+                  />
+                </div>
+              </div>
+
+              {/* Типы кухни */}
+              <div>
+                <label className="block text-sm text-white/60 mb-1">
+                  Типы кухни (через запятую)
+                </label>
+                <input
+                  type="text"
+                  value={(restaurant.cuisine || []).join(', ')}
+                  onChange={(e) => updateField('cuisine', e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean))}
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                  placeholder="Узбекская, Европейская, Фастфуд"
+                />
+              </div>
+
+              {/* Статусы */}
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm text-white/60">
+                  <input
+                    type="checkbox"
+                    checked={restaurant.isActive}
+                    onChange={(e) => updateField('isActive', e.target.checked)}
+                    className="rounded"
+                  />
+                  Активен
+                </label>
+                <label className="flex items-center gap-2 text-sm text-white/60">
+                  <input
+                    type="checkbox"
+                    checked={restaurant.isVerified}
+                    onChange={(e) => updateField('isVerified', e.target.checked)}
+                    className="rounded"
+                  />
+                  Верифицирован
+                </label>
+                <label className="flex items-center gap-2 text-sm text-white/60">
+                  <input
+                    type="checkbox"
+                    checked={restaurant.isArchived}
+                    onChange={(e) => updateField('isArchived', e.target.checked)}
+                    className="rounded"
+                  />
+                  В архиве
+                </label>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'menu' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-white/60">
+                  {menuItems.length} позиций в меню
+                </p>
+                <button
+                  onClick={addMenuItem}
+                  className="px-4 py-2 bg-cyan-500/20 text-cyan-300 text-sm rounded-lg hover:bg-cyan-500/30"
+                >
+                  + Добавить позицию
+                </button>
+              </div>
+
+              {menuItems.length === 0 ? (
+                <div className="text-center py-12 text-white/40">
+                  <p className="text-4xl mb-2">🍽️</p>
+                  <p>Меню пустое</p>
+                  <p className="text-sm">Добавьте позиции вручную</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {menuItems.map((item, index) => (
+                    <div key={index} className="p-4 bg-white/5 rounded-lg border border-white/10">
+                      <div className="grid grid-cols-12 gap-3">
+                        <div className="col-span-4">
+                          <input
+                            type="text"
+                            value={item.name || ''}
+                            onChange={(e) => updateMenuItem(index, 'name', e.target.value)}
+                            placeholder="Название блюда"
+                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <input
+                            type="number"
+                            value={item.price || ''}
+                            onChange={(e) => updateMenuItem(index, 'price', e.target.value)}
+                            placeholder="Цена"
+                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div className="col-span-3">
+                          <input
+                            type="text"
+                            value={item.category || ''}
+                            onChange={(e) => updateMenuItem(index, 'category', e.target.value)}
+                            placeholder="Категория"
+                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <input
+                            type="text"
+                            value={item.description || ''}
+                            onChange={(e) => updateMenuItem(index, 'description', e.target.value)}
+                            placeholder="Описание"
+                            className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded text-white text-sm"
+                          />
+                        </div>
+                        <div className="col-span-1 flex items-center justify-center">
+                          <button
+                            onClick={() => removeMenuItem(index)}
+                            className="text-red-400 hover:text-red-300"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'hours' && (
+            <div className="space-y-3">
+              <p className="text-sm text-white/60 mb-4">
+                Время работы заведения
+              </p>
+              {[
+                { day: 0, name: 'Воскресенье' },
+                { day: 1, name: 'Понедельник' },
+                { day: 2, name: 'Вторник' },
+                { day: 3, name: 'Среда' },
+                { day: 4, name: 'Четверг' },
+                { day: 5, name: 'Пятница' },
+                { day: 6, name: 'Суббота' }
+              ].map(({ day, name }) => {
+                const hours = restaurant.workingHours?.find((h: any) => h.dayOfWeek === day);
+                return (
+                  <div key={day} className="flex items-center gap-4 p-3 bg-white/5 rounded-lg">
+                    <span className="w-32 text-sm text-white/60">{name}</span>
+                    <input
+                      type="time"
+                      value={hours?.openTime || '09:00'}
+                      onChange={(e) => {
+                        const newHours = [...(restaurant.workingHours || [])];
+                        const idx = newHours.findIndex((h: any) => h.dayOfWeek === day);
+                        if (idx >= 0) {
+                          newHours[idx] = { ...newHours[idx], openTime: e.target.value };
+                        } else {
+                          newHours.push({ dayOfWeek: day, openTime: e.target.value, closeTime: '22:00' });
+                        }
+                        updateField('workingHours', newHours);
+                      }}
+                      className="px-3 py-1 bg-white/5 border border-white/10 rounded text-white text-sm"
+                    />
+                    <span className="text-white/40">—</span>
+                    <input
+                      type="time"
+                      value={hours?.closeTime || '22:00'}
+                      onChange={(e) => {
+                        const newHours = [...(restaurant.workingHours || [])];
+                        const idx = newHours.findIndex((h: any) => h.dayOfWeek === day);
+                        if (idx >= 0) {
+                          newHours[idx] = { ...newHours[idx], closeTime: e.target.value };
+                        } else {
+                          newHours.push({ dayOfWeek: day, openTime: '09:00', closeTime: e.target.value });
+                        }
+                        updateField('workingHours', newHours);
+                      }}
+                      className="px-3 py-1 bg-white/5 border border-white/10 rounded text-white text-sm"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Футер */}
+        <div className="p-4 border-t border-white/10 flex justify-between">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-white/5 text-white/60 rounded-lg hover:bg-white/10"
+          >
+            Отмена
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-6 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 disabled:opacity-50"
+          >
+            {saving ? 'Сохранение...' : '💾 Сохранить'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChainsSection() {
   const [stats, setStats] = useState<{
     totalChains: number;
@@ -1063,6 +1515,7 @@ function QualitySection() {
   const [filter, setFilter] = useState('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const fetchQuality = async (currentFilter = filter) => {
     setLoading(true);
@@ -1387,6 +1840,16 @@ function QualitySection() {
                                 {(r.images as string[])?.length > 0 && (
                                   <span>📷 {(r.images as string[]).length}</span>
                                 )}
+                                {/* Кнопка редактирования */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingId(r.id);
+                                  }}
+                                  className="ml-2 px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded hover:bg-cyan-500/30"
+                                >
+                                  ✏️
+                                </button>
                               </div>
                             </div>
                           </div>
@@ -1415,6 +1878,18 @@ function QualitySection() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Редактор ресторана */}
+      {editingId && (
+        <RestaurantEditor
+          restaurantId={editingId}
+          onClose={() => setEditingId(null)}
+          onSaved={() => {
+            setEditingId(null);
+            fetchQuality();
+          }}
+        />
       )}
     </div>
   );
