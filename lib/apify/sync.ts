@@ -283,6 +283,28 @@ export async function fetchAndSaveResults(runId: string, jobId: string, source: 
 }
 
 /**
+ * Получает результаты синхронизации по jobId (для webhook)
+ */
+export async function getSyncResults(jobId: string) {
+  const job = await prisma.syncJob.findUnique({
+    where: { id: jobId },
+  });
+
+  if (!job) {
+    throw new Error('Job not found');
+  }
+
+  const stats = job.stats as { runId?: string } | null;
+  const runId = stats?.runId;
+
+  if (!runId) {
+    throw new Error('No runId found for job');
+  }
+
+  return fetchAndSaveResults(runId, jobId, job.source as SyncSource);
+}
+
+/**
  * Сохраняет ресторан в БД с консолидацией дубликатов
  */
 async function saveRestaurant(source: SyncSource, data: any) {
