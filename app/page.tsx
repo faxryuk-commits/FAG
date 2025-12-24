@@ -436,8 +436,8 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0f0f1a] via-[#1a1a2e] to-[#16213e]">
       {/* Compact Header + Search */}
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-black/50 border-b border-white/5">
-        <div className="max-w-6xl mx-auto px-4 py-2">
+      <header className="sticky top-0 z-50 backdrop-blur-xl bg-[#0f0f1a]/95 border-b border-white/10 shadow-lg shadow-black/20">
+        <div className="max-w-6xl mx-auto px-4 py-3">
           {/* Верхняя строка: лого + действия */}
           <div className="flex items-center justify-between gap-4 mb-2">
             <Link href="/" className="flex items-center gap-1.5 shrink-0">
@@ -523,14 +523,14 @@ export default function Home() {
             {showSuggestions && suggestions.length > 0 && (
               <div 
                 ref={suggestionsRef}
-                className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a2e]/98 backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden z-50 shadow-2xl"
+                className="absolute top-full left-0 right-0 mt-2 bg-[#12121f] border border-white/20 rounded-xl overflow-hidden z-[100] shadow-2xl shadow-black/50"
               >
-                <div className="px-3 py-1.5 border-b border-white/10 flex justify-between items-center">
-                  <span className="text-xs text-white/40">
-                    {search ? '💡 Подсказки' : '🕐 Недавние'}
+                <div className="px-3 py-2 bg-white/5 border-b border-white/10 flex justify-between items-center">
+                  <span className="text-xs text-white/50 font-medium">
+                    {search ? '💡 Подсказки' : '🕐 Недавние поиски'}
                   </span>
                   {searchHistory.length > 0 && !search && (
-                    <button type="button" onClick={handleClearHistory} className="text-xs text-white/30 hover:text-red-400">
+                    <button type="button" onClick={handleClearHistory} className="text-xs text-white/40 hover:text-red-400">
                       Очистить
                     </button>
                   )}
@@ -541,13 +541,13 @@ export default function Home() {
                     key={suggestion}
                     type="button"
                     onClick={() => handleSelectSuggestion(suggestion)}
-                    className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors ${
+                    className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors border-b border-white/5 last:border-0 ${
                       highlightedIndex === index 
-                        ? 'bg-orange-500/20 text-white' 
-                        : 'text-white/60 hover:bg-white/5'
+                        ? 'bg-orange-500/30 text-white' 
+                        : 'text-white/70 hover:bg-white/10'
                     }`}
                   >
-                    <span className="text-white/30 text-xs">{searchHistory.includes(suggestion) ? '🕐' : '🔍'}</span>
+                    <span className="text-white/40">{searchHistory.includes(suggestion) ? '🕐' : '🔍'}</span>
                     <span>{suggestion}</span>
                   </button>
                 ))}
@@ -584,12 +584,13 @@ export default function Home() {
 
       {/* Категории - скрываем при активном поиске */}
       {!search && (
-        <>
-          {/* Быстрые фильтры в одну строку */}
-          <section className="px-4 pb-4">
+        <div className="bg-[#12121f]/50 border-b border-white/5">
+          {/* Быстрые фильтры */}
+          <section className="px-4 pt-3 pb-2">
             <div className="max-w-6xl mx-auto">
-              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                <span className="text-white/40 text-sm shrink-0">🎯</span>
+              <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+                <span className="text-white/30 text-xs shrink-0 uppercase tracking-wide">Настроение</span>
+                <span className="text-white/20">|</span>
                 {MOOD_CATEGORIES.map((mood) => {
                   const moodStat = categoryStats?.moods.find(m => m.id === mood.id);
                   const count = moodStat?.count || 0;
@@ -598,18 +599,18 @@ export default function Home() {
                       key={mood.id}
                       onClick={() => handleMoodSelect(mood)}
                       disabled={count === 0}
-                      className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${
+                      className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
                         selectedMood === mood.id
-                          ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white'
+                          ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-lg shadow-orange-500/20'
                           : count === 0 
-                            ? 'bg-white/5 text-white/30 cursor-not-allowed'
-                            : 'bg-white/10 text-white/70 hover:bg-white/15'
+                            ? 'bg-white/5 text-white/20 cursor-not-allowed'
+                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 border border-white/10'
                       }`}
                     >
                       <span>{mood.emoji}</span>
-                      <span>{mood.label}</span>
+                      <span className="hidden sm:inline">{mood.label}</span>
                       {count > 0 && (
-                        <span className="text-xs opacity-60">{count}</span>
+                        <span className="text-xs bg-white/10 px-1.5 rounded">{count}</span>
                       )}
                     </button>
                   );
@@ -618,11 +619,12 @@ export default function Home() {
             </div>
           </section>
 
-          {/* Типы кухонь - компактно */}
-          <section className="px-4 pb-4">
+          {/* Типы кухонь */}
+          <section className="px-4 pb-3">
             <div className="max-w-6xl mx-auto">
-              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                <span className="text-white/40 text-sm shrink-0">🍴</span>
+              <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+                <span className="text-white/30 text-xs shrink-0 uppercase tracking-wide">Кухня</span>
+                <span className="text-white/20">|</span>
                 {CUISINES.map((cuisine) => {
                   const cuisineStat = categoryStats?.cuisines.find(c => c.id === cuisine.id);
                   const count = cuisineStat?.count || 0;
@@ -631,17 +633,17 @@ export default function Home() {
                       key={cuisine.id}
                       onClick={() => handleCuisineSelect(cuisine)}
                       disabled={count === 0}
-                      className={`shrink-0 px-3 py-1.5 rounded-full text-sm transition-all flex items-center gap-1.5 ${
+                      className={`shrink-0 px-3 py-1.5 rounded-lg text-sm transition-all flex items-center gap-1.5 ${
                         selectedCuisine === cuisine.id
-                          ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white font-medium'
+                          ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white font-medium shadow-lg shadow-orange-500/20'
                           : count === 0 
-                            ? 'bg-white/5 text-white/30 cursor-not-allowed'
-                            : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/10'
+                            ? 'bg-white/5 text-white/20 cursor-not-allowed'
+                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 border border-white/10'
                       }`}
                     >
                       <span>{cuisine.label}</span>
                       {count > 0 && (
-                        <span className="text-xs opacity-60">{count}</span>
+                        <span className="text-xs bg-white/10 px-1.5 rounded">{count}</span>
                       )}
                     </button>
                   );
@@ -649,7 +651,7 @@ export default function Home() {
               </div>
             </div>
           </section>
-        </>
+        </div>
       )}
 
       {/* Результаты */}
