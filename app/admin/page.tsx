@@ -43,6 +43,12 @@ interface SyncJob {
   createdAt: string;
 }
 
+interface DbStats {
+  total: number;
+  bySource: Array<{ source: string; count: number; avgRating: number | null }>;
+  potentialDuplicates: number;
+}
+
 // Компонент таймера
 function JobTimer({ startedAt, estimatedSeconds }: { startedAt: string; estimatedSeconds: number }) {
   const [elapsed, setElapsed] = useState(0);
@@ -90,12 +96,19 @@ export default function AdminPage() {
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [step, setStep] = useState<'select' | 'configure' | 'fields' | 'confirm'>('select');
+  const [dbStats, setDbStats] = useState<DbStats | null>(null);
 
-  // Загрузка скреперов
+  // Загрузка скреперов и статистики
   useEffect(() => {
     fetch('/api/scrapers')
       .then(res => res.json())
       .then(data => setScrapers(data.scrapers || []))
+      .catch(console.error);
+    
+    // Загрузка статистики БД
+    fetch('/api/consolidate')
+      .then(res => res.json())
+      .then(data => setDbStats(data))
       .catch(console.error);
     
     fetchJobs();
@@ -227,30 +240,86 @@ export default function AdminPage() {
           {/* Main Panel */}
           <div className="lg:col-span-3 space-y-6">
             
+            {/* Database Stats Banner */}
+            {dbStats && dbStats.total > 0 && (
+              <div className="bg-gradient-to-r from-emerald-500/20 to-teal-500/20 backdrop-blur-xl rounded-2xl border border-emerald-500/30 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">📊</span>
+                    <div>
+                      <div className="text-white font-bold">В базе уже {dbStats.total} ресторанов</div>
+                      <div className="text-white/60 text-sm flex items-center gap-3">
+                        {dbStats.bySource.map(s => (
+                          <span key={s.source} className="capitalize">
+                            {s.source === 'google' ? '🗺️' : s.source === 'yandex' ? '🔴' : '🟢'} {s.count}
+                          </span>
+                        ))}
+                        {dbStats.potentialDuplicates > 0 && (
+                          <span className="text-amber-400">⚠️ ~{dbStats.potentialDuplicates} возможных дубликатов</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <Link
+                    href="/"
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-colors"
+                  >
+                    Смотреть →
+                  </Link>
+                </div>
+              </div>
+            )}
+
             {/* Step 1: Select Scraper */}
             {step === 'select' && (
               <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-8">
                 <h2 className="text-2xl font-bold text-white mb-2">🔧 Выберите источник данных</h2>
                 <p className="text-white/60 mb-6">Откуда будем парсить информацию о ресторанах?</p>
                 
+                {/* Warning about running jobs */}
+                {jobs.some(j => j.status === 'running') && (
+                  <div className="mb-6 p-4 rounded-xl bg-amber-500/20 border border-amber-500/30">
+                    <div className="flex items-center gap-2 text-amber-300 font-medium">
+                      <span className="animate-pulse">⏳</span>
+                      Уже выполняется парсинг! Дождитесь завершения или проверьте результаты.
+                    </div>
+                  </div>
+                )}
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {scrapers.map(scraper => (
-                    <button
-                      key={scraper.id}
-                      onClick={() => selectScraper(scraper)}
-                      className="p-6 rounded-2xl border-2 border-white/10 hover:border-purple-500/50 bg-white/5 hover:bg-white/10 transition-all text-left group"
-                    >
-                      <div className="text-4xl mb-3">{scraper.icon}</div>
-                      <h3 className="text-lg font-bold text-white group-hover:text-purple-300 transition-colors">
-                        {scraper.name}
-                      </h3>
-                      <p className="text-sm text-white/50 mt-1">{scraper.description}</p>
-                      <div className="mt-4 flex items-center gap-4 text-xs text-white/40">
-                        <span>~${scraper.costPerItem}/шт</span>
-                        <span>{scraper.fields.length} полей</span>
-                      </div>
-                    </button>
-                  ))}
+                  {scrapers.map(scraper => {
+                    const sourceMap: Record<string, string> = {
+                      'google-places': 'google',
+                      'google-reviews': 'google',
+                      'yandex-maps': 'yandex',
+                      '2gis': '2gis',
+                    };
+                    const sourceName = sourceMap[scraper.id] || scraper.id;
+                    const existingCount = dbStats?.bySource.find(s => s.source === sourceName)?.count || 0;
+                    
+                    return (
+                      <button
+                        key={scraper.id}
+                        onClick={() => selectScraper(scraper)}
+                        className="p-6 rounded-2xl border-2 border-white/10 hover:border-purple-500/50 bg-white/5 hover:bg-white/10 transition-all text-left group relative"
+                      >
+                        {existingCount > 0 && (
+                          <div className="absolute top-3 right-3 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs rounded-full">
+                            ✓ {existingCount} в базе
+                          </div>
+                        )}
+                        <div className="text-4xl mb-3">{scraper.icon}</div>
+                        <h3 className="text-lg font-bold text-white group-hover:text-purple-300 transition-colors">
+                          {scraper.name}
+                        </h3>
+                        <p className="text-sm text-white/50 mt-1">{scraper.description}</p>
+                        <div className="mt-4 flex items-center gap-4 text-xs text-white/40">
+                          <span>~${scraper.costPerItem}/шт</span>
+                          <span>{scraper.fields.length} полей</span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -421,6 +490,37 @@ export default function AdminPage() {
                   </div>
                 </div>
 
+                {/* Existing data warning */}
+                {(() => {
+                  const sourceMap: Record<string, string> = {
+                    'google-places': 'google',
+                    'google-reviews': 'google',
+                    'yandex-maps': 'yandex',
+                    '2gis': '2gis',
+                  };
+                  const sourceName = sourceMap[selectedScraper.id] || selectedScraper.id;
+                  const existingCount = dbStats?.bySource.find(s => s.source === sourceName)?.count || 0;
+                  
+                  if (existingCount > 0) {
+                    return (
+                      <div className="p-4 rounded-xl bg-emerald-500/20 border border-emerald-500/30 mb-6">
+                        <div className="flex items-start gap-3">
+                          <span className="text-2xl">ℹ️</span>
+                          <div>
+                            <div className="text-emerald-300 font-medium">
+                              Уже есть {existingCount} ресторанов из {selectedScraper.name}
+                            </div>
+                            <div className="text-white/60 text-sm mt-1">
+                              Дубликаты будут автоматически объединены. Новые данные дополнят существующие.
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
                 {/* Cost Calculator */}
                 <div className="p-6 rounded-2xl bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 mb-6">
                   <div className="grid grid-cols-3 gap-4 text-center">
@@ -441,13 +541,17 @@ export default function AdminPage() {
 
                 <button
                   onClick={startScraping}
-                  disabled={syncing}
+                  disabled={syncing || jobs.some(j => j.status === 'running')}
                   className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {syncing ? (
                     <>
                       <span className="animate-spin">⏳</span>
                       Запуск...
+                    </>
+                  ) : jobs.some(j => j.status === 'running') ? (
+                    <>
+                      ⏳ Дождитесь завершения текущего парсинга
                     </>
                   ) : (
                     <>
