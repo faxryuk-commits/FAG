@@ -280,7 +280,7 @@ export async function fetchAndSaveResults(runId: string, jobId: string, source: 
   const processedItems: Array<{ name: string; status: 'success' | 'error'; error?: string }> = [];
 
   for (const item of results) {
-    const itemName = item.title || item.name || 'Без названия';
+    const itemName = String(item.title || item.name || 'Без названия');
     try {
       await saveRestaurant(source, item);
       processed++;
