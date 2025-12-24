@@ -605,76 +605,118 @@ export default function Home() {
               </div>
             )}
           </form>
-        </div>
-      </section>
-
-      {/* Категории настроения */}
-      <section className="px-4 pb-6">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <span>🎯</span> Настроение
-          </h2>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-            {MOOD_CATEGORIES.map((mood) => {
-              const moodStat = categoryStats?.moods.find(m => m.id === mood.id);
-              const count = moodStat?.count || 0;
-              return (
-                <button
-                  key={mood.id}
-                  onClick={() => handleMoodSelect(mood)}
-                  disabled={count === 0}
-                  className={`relative overflow-hidden rounded-2xl p-4 transition-all duration-300 hover:scale-105 ${
-                    selectedMood === mood.id ? 'ring-2 ring-white shadow-lg shadow-white/20' : ''
-                  } ${count === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}
-                >
-                  <div className={`absolute inset-0 bg-gradient-to-br ${mood.color}`}></div>
-                  <div className="relative text-center">
-                    <span className="text-2xl sm:text-3xl block mb-1">{mood.emoji}</span>
-                    <span className="text-xs sm:text-sm font-medium text-white">{mood.label}</span>
-                    {count > 0 && (
-                      <span className="block mt-1 text-xs text-white/70">{count} мест</span>
+          
+          {/* Индикатор результатов поиска */}
+          {(search || selectedMood || selectedCuisine) && (
+            <div className="mt-4 flex items-center justify-center gap-3 text-sm">
+              {loading ? (
+                <span className="text-white/50 flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-orange-500/30 border-t-orange-500 rounded-full animate-spin"></span>
+                  Ищем...
+                </span>
+              ) : (
+                <>
+                  <span className="text-white/70">
+                    {restaurants.length > 0 ? (
+                      <>
+                        Найдено: <span className="text-orange-400 font-semibold">{restaurants.length}</span>
+                        {totalCount > restaurants.length && (
+                          <span className="text-white/40"> из {totalCount}</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-red-400">Ничего не найдено</span>
                     )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+                  </span>
+                  {(search || selectedMood || selectedCuisine) && (
+                    <button
+                      onClick={() => {
+                        setSearch('');
+                        setSelectedMood(null);
+                        setSelectedCuisine(null);
+                        fetchRestaurants({});
+                      }}
+                      className="text-white/40 hover:text-white/70 underline"
+                    >
+                      Сбросить
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
-      {/* Типы кухонь */}
-      <section className="px-4 pb-8">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <span>🍴</span> Кухня
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {CUISINES.map((cuisine) => {
-              const cuisineStat = categoryStats?.cuisines.find(c => c.id === cuisine.id);
-              const count = cuisineStat?.count || 0;
-              return (
-                <button
-                  key={cuisine.id}
-                  onClick={() => handleCuisineSelect(cuisine)}
-                  disabled={count === 0}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
-                    selectedCuisine === cuisine.id
-                      ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white'
-                      : count === 0 
-                        ? 'bg-white/5 text-white/30 border border-white/5 cursor-not-allowed'
-                        : 'bg-white/5 text-white/70 hover:bg-white/10 border border-white/10'
-                  }`}
-                >
-                  <span>{cuisine.label}</span>
-                  {count > 0 && (
-                    <span className="px-1.5 py-0.5 bg-white/10 rounded-md text-xs">{count}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </section>
+      {/* Категории - скрываем при активном поиске */}
+      {!search && (
+        <>
+          {/* Быстрые фильтры в одну строку */}
+          <section className="px-4 pb-4">
+            <div className="max-w-6xl mx-auto">
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                <span className="text-white/40 text-sm shrink-0">🎯</span>
+                {MOOD_CATEGORIES.map((mood) => {
+                  const moodStat = categoryStats?.moods.find(m => m.id === mood.id);
+                  const count = moodStat?.count || 0;
+                  return (
+                    <button
+                      key={mood.id}
+                      onClick={() => handleMoodSelect(mood)}
+                      disabled={count === 0}
+                      className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${
+                        selectedMood === mood.id
+                          ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white'
+                          : count === 0 
+                            ? 'bg-white/5 text-white/30 cursor-not-allowed'
+                            : 'bg-white/10 text-white/70 hover:bg-white/15'
+                      }`}
+                    >
+                      <span>{mood.emoji}</span>
+                      <span>{mood.label}</span>
+                      {count > 0 && (
+                        <span className="text-xs opacity-60">{count}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          {/* Типы кухонь - компактно */}
+          <section className="px-4 pb-4">
+            <div className="max-w-6xl mx-auto">
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                <span className="text-white/40 text-sm shrink-0">🍴</span>
+                {CUISINES.map((cuisine) => {
+                  const cuisineStat = categoryStats?.cuisines.find(c => c.id === cuisine.id);
+                  const count = cuisineStat?.count || 0;
+                  return (
+                    <button
+                      key={cuisine.id}
+                      onClick={() => handleCuisineSelect(cuisine)}
+                      disabled={count === 0}
+                      className={`shrink-0 px-3 py-1.5 rounded-full text-sm transition-all flex items-center gap-1.5 ${
+                        selectedCuisine === cuisine.id
+                          ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white font-medium'
+                          : count === 0 
+                            ? 'bg-white/5 text-white/30 cursor-not-allowed'
+                            : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/10'
+                      }`}
+                    >
+                      <span>{cuisine.label}</span>
+                      {count > 0 && (
+                        <span className="text-xs opacity-60">{count}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        </>
+      )}
 
       {/* Результаты */}
       <section className="px-4 pb-16">
