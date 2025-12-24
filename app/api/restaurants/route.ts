@@ -430,9 +430,8 @@ export async function GET(request: NextRequest) {
     
     let restaurants = await prisma.restaurant.findMany({
       where,
-      orderBy: sortBy === 'distance' ? undefined : { rating: 'desc' },
-      skip: needsPostFilter || sortBy === 'distance' ? 0 : offset,
-      take: needsPostFilter || sortBy === 'distance' ? 500 : limit,
+      // Получаем больше записей для сортировки на уровне JS
+      take: 1000,
       include: {
         reviews: {
           take: 3,
@@ -525,27 +524,57 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => b.relevanceScore - a.relevanceScore);
     }
     
-    // Применяем пагинацию после фильтрации
-    if (needsPostFilter && !sortBy) {
-      restaurants = restaurants.slice(offset, offset + limit);
-    }
+    // Вычисляем расстояние если есть геолокация
+    const userLat = lat ? parseFloat(lat) : null;
+    const userLng = lng ? parseFloat(lng) : null;
     
-    // Если сортируем по расстоянию - вычисляем и сортируем
-    if (sortBy === 'distance' && lat && lng) {
-      const userLat = parseFloat(lat);
-      const userLng = parseFloat(lng);
+    if (userLat && userLng) {
+      restaurants = restaurants.map(r => ({
+        ...r,
+        distance: calculateDistance(userLat, userLng, r.latitude, r.longitude),
+      }));
       
-      restaurants = restaurants
-        .map(r => ({
-          ...r,
-          distance: calculateDistance(userLat, userLng, r.latitude, r.longitude),
-        }))
-        .filter(r => r.distance <= maxDistance)
-        .sort((a, b) => a.distance - b.distance)
-        .slice(offset, offset + limit);
+      // Фильтруем по максимальному расстоянию если нужно
+      if (sortBy === 'distance') {
+        restaurants = restaurants.filter(r => (r as any).distance <= maxDistance);
+      }
     }
     
-    const total = search ? restaurants.length : await prisma.restaurant.count({ where });
+    // Комплексная сортировка:
+    // 1. Рейтинг (выше = лучше, null в конец)
+    // 2. Наличие фото (есть = лучше)
+    // 3. Расстояние (ближе = лучше)
+    restaurants.sort((a, b) => {
+      // 1. Рейтинг: выше = лучше, null = хуже
+      const ratingA = a.rating ?? -1;
+      const ratingB = b.rating ?? -1;
+      if (ratingB !== ratingA) {
+        return ratingB - ratingA;
+      }
+      
+      // 2. Наличие фото: есть = лучше
+      const hasPhotosA = (a.images as string[])?.length > 0 ? 1 : 0;
+      const hasPhotosB = (b.images as string[])?.length > 0 ? 1 : 0;
+      if (hasPhotosB !== hasPhotosA) {
+        return hasPhotosB - hasPhotosA;
+      }
+      
+      // 3. Расстояние: ближе = лучше (если есть геолокация)
+      if (userLat && userLng) {
+        const distA = (a as any).distance ?? Infinity;
+        const distB = (b as any).distance ?? Infinity;
+        return distA - distB;
+      }
+      
+      // 4. По количеству отзывов
+      return (b.ratingCount || 0) - (a.ratingCount || 0);
+    });
+    
+    // Применяем пагинацию
+    const totalBeforePagination = restaurants.length;
+    restaurants = restaurants.slice(offset, offset + limit);
+    
+    const total = search ? totalBeforePagination : await prisma.restaurant.count({ where });
     
     // Считаем архивированные для отображения в UI
     const archivedCount = await prisma.restaurant.count({ where: { isArchived: true } });
