@@ -2,6 +2,145 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 /**
+ * Транслитерация кириллица → латиница
+ */
+const CYR_TO_LAT: Record<string, string> = {
+  'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
+  'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
+  'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'kh', 'ц': 'ts',
+  'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu',
+  'я': 'ya', 'ў': "o'", 'қ': 'q', 'ғ': "g'", 'ҳ': 'h',
+};
+
+/**
+ * Транслитерация латиница → кириллица
+ */
+const LAT_TO_CYR: Record<string, string> = {
+  'a': 'а', 'b': 'б', 'c': 'к', 'd': 'д', 'e': 'е', 'f': 'ф', 'g': 'г', 'h': 'х',
+  'i': 'и', 'j': 'ж', 'k': 'к', 'l': 'л', 'm': 'м', 'n': 'н', 'o': 'о', 'p': 'п',
+  'q': 'қ', 'r': 'р', 's': 'с', 't': 'т', 'u': 'у', 'v': 'в', 'w': 'в', 'x': 'кс',
+  'y': 'й', 'z': 'з',
+  'sh': 'ш', 'ch': 'ч', 'zh': 'ж', 'kh': 'х', 'ts': 'ц', 'yu': 'ю', 'ya': 'я',
+};
+
+/**
+ * Транслитерировать текст (кириллица ↔ латиница)
+ */
+function transliterate(text: string): { latin: string; cyrillic: string } {
+  const lower = text.toLowerCase();
+  
+  // Кириллица → латиница
+  let latin = '';
+  for (const char of lower) {
+    latin += CYR_TO_LAT[char] || char;
+  }
+  
+  // Латиница → кириллица (сначала многосимвольные)
+  let cyrillic = lower;
+  for (const [lat, cyr] of Object.entries(LAT_TO_CYR).sort((a, b) => b[0].length - a[0].length)) {
+    cyrillic = cyrillic.replace(new RegExp(lat, 'g'), cyr);
+  }
+  
+  return { latin, cyrillic };
+}
+
+/**
+ * Расстояние Левенштейна (для fuzzy matching)
+ */
+function levenshteinDistance(a: string, b: string): number {
+  const matrix: number[][] = [];
+  
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // замена
+          matrix[i][j - 1] + 1,     // вставка
+          matrix[i - 1][j] + 1      // удаление
+        );
+      }
+    }
+  }
+  
+  return matrix[b.length][a.length];
+}
+
+/**
+ * Проверка fuzzy match (допускает опечатки)
+ * Возвращает true если строки похожи
+ */
+function fuzzyMatch(search: string, target: string, threshold: number = 0.3): boolean {
+  const s = search.toLowerCase();
+  const t = target.toLowerCase();
+  
+  // Точное совпадение или содержание
+  if (t.includes(s) || s.includes(t)) return true;
+  
+  // Для коротких слов - строже
+  if (s.length <= 3) {
+    return t.includes(s);
+  }
+  
+  // Расстояние Левенштейна
+  const distance = levenshteinDistance(s, t);
+  const maxLen = Math.max(s.length, t.length);
+  const similarity = 1 - distance / maxLen;
+  
+  return similarity >= (1 - threshold);
+}
+
+/**
+ * Умный поиск: транслитерация + fuzzy matching
+ */
+function smartSearch(search: string, text: string): { matches: boolean; score: number } {
+  const lowerSearch = search.toLowerCase();
+  const lowerText = text.toLowerCase();
+  
+  // 1. Прямое совпадение
+  if (lowerText.includes(lowerSearch)) {
+    return { matches: true, score: 100 };
+  }
+  
+  // 2. Транслитерация
+  const { latin, cyrillic } = transliterate(search);
+  if (lowerText.includes(latin) || lowerText.includes(cyrillic)) {
+    return { matches: true, score: 90 };
+  }
+  
+  // 3. Fuzzy match для каждого слова
+  const searchWords = lowerSearch.split(/\s+/).filter(w => w.length >= 2);
+  const textWords = lowerText.split(/\s+/);
+  
+  let matchedWords = 0;
+  for (const sw of searchWords) {
+    const { latin: swLat, cyrillic: swCyr } = transliterate(sw);
+    
+    for (const tw of textWords) {
+      if (fuzzyMatch(sw, tw) || fuzzyMatch(swLat, tw) || fuzzyMatch(swCyr, tw)) {
+        matchedWords++;
+        break;
+      }
+    }
+  }
+  
+  if (matchedWords > 0) {
+    const score = (matchedWords / searchWords.length) * 70;
+    return { matches: matchedWords >= Math.ceil(searchWords.length * 0.5), score };
+  }
+  
+  return { matches: false, score: 0 };
+}
+
+/**
  * Вычисляет расстояние между двумя точками (формула Haversine)
  */
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -243,25 +382,32 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // Если есть текстовый поиск - ранжируем по релевантности
+    // Если есть текстовый поиск - умный поиск с транслитерацией и fuzzy matching
     if (search) {
-      const lowerSearch = search.toLowerCase();
-      const searchWords = lowerSearch.split(/\s+/).filter(w => w.length > 2);
+      const { latin: searchLatin, cyrillic: searchCyr } = transliterate(search);
       
       restaurants = restaurants
         .map(r => {
           let score = 0;
-          const combinedText = `${r.name} ${r.address} ${r.cuisine?.join(' ') || ''} ${r.description || ''}`.toLowerCase();
+          const combinedText = `${r.name} ${r.address} ${r.cuisine?.join(' ') || ''} ${r.description || ''}`;
           
-          // Полное совпадение в названии
-          if (r.name.toLowerCase().includes(lowerSearch)) score += 100;
+          // Умный поиск по названию (высший приоритет)
+          const nameMatch = smartSearch(search, r.name);
+          if (nameMatch.matches) score += nameMatch.score;
           
-          // Совпадение отдельных слов
-          for (const word of searchWords) {
-            if (r.name.toLowerCase().includes(word)) score += 30;
-            if (r.cuisine?.some(c => c.toLowerCase().includes(word))) score += 25;
-            if (r.address.toLowerCase().includes(word)) score += 10;
-          }
+          // Умный поиск по всему тексту
+          const textMatch = smartSearch(search, combinedText);
+          if (textMatch.matches && !nameMatch.matches) score += textMatch.score * 0.5;
+          
+          // Поиск по транслитерации
+          if (r.name.toLowerCase().includes(searchLatin)) score += 80;
+          if (r.name.toLowerCase().includes(searchCyr)) score += 80;
+          
+          // Поиск по категориям
+          if (r.cuisine?.some(c => {
+            const cm = smartSearch(search, c);
+            return cm.matches;
+          })) score += 40;
           
           // Бонус за рейтинг
           if (r.rating) score += r.rating * 2;
