@@ -1901,6 +1901,83 @@ export default function AdminPage() {
                 </button>
               </div>
 
+              {/* Import JSON Section */}
+              <div className="mt-6 pt-6 border-t border-white/10">
+                <h3 className="text-sm font-medium text-white/60 mb-3">📥 Импорт JSON</h3>
+                <p className="text-xs text-white/40 mb-3">
+                  Загрузите JSON файл из Apify (Google Maps, Yandex, 2GIS)
+                </p>
+                <label className="block">
+                  <input
+                    type="file"
+                    accept=".json"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      
+                      const text = await file.text();
+                      let data;
+                      try {
+                        data = JSON.parse(text);
+                      } catch {
+                        alert('❌ Некорректный JSON файл');
+                        return;
+                      }
+                      
+                      if (!Array.isArray(data)) {
+                        alert('❌ JSON должен быть массивом');
+                        return;
+                      }
+                      
+                      if (!confirm(`Импортировать ${data.length} записей?\n\nЭто может занять несколько минут.`)) {
+                        return;
+                      }
+                      
+                      // Разбиваем на чанки
+                      const chunkSize = 100;
+                      const chunks = [];
+                      for (let i = 0; i < data.length; i += chunkSize) {
+                        chunks.push(data.slice(i, i + chunkSize));
+                      }
+                      
+                      let totalProcessed = 0;
+                      let totalErrors = 0;
+                      
+                      for (let i = 0; i < chunks.length; i++) {
+                        try {
+                          const res = await fetch('/api/import', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ data: chunks[i], source: 'google' }),
+                          });
+                          const result = await res.json();
+                          if (result.stats) {
+                            totalProcessed += result.stats.processed || 0;
+                            totalErrors += result.stats.errors || 0;
+                          }
+                        } catch (err) {
+                          totalErrors += chunks[i].length;
+                        }
+                      }
+                      
+                      alert(`✅ Импорт завершён!\n\nОбработано: ${totalProcessed}\nОшибок: ${totalErrors}`);
+                      
+                      // Обновляем статистику
+                      fetch('/api/consolidate')
+                        .then(res => res.json())
+                        .then(data => setDbStats(data))
+                        .catch(console.error);
+                      
+                      e.target.value = '';
+                    }}
+                  />
+                  <span className="w-full py-2.5 bg-blue-500/20 text-blue-300 text-sm rounded-lg hover:bg-blue-500/30 transition-colors font-medium flex items-center justify-center gap-2 cursor-pointer">
+                    📂 Выбрать JSON файл
+                  </span>
+                </label>
+              </div>
+
               {/* Delete Data Section */}
               <div className="mt-6 pt-6 border-t border-white/10">
                 <h3 className="text-sm font-medium text-white/60 mb-3">🗑️ Удаление данных</h3>
