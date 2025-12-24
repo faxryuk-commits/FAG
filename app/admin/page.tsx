@@ -1075,6 +1075,81 @@ export default function AdminPage() {
                   🔗 Объединить дубликаты
                 </button>
               </div>
+
+              {/* Delete Data Section */}
+              <div className="mt-6 pt-6 border-t border-white/10">
+                <h3 className="text-sm font-medium text-white/60 mb-3">🗑️ Удаление данных</h3>
+                <p className="text-xs text-white/40 mb-3">
+                  Удалить спарсенные данные (рестораны, отзывы, время работы)
+                </p>
+                
+                <div className="space-y-2">
+                  {/* Delete by source */}
+                  {dbStats?.bySource && dbStats.bySource.map(source => (
+                    <button
+                      key={source.source}
+                      onClick={async () => {
+                        if (!confirm(`Удалить все ${source.count} ресторанов из ${source.source}?\n\nЭто действие нельзя отменить!`)) return;
+                        
+                        const res = await fetch('/api/restaurants/delete', {
+                          method: 'DELETE',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ source: source.source }),
+                        });
+                        const data = await res.json();
+                        
+                        if (res.ok) {
+                          alert(`✅ ${data.message}`);
+                          window.location.reload();
+                        } else {
+                          alert(`❌ Ошибка: ${data.error}`);
+                        }
+                      }}
+                      className="w-full py-2 px-3 bg-red-500/10 text-red-300 text-sm rounded-lg hover:bg-red-500/20 transition-colors flex items-center justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>{source.source === 'google' ? '🗺️' : source.source === 'yandex' ? '🔴' : '🟢'}</span>
+                        <span className="capitalize">{source.source}</span>
+                      </span>
+                      <span className="text-white/50">{source.count} шт</span>
+                    </button>
+                  ))}
+                  
+                  {/* Delete all */}
+                  <button
+                    onClick={async () => {
+                      const confirmation = prompt(
+                        `⚠️ ОПАСНО! Вы собираетесь удалить ВСЕ данные!\n\n` +
+                        `Это удалит ${dbStats?.total || 0} ресторанов и все связанные отзывы.\n\n` +
+                        `Для подтверждения введите "УДАЛИТЬ ВСЁ":`
+                      );
+                      
+                      if (confirmation !== 'УДАЛИТЬ ВСЁ') {
+                        alert('Удаление отменено');
+                        return;
+                      }
+                      
+                      const res = await fetch('/api/restaurants/delete', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ all: true }),
+                      });
+                      const data = await res.json();
+                      
+                      if (res.ok) {
+                        alert(`✅ ${data.message}`);
+                        window.location.reload();
+                      } else {
+                        alert(`❌ Ошибка: ${data.error}`);
+                      }
+                    }}
+                    disabled={!dbStats?.total}
+                    className="w-full mt-3 py-2.5 bg-red-600/30 text-red-300 text-sm rounded-lg hover:bg-red-600/50 transition-colors font-medium border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    🗑️ Удалить ВСЁ ({dbStats?.total || 0} ресторанов)
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

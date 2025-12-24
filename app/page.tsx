@@ -387,70 +387,93 @@ export default function Home() {
                     href={`/restaurants/${restaurant.slug}`}
                     className="group"
                   >
-                    <div className="rounded-2xl overflow-hidden bg-white/5 border border-white/10 hover:border-orange-500/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-orange-500/10">
-                      {/* Изображение */}
-                      <div className="h-48 relative overflow-hidden">
+                    <div className="rounded-3xl overflow-hidden bg-gradient-to-b from-white/[0.08] to-white/[0.02] border border-white/10 hover:border-orange-500/50 transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-orange-500/20">
+                      {/* Изображение с улучшенным хедером */}
+                      <div className="h-52 relative overflow-hidden">
                         {restaurant.images?.[0] ? (
                           <img
                             src={restaurant.images[0]}
                             alt={restaurant.name}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
                           />
                         ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-orange-500/20 to-pink-500/20 flex items-center justify-center">
-                            <span className="text-6xl opacity-30">🍽️</span>
+                          <div className="w-full h-full bg-gradient-to-br from-orange-500/30 via-pink-500/20 to-purple-500/30 flex items-center justify-center">
+                            <span className="text-7xl opacity-40 group-hover:scale-110 transition-transform duration-500">🍽️</span>
                           </div>
                         )}
                         
-                        {/* Градиент */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+                        {/* Многослойный градиент для глубины */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f1a] via-transparent to-transparent"></div>
+                        <div className="absolute inset-0 bg-gradient-to-br from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                         
-                        {/* Бейджи */}
-                        <div className="absolute top-3 right-3 flex flex-col gap-2">
-                          {restaurant.priceRange && (
-                            <span className="px-2 py-1 bg-black/60 backdrop-blur-sm rounded-lg text-xs font-bold text-white">
-                              {restaurant.priceRange}
-                            </span>
-                          )}
-                          {restaurant.distance !== undefined && (
-                            <span className="px-2 py-1 bg-green-500/90 rounded-lg text-xs font-bold text-white">
-                              {restaurant.distance < 1 
-                                ? `${Math.round(restaurant.distance * 1000)}м` 
-                                : `${restaurant.distance.toFixed(1)}км`}
-                            </span>
-                          )}
-                        </div>
-                        
-                        {/* Рейтинг */}
-                        {restaurant.rating && (
-                          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1.5 bg-black/60 backdrop-blur-sm rounded-xl">
-                            <span className="text-yellow-400 text-lg">★</span>
-                            <span className="font-bold text-white">{restaurant.rating.toFixed(1)}</span>
-                            <span className="text-white/50 text-sm">({restaurant.ratingCount})</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Контент */}
-                      <div className="p-4">
-                        <h3 className="font-bold text-lg text-white group-hover:text-orange-400 transition-colors line-clamp-1">
-                          {restaurant.name}
-                        </h3>
-                        
-                        {/* Кухня */}
-                        {restaurant.cuisine?.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {restaurant.cuisine.slice(0, 3).map((c, i) => (
-                              <span key={i} className="px-2 py-0.5 bg-white/10 rounded-md text-xs text-white/60">
+                        {/* Верхняя панель с бейджами */}
+                        <div className="absolute top-0 left-0 right-0 p-3 flex items-start justify-between">
+                          {/* Левые бейджи - кухня */}
+                          <div className="flex flex-wrap gap-1.5 max-w-[60%]">
+                            {restaurant.cuisine?.slice(0, 2).map((c, i) => (
+                              <span 
+                                key={i} 
+                                className="px-2.5 py-1 bg-black/50 backdrop-blur-md rounded-lg text-xs font-medium text-white/90 border border-white/10"
+                              >
                                 {c}
                               </span>
                             ))}
                           </div>
-                        )}
+                          
+                          {/* Правые бейджи */}
+                          <div className="flex flex-col gap-1.5 items-end">
+                            {restaurant.priceRange && (
+                              <span className="px-2.5 py-1 bg-emerald-500/80 backdrop-blur-sm rounded-lg text-xs font-bold text-white shadow-lg shadow-emerald-500/30">
+                                {restaurant.priceRange}
+                              </span>
+                            )}
+                            {restaurant.distance !== undefined && (
+                              <span className="px-2.5 py-1 bg-blue-500/80 backdrop-blur-sm rounded-lg text-xs font-bold text-white shadow-lg shadow-blue-500/30">
+                                📍 {restaurant.distance < 1 
+                                  ? `${Math.round(restaurant.distance * 1000)}м` 
+                                  : `${restaurant.distance.toFixed(1)}км`}
+                              </span>
+                            )}
+                        </div>
                         
-                        <p className="text-white/40 text-sm mt-3 line-clamp-1 flex items-center gap-1">
-                          <span>📍</span> {restaurant.address}
-                        </p>
+                        {/* Рейтинг - плавающий бейдж внизу */}
+                        {restaurant.rating && (
+                          <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-2 bg-black/70 backdrop-blur-md rounded-2xl border border-white/10 shadow-xl">
+                            <div className="flex items-center gap-1">
+                              <span className="text-amber-400 text-lg drop-shadow-glow">★</span>
+                              <span className="font-black text-lg text-white">{restaurant.rating.toFixed(1)}</span>
+                            </div>
+                            <div className="w-px h-4 bg-white/20"></div>
+                            <span className="text-white/60 text-xs">{restaurant.ratingCount} отзывов</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Контент карточки */}
+                      <div className="p-5">
+                        {/* Название с градиентным эффектом при наведении */}
+                        <h3 className="font-bold text-lg text-white group-hover:bg-gradient-to-r group-hover:from-orange-400 group-hover:to-pink-400 group-hover:bg-clip-text group-hover:text-transparent transition-all duration-300 line-clamp-1">
+                          {restaurant.name}
+                        </h3>
+                        
+                        {/* Адрес */}
+                        <div className="flex items-center gap-2 mt-3 text-white/50 text-sm">
+                          <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-xs">
+                            📍
+                          </div>
+                          <span className="line-clamp-1">{restaurant.address}</span>
+                        </div>
+                        
+                        {/* Нижняя панель - действия */}
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5">
+                          <span className="text-xs text-white/40">
+                            {restaurant.cuisine?.length || 0} категорий
+                          </span>
+                          <div className="flex items-center gap-1.5 text-orange-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
+                            <span>Подробнее</span>
+                            <span>→</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </Link>
