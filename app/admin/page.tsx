@@ -95,12 +95,10 @@ function JobTimer({
   startedAt, 
   estimatedSeconds, 
   stats,
-  onRefresh 
 }: { 
   startedAt: string; 
   estimatedSeconds: number;
   stats?: JobStats;
-  onRefresh?: () => void;
 }) {
   const [elapsed, setElapsed] = useState(0);
   
@@ -113,13 +111,7 @@ function JobTimer({
     return () => clearInterval(interval);
   }, [startedAt]);
 
-  // Авто-обновление каждые 5 секунд
-  useEffect(() => {
-    if (onRefresh) {
-      const refreshInterval = setInterval(onRefresh, 5000);
-      return () => clearInterval(refreshInterval);
-    }
-  }, [onRefresh]);
+  // ⚡ УДАЛЁН дублирующий polling - главный компонент уже делает это
 
   const remaining = Math.max(0, estimatedSeconds - elapsed);
   const realProgress = stats?.total ? ((stats.processed || 0) / stats.total) * 100 : 0;
@@ -564,10 +556,18 @@ function ParsingMonitorModal({
   useEffect(() => {
     if (!isOpen || !jobId) return;
 
+    let isCancelled = false;
+    let intervalId: NodeJS.Timeout | null = null;
+
     const fetchStatus = async () => {
+      if (isCancelled) return;
+      
       try {
         const res = await fetch(`/api/sync?jobId=${jobId}`);
         const data = await res.json();
+        
+        if (isCancelled) return;
+        
         if (data.job) {
           setJob(data.job);
           
@@ -581,20 +581,39 @@ function ParsingMonitorModal({
               return [...prev, ...newItems];
             });
           }
+          
+          // ⚡ ОПТИМИЗАЦИЯ: Останавливаем polling если задача завершена
+          if (['completed', 'failed', 'cancelled'].includes(data.job.status)) {
+            if (intervalId) {
+              clearInterval(intervalId);
+              intervalId = null;
+            }
+          }
         }
         
         // Если есть результаты, показываем их
         if (data.results) {
           setJob(prev => prev ? { ...prev, status: 'completed', stats: data.results } : null);
+          // Остановить polling после получения результатов
+          if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
         }
       } catch (error) {
         console.error('Error fetching job status:', error);
       }
     };
 
+    // Первый запрос сразу
     fetchStatus();
-    const interval = setInterval(fetchStatus, 2000); // Обновляем каждые 2 секунды
-    return () => clearInterval(interval);
+    // Polling каждые 3 секунды (вместо 2)
+    intervalId = setInterval(fetchStatus, 3000);
+    
+    return () => {
+      isCancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [isOpen, jobId]);
 
   // Сброс при закрытии
@@ -781,7 +800,10 @@ export default function AdminPage() {
     }
   };
 
-  // Загрузка скреперов и статистики
+  // Проверяем есть ли активные задачи
+  const hasRunningJobs = jobs.some(j => j.status === 'running');
+
+  // Загрузка скреперов и статистики (один раз при монтировании)
   useEffect(() => {
     fetch('/api/scrapers')
       .then(res => res.json())
@@ -797,14 +819,18 @@ export default function AdminPage() {
     // Загрузка использования Apify
     fetchApifyUsage();
     
+    // Начальная загрузка задач
     fetchJobs();
-    const interval = setInterval(fetchJobs, 5000);
-    const usageInterval = setInterval(fetchApifyUsage, 30000); // Обновляем каждые 30 сек
-    return () => {
-      clearInterval(interval);
-      clearInterval(usageInterval);
-    };
   }, []);
+
+  // Polling только когда есть активные задачи
+  useEffect(() => {
+    if (!hasRunningJobs) return;
+    
+    // Polling каждые 10 сек только если есть running задачи
+    const interval = setInterval(fetchJobs, 10000);
+    return () => clearInterval(interval);
+  }, [hasRunningJobs]);
 
   const fetchJobs = async () => {
     try {
@@ -1496,7 +1522,6 @@ export default function AdminPage() {
                             startedAt={job.startedAt} 
                             estimatedSeconds={100}
                             stats={job.stats as JobStats}
-                            onRefresh={fetchJobs}
                           />
                           <div className="flex gap-2 mt-3">
                             <button
