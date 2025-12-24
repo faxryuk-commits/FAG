@@ -19,23 +19,29 @@ interface Restaurant {
 
 // Категории настроения
 const MOOD_CATEGORIES = [
-  { id: 'romantic', emoji: '💕', label: 'Романтика', query: 'романтический ресторан', color: 'from-pink-600 to-rose-500' },
-  { id: 'business', emoji: '💼', label: 'Бизнес', query: 'бизнес ланч кафе', color: 'from-slate-700 to-slate-600' },
-  { id: 'family', emoji: '👨‍👩‍👧', label: 'Семья', query: 'семейный ресторан детское меню', color: 'from-amber-500 to-orange-500' },
-  { id: 'friends', emoji: '🎉', label: 'Друзья', query: 'бар паб ресторан', color: 'from-violet-600 to-purple-500' },
-  { id: 'fast', emoji: '⚡', label: 'Быстро', query: 'фастфуд быстрое питание', color: 'from-emerald-600 to-green-500' },
-  { id: 'coffee', emoji: '☕', label: 'Кофе', query: 'кофейня кафе десерты', color: 'from-amber-700 to-yellow-600' },
+  { id: 'romantic', emoji: '💕', label: 'Романтика', query: 'ресторан итальянский французский wine', color: 'from-pink-600 to-rose-500' },
+  { id: 'business', emoji: '💼', label: 'Бизнес', query: 'кафе кофейня ланч бизнес', color: 'from-slate-700 to-slate-600' },
+  { id: 'family', emoji: '👨‍👩‍👧', label: 'Семья', query: 'семейный пицца бургер детское', color: 'from-amber-500 to-orange-500' },
+  { id: 'friends', emoji: '🎉', label: 'Друзья', query: 'бар паб гриль пиво', color: 'from-violet-600 to-purple-500' },
+  { id: 'fast', emoji: '⚡', label: 'Быстро', query: 'фастфуд быстрое экспресс доставка', color: 'from-emerald-600 to-green-500' },
+  { id: 'coffee', emoji: '☕', label: 'Кофе', query: 'кофейня кафе десерт торт', color: 'from-amber-700 to-yellow-600' },
 ];
 
 // Типы кухонь
 const CUISINES = [
-  { id: 'uzbek', label: '🥟 Узбекская', query: 'узбекская кухня плов' },
-  { id: 'european', label: '🍝 Европейская', query: 'европейская кухня' },
-  { id: 'asian', label: '🍜 Азиатская', query: 'азиатская японская китайская' },
-  { id: 'meat', label: '🥩 Мясо/Гриль', query: 'стейк гриль мясо шашлык' },
-  { id: 'pizza', label: '🍕 Пицца', query: 'пицца итальянская' },
-  { id: 'sushi', label: '🍣 Суши', query: 'суши роллы японская' },
+  { id: 'uzbek', label: '🥟 Узбекская', query: 'узбекская плов самса лагман чайхона' },
+  { id: 'european', label: '🍝 Европейская', query: 'европейская итальянская французская' },
+  { id: 'asian', label: '🍜 Азиатская', query: 'азиатская китайская японская корейская вок' },
+  { id: 'meat', label: '🥩 Мясо/Гриль', query: 'стейк гриль мясо шашлык кебаб' },
+  { id: 'pizza', label: '🍕 Пицца', query: 'пицца pizza итальянская' },
+  { id: 'sushi', label: '🍣 Суши', query: 'суши роллы сашими японская' },
 ];
+
+interface CategoryStats {
+  moods: Array<{ id: string; label: string; emoji: string; count: number }>;
+  cuisines: Array<{ id: string; label: string; emoji: string; count: number }>;
+  stats: { total: number; avgRating: number; withReviews: number };
+}
 
 function getTimeGreeting() {
   const hour = new Date().getHours();
@@ -54,8 +60,25 @@ export default function Home() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [showAll, setShowAll] = useState(false);
+  const [categoryStats, setCategoryStats] = useState<CategoryStats | null>(null);
   
   const greeting = getTimeGreeting();
+
+  // Загрузка статистики по категориям
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('/api/categories');
+        if (res.ok) {
+          const data = await res.json();
+          setCategoryStats(data);
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+      }
+    };
+    fetchStats();
+  }, []);
 
   // Запрос геолокации
   const requestLocation = useCallback(() => {
@@ -249,21 +272,29 @@ export default function Home() {
             <span>🎯</span> Настроение
           </h2>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-            {MOOD_CATEGORIES.map((mood) => (
-              <button
-                key={mood.id}
-                onClick={() => handleMoodSelect(mood)}
-                className={`relative overflow-hidden rounded-2xl p-4 transition-all duration-300 hover:scale-105 ${
-                  selectedMood === mood.id ? 'ring-2 ring-white shadow-lg shadow-white/20' : ''
-                }`}
-              >
-                <div className={`absolute inset-0 bg-gradient-to-br ${mood.color}`}></div>
-                <div className="relative text-center">
-                  <span className="text-2xl sm:text-3xl block mb-1">{mood.emoji}</span>
-                  <span className="text-xs sm:text-sm font-medium text-white">{mood.label}</span>
-                </div>
-              </button>
-            ))}
+            {MOOD_CATEGORIES.map((mood) => {
+              const moodStat = categoryStats?.moods.find(m => m.id === mood.id);
+              const count = moodStat?.count || 0;
+              return (
+                <button
+                  key={mood.id}
+                  onClick={() => handleMoodSelect(mood)}
+                  disabled={count === 0}
+                  className={`relative overflow-hidden rounded-2xl p-4 transition-all duration-300 hover:scale-105 ${
+                    selectedMood === mood.id ? 'ring-2 ring-white shadow-lg shadow-white/20' : ''
+                  } ${count === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}
+                >
+                  <div className={`absolute inset-0 bg-gradient-to-br ${mood.color}`}></div>
+                  <div className="relative text-center">
+                    <span className="text-2xl sm:text-3xl block mb-1">{mood.emoji}</span>
+                    <span className="text-xs sm:text-sm font-medium text-white">{mood.label}</span>
+                    {count > 0 && (
+                      <span className="block mt-1 text-xs text-white/70">{count} мест</span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -275,19 +306,29 @@ export default function Home() {
             <span>🍴</span> Кухня
           </h2>
           <div className="flex flex-wrap gap-2">
-            {CUISINES.map((cuisine) => (
-              <button
-                key={cuisine.id}
-                onClick={() => handleCuisineSelect(cuisine)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                  selectedCuisine === cuisine.id
-                    ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white'
-                    : 'bg-white/5 text-white/70 hover:bg-white/10 border border-white/10'
-                }`}
-              >
-                {cuisine.label}
-              </button>
-            ))}
+            {CUISINES.map((cuisine) => {
+              const cuisineStat = categoryStats?.cuisines.find(c => c.id === cuisine.id);
+              const count = cuisineStat?.count || 0;
+              return (
+                <button
+                  key={cuisine.id}
+                  onClick={() => handleCuisineSelect(cuisine)}
+                  disabled={count === 0}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+                    selectedCuisine === cuisine.id
+                      ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white'
+                      : count === 0 
+                        ? 'bg-white/5 text-white/30 border border-white/5 cursor-not-allowed'
+                        : 'bg-white/5 text-white/70 hover:bg-white/10 border border-white/10'
+                  }`}
+                >
+                  <span>{cuisine.label}</span>
+                  {count > 0 && (
+                    <span className="px-1.5 py-0.5 bg-white/10 rounded-md text-xs">{count}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       </section>

@@ -14,6 +14,68 @@ const SOURCE_PRIORITY: Record<string, number> = {
 };
 
 /**
+ * Маппинг ключевых слов на стандартизированные категории кухни
+ */
+const CUISINE_MAPPING: Record<string, string[]> = {
+  // Узбекская
+  'Узбекская кухня': ['узбек', 'uzbek', 'плов', 'plov', 'самса', 'samsa', 'лагман', 'lagman', 'шурпа', 'чайхана', 'чайхона'],
+  // Европейская
+  'Европейская кухня': ['европ', 'europ', 'western', 'continental', 'french', 'франц', 'german', 'немец', 'итальян', 'italian', 'spanish', 'испан'],
+  // Азиатская
+  'Азиатская кухня': ['азиат', 'asian', 'china', 'китай', 'japan', 'япон', 'korea', 'корей', 'вьетнам', 'vietnam', 'thai', 'тайск', 'wok', 'вок', 'noodle', 'лапша'],
+  // Мясо/Гриль
+  'Мясо и гриль': ['мясо', 'meat', 'стейк', 'steak', 'гриль', 'grill', 'шашлык', 'bbq', 'барбекю', 'kebab', 'кебаб', 'мангал'],
+  // Пицца
+  'Пиццерия': ['пицц', 'pizza'],
+  // Суши
+  'Суши и роллы': ['суши', 'sushi', 'ролл', 'roll', 'sashimi', 'сашими'],
+  // Кофейня
+  'Кофейня': ['кофе', 'coffee', 'cafe', 'espresso', 'эспрессо', 'капучино', 'cappuccino'],
+  // Бар
+  'Бар': ['бар', 'bar', 'pub', 'паб', 'пиво', 'beer', 'cocktail', 'коктейл'],
+  // Фастфуд
+  'Фастфуд': ['фаст', 'fast', 'фуд', 'food', 'бургер', 'burger', 'хот-дог', 'hotdog', 'quick'],
+  // Кондитерская
+  'Кондитерская': ['десерт', 'dessert', 'торт', 'cake', 'выпечка', 'bakery', 'пекарн', 'сладк', 'sweet'],
+  // Ресторан (общий)
+  'Ресторан': ['ресторан', 'restaurant', 'dining'],
+  // Кафе (общий)
+  'Кафе': ['кафе', 'cafe', 'столовая', 'canteen', 'bistro', 'бистро'],
+};
+
+/**
+ * Нормализует и обогащает массив категорий кухни
+ */
+export function normalizeCuisine(cuisineArray: string[], name?: string): string[] {
+  const result = new Set<string>();
+  
+  // Объединяем все данные для анализа
+  const allText = [...cuisineArray, name || ''].join(' ').toLowerCase();
+  
+  // Сохраняем оригинальные категории (очищенные)
+  for (const cuisine of cuisineArray) {
+    if (cuisine && typeof cuisine === 'string') {
+      const cleaned = cuisine.trim();
+      if (cleaned.length > 0 && cleaned.length < 50) {
+        result.add(cleaned);
+      }
+    }
+  }
+  
+  // Добавляем стандартизированные категории на основе ключевых слов
+  for (const [standardCategory, keywords] of Object.entries(CUISINE_MAPPING)) {
+    for (const keyword of keywords) {
+      if (allText.includes(keyword.toLowerCase())) {
+        result.add(standardCategory);
+        break;
+      }
+    }
+  }
+  
+  return [...result].slice(0, 10); // Максимум 10 категорий
+}
+
+/**
  * Вычисляет хеш данных для инкрементального парсинга
  */
 export function calculateDataHash(data: any): string {
@@ -599,15 +661,18 @@ export async function saveWithConsolidation(
   options?: { incremental?: boolean }
 ): Promise<{ action: SaveAction; id: string; mergedWith?: string }> {
   // Извлекаем временные поля
-  const { name, latitude, longitude, sourceId, _openingHours, _reviews, ...rest } = data;
+  const { name, latitude, longitude, sourceId, _openingHours, _reviews, cuisine: rawCuisine, ...rest } = data;
   
   if (!name || !latitude || !longitude) {
     throw new Error('Missing required fields for consolidation');
   }
 
+  // Нормализуем категории кухни
+  const cuisine = normalizeCuisine(rawCuisine || [], name);
+
   // Инкрементальная проверка - пропускаем если данные не изменились
   if (options?.incremental) {
-    const changed = await hasDataChanged(source, sourceId, { name, ...rest });
+    const changed = await hasDataChanged(source, sourceId, { name, cuisine, ...rest });
     if (!changed) {
       const existing = await prisma.restaurant.findFirst({
         where: { source, sourceId },
@@ -628,7 +693,7 @@ export async function saveWithConsolidation(
   
   if (duplicate) {
     // Объединяем данные
-    const mergedData = mergeRestaurantData(duplicate, { ...rest, name, latitude, longitude, sourceId }, source);
+    const mergedData = mergeRestaurantData(duplicate, { ...rest, name, latitude, longitude, sourceId, cuisine }, source);
     
     // Обновляем существующую запись
     await prisma.restaurant.update({
@@ -682,7 +747,7 @@ export async function saveWithConsolidation(
     // Обновляем свою же запись
     await prisma.restaurant.update({
       where: { id: existing.id },
-      data: { ...rest, name, latitude, longitude, lastSynced: new Date() },
+      data: { ...rest, name, latitude, longitude, cuisine, lastSynced: new Date() },
     });
     
     // Обновляем время работы
@@ -731,6 +796,7 @@ export async function saveWithConsolidation(
       name,
       latitude,
       longitude,
+      cuisine,
       source, 
       sourceId,
       // Время работы
