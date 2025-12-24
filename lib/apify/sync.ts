@@ -3,6 +3,21 @@ import { prisma } from '@/lib/prisma';
 
 export type SyncSource = 'yandex' | 'google' | '2gis';
 
+/**
+ * Генерирует slug из названия
+ */
+function generateSlug(name: string, sourceId: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-zа-яё0-9\s]/gi, '')
+    .replace(/\s+/g, '-')
+    .substring(0, 50);
+  
+  // Добавляем часть sourceId для уникальности
+  const suffix = sourceId.substring(0, 8);
+  return `${base}-${suffix}`;
+}
+
 interface SyncOptions {
   source: SyncSource;
   city?: string;
@@ -158,78 +173,72 @@ function normalizeRestaurantData(source: SyncSource, data: any) {
   };
 
   switch (source) {
-    case 'yandex':
+    case 'yandex': {
+      const name = data.name || data.title || 'Без названия';
+      const sourceId = data.id || data.placeId || String(Date.now());
       return {
         ...base,
-        name: data.name || data.title,
-        address: data.address || data.formattedAddress,
-        city: extractCity(data.address),
-        latitude: data.coordinates?.lat || data.lat,
-        longitude: data.coordinates?.lon || data.lng,
-        phone: data.phones?.[0],
-        website: data.url,
-        rating: data.rating,
+        name,
+        slug: generateSlug(name, sourceId),
+        address: data.address || data.formattedAddress || '',
+        city: extractCity(data.address || ''),
+        latitude: data.coordinates?.lat || data.lat || 0,
+        longitude: data.coordinates?.lon || data.lng || 0,
+        phone: data.phones?.[0] || null,
+        website: data.url || null,
+        rating: data.rating || null,
         ratingCount: data.reviewsCount || 0,
-        sourceId: data.id || data.placeId,
-        sourceUrl: data.url,
+        sourceId,
+        sourceUrl: data.url || null,
         images: data.photos || [],
         cuisine: data.categories || [],
-        workingHours: data.workingHours ? {
-          create: normalizeWorkingHours(data.workingHours),
-        } : undefined,
-        reviews: data.reviews ? {
-          create: normalizeReviews(data.reviews, source),
-        } : undefined,
       };
+    }
 
-    case 'google':
+    case 'google': {
+      const name = data.name || 'Без названия';
+      const sourceId = data.place_id || String(Date.now());
       return {
         ...base,
-        name: data.name,
-        address: data.formatted_address,
-        city: extractCity(data.formatted_address),
-        latitude: data.geometry?.location?.lat,
-        longitude: data.geometry?.location?.lng,
-        phone: data.formatted_phone_number,
-        website: data.website,
-        rating: data.rating,
+        name,
+        slug: generateSlug(name, sourceId),
+        address: data.formatted_address || '',
+        city: extractCity(data.formatted_address || ''),
+        latitude: data.geometry?.location?.lat || 0,
+        longitude: data.geometry?.location?.lng || 0,
+        phone: data.formatted_phone_number || null,
+        website: data.website || null,
+        rating: data.rating || null,
         ratingCount: data.user_ratings_total || 0,
         priceRange: data.price_level ? '$'.repeat(data.price_level) : null,
-        sourceId: data.place_id,
-        sourceUrl: data.url,
+        sourceId,
+        sourceUrl: data.url || null,
         images: data.photos?.map((p: any) => p.photo_reference) || [],
         cuisine: data.types || [],
-        workingHours: data.opening_hours?.weekday_text ? {
-          create: normalizeGoogleWorkingHours(data.opening_hours.weekday_text),
-        } : undefined,
-        reviews: data.reviews ? {
-          create: normalizeReviews(data.reviews, source),
-        } : undefined,
       };
+    }
 
-    case '2gis':
+    case '2gis': {
+      const name = data.name || 'Без названия';
+      const sourceId = data.id || String(Date.now());
       return {
         ...base,
-        name: data.name,
-        address: data.address_name,
-        city: data.city || extractCity(data.address_name),
-        latitude: data.point?.lat,
-        longitude: data.point?.lon,
-        phone: data.contacts?.phones?.[0]?.formatted,
-        website: data.url,
-        rating: data.rating,
+        name,
+        slug: generateSlug(name, sourceId),
+        address: data.address_name || '',
+        city: data.city || extractCity(data.address_name || ''),
+        latitude: data.point?.lat || 0,
+        longitude: data.point?.lon || 0,
+        phone: data.contacts?.phones?.[0]?.formatted || null,
+        website: data.url || null,
+        rating: data.rating || null,
         ratingCount: data.reviews_count || 0,
-        sourceId: data.id,
-        sourceUrl: data.url,
-        images: data.rubrics || [],
+        sourceId,
+        sourceUrl: data.url || null,
+        images: [],
         cuisine: data.rubrics || [],
-        workingHours: data.schedule ? {
-          create: normalize2GisWorkingHours(data.schedule),
-        } : undefined,
-        reviews: data.reviews ? {
-          create: normalizeReviews(data.reviews, source),
-        } : undefined,
       };
+    }
 
     default:
       throw new Error(`Unknown source: ${source}`);
@@ -243,34 +252,8 @@ function extractCity(address: string): string {
   return parts[parts.length - 1]?.trim() || 'Неизвестно';
 }
 
-function normalizeWorkingHours(hours: any) {
-  // Нормализация времени работы для Яндекс.Карт
-  // Формат зависит от API
-  return [];
-}
-
-function normalizeGoogleWorkingHours(weekdayText: string[]) {
-  // Нормализация времени работы для Google Maps
-  return [];
-}
-
-function normalize2GisWorkingHours(schedule: any) {
-  // Нормализация времени работы для 2ГИС
-  return [];
-}
-
-function normalizeReviews(reviews: any[], source: SyncSource) {
-  return reviews.map((review) => ({
-    author: review.author_name || review.author || 'Аноним',
-    rating: review.rating || review.rating_value || 0,
-    text: review.text || review.comment || null,
-    date: new Date(review.time || review.date || Date.now()),
-    source,
-    sourceId: review.id || null,
-    isApproved: true, // Автоматически одобряем отзывы из источников
-    isVerified: true,
-  }));
-}
+// TODO: Реализовать обработку времени работы и отзывов
+// после создания ресторана через отдельные запросы
 
 function getDefaultActorId(source: SyncSource): string {
   // Здесь должны быть ID ваших актеров в Apify
