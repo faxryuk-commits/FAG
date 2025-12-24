@@ -128,6 +128,48 @@ export async function startRestaurantSync(options: SyncOptions) {
 }
 
 /**
+ * Извлекает отзывы из данных (универсальная функция)
+ */
+function extractReviews(data: any): any[] {
+  // Прямые поля с отзывами
+  if (Array.isArray(data.reviews) && data.reviews.length > 0) {
+    console.log(`[Reviews] Found ${data.reviews.length} reviews in data.reviews`);
+    return data.reviews;
+  }
+  if (Array.isArray(data.reviewsData) && data.reviewsData.length > 0) {
+    console.log(`[Reviews] Found ${data.reviewsData.length} reviews in data.reviewsData`);
+    return data.reviewsData;
+  }
+  if (Array.isArray(data.reviewsList) && data.reviewsList.length > 0) {
+    console.log(`[Reviews] Found ${data.reviewsList.length} reviews in data.reviewsList`);
+    return data.reviewsList;
+  }
+  if (Array.isArray(data.userReviews) && data.userReviews.length > 0) {
+    console.log(`[Reviews] Found ${data.userReviews.length} reviews in data.userReviews`);
+    return data.userReviews;
+  }
+  if (Array.isArray(data.comments) && data.comments.length > 0) {
+    console.log(`[Reviews] Found ${data.comments.length} reviews in data.comments`);
+    return data.comments;
+  }
+  
+  // Поле review (единственный отзыв в объекте)
+  if (data.review && typeof data.review === 'object') {
+    console.log(`[Reviews] Found single review in data.review`);
+    return [data.review];
+  }
+  
+  // Если данные сами являются отзывом (oneReviewPerRow)
+  if (data.reviewId || (data.text && data.author)) {
+    console.log(`[Reviews] Data is a single review (oneReviewPerRow mode)`);
+    return [data];
+  }
+  
+  console.log(`[Reviews] No reviews found in data`);
+  return [];
+}
+
+/**
  * Формирует input для актера в зависимости от источника
  */
 function getActorInput(source: SyncSource, searchQuery: string, location: string, maxResults: number) {
@@ -460,8 +502,8 @@ function normalizeData(source: SyncSource, data: any) {
         cuisine: cuisine.filter(Boolean),
         // Время работы будет обрабатываться отдельно
         _openingHours: data.openingHours || data.workingHours || data.hours || null,
-        // Отзывы могут быть в разных полях
-        _reviews: data.reviews || data.reviewsData || data.reviewsList || data.userReviews || [],
+        // Отзывы - проверяем все возможные поля
+        _reviews: extractReviews(data),
       };
     }
 
@@ -508,7 +550,7 @@ function normalizeData(source: SyncSource, data: any) {
         cuisine: cuisine.filter(Boolean),
         priceRange: data.priceCategory || data.price || null,
         _openingHours: data.workingHours || data.openingHours || data.schedule || null,
-        _reviews: data.reviews || data.reviewsData || data.comments || [],
+        _reviews: extractReviews(data),
       };
     }
 
@@ -555,7 +597,7 @@ function normalizeData(source: SyncSource, data: any) {
         cuisine: cuisine.filter(Boolean),
         priceRange: data.priceCategory || data.average_bill || null,
         _openingHours: data.schedule || data.workingHours || data.working_hours || null,
-        _reviews: data.reviews || [],
+        _reviews: extractReviews(data),
       };
     }
 
