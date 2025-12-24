@@ -343,6 +343,17 @@ export default function Home() {
     }
   }, [fetchRestaurants]);
 
+  // Перезагрузка при изменении геолокации
+  useEffect(() => {
+    if (userLocation && initialLoadDone.current) {
+      // Перезагружаем с учётом геолокации
+      fetchRestaurants({
+        mood: selectedMood || undefined,
+        cuisineType: selectedCuisine || undefined
+      });
+    }
+  }, [userLocation]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Обработка выбора настроения
   const handleMoodSelect = (mood: typeof MOOD_CATEGORIES[0]) => {
     if (selectedMood === mood.id) {
