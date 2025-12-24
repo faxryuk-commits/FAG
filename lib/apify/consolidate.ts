@@ -214,20 +214,77 @@ export function mergeRestaurantData(existing: any, newData: any, newSource: stri
 }
 
 /**
+ * Конвертирует время из AM/PM формата в 24-часовой
+ */
+function convertTo24Hour(time: string): string {
+  if (!time) return '00:00';
+  
+  // Уже в 24-часовом формате
+  if (/^\d{1,2}:\d{2}$/.test(time.trim())) {
+    const [h, m] = time.trim().split(':');
+    return `${h.padStart(2, '0')}:${m}`;
+  }
+  
+  // AM/PM формат
+  const match = time.match(/(\d{1,2}):?(\d{2})?\s*(am|pm|AM|PM)/i);
+  if (match) {
+    let hours = parseInt(match[1]);
+    const minutes = match[2] || '00';
+    const period = match[3].toLowerCase();
+    
+    if (period === 'pm' && hours !== 12) hours += 12;
+    if (period === 'am' && hours === 12) hours = 0;
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes}`;
+  }
+  
+  // Только число (часы)
+  const hourMatch = time.match(/^(\d{1,2})$/);
+  if (hourMatch) {
+    return `${hourMatch[1].padStart(2, '0')}:00`;
+  }
+  
+  return '00:00';
+}
+
+/**
+ * Проверяет, указывает ли строка на закрытие
+ */
+function isClosedIndicator(str: string): boolean {
+  if (!str) return false;
+  const normalized = str.toLowerCase().trim();
+  return normalized === 'closed' || 
+         normalized === 'закрыто' || 
+         normalized === 'выходной' ||
+         normalized === 'не работает' ||
+         normalized.includes('closed') ||
+         normalized.includes('закрыт');
+}
+
+/**
  * Парсит время работы в формат для БД
  */
-function parseWorkingHours(hours: any): Array<{ dayOfWeek: number; openTime: string; closeTime: string }> {
+function parseWorkingHours(hours: any): Array<{ dayOfWeek: number; openTime: string; closeTime: string; isClosed?: boolean }> {
   if (!hours) return [];
   
-  const result: Array<{ dayOfWeek: number; openTime: string; closeTime: string }> = [];
+  const result: Array<{ dayOfWeek: number; openTime: string; closeTime: string; isClosed?: boolean }> = [];
   const dayNames: Record<string, number> = {
-    'sunday': 0, 'sun': 0, 'вс': 0, 'воскресенье': 0,
-    'monday': 1, 'mon': 1, 'пн': 1, 'понедельник': 1,
-    'tuesday': 2, 'tue': 2, 'вт': 2, 'вторник': 2,
-    'wednesday': 3, 'wed': 3, 'ср': 3, 'среда': 3,
-    'thursday': 4, 'thu': 4, 'чт': 4, 'четверг': 4,
-    'friday': 5, 'fri': 5, 'пт': 5, 'пятница': 5,
-    'saturday': 6, 'sat': 6, 'сб': 6, 'суббота': 6,
+    // English
+    'sunday': 0, 'sun': 0,
+    'monday': 1, 'mon': 1,
+    'tuesday': 2, 'tue': 2,
+    'wednesday': 3, 'wed': 3,
+    'thursday': 4, 'thu': 4,
+    'friday': 5, 'fri': 5,
+    'saturday': 6, 'sat': 6,
+    // Russian
+    'вс': 0, 'воскресенье': 0,
+    'пн': 1, 'понедельник': 1,
+    'вт': 2, 'вторник': 2,
+    'ср': 3, 'среда': 3,
+    'чт': 4, 'четверг': 4,
+    'пт': 5, 'пятница': 5,
+    'сб': 6, 'суббота': 6,
   };
 
   // Вспомогательная функция для конвертации дня в число
@@ -250,28 +307,99 @@ function parseWorkingHours(hours: any): Array<{ dayOfWeek: number; openTime: str
     return undefined;
   };
 
-  // Если массив строк вида "Monday: 9:00 - 22:00"
+  // Парсит строку времени вида "9:00 AM – 10:00 PM" или "09:00-22:00"
+  const parseTimeRange = (timeStr: string): { open: string; close: string; isClosed: boolean } | null => {
+    if (!timeStr) return null;
+    
+    // Проверяем на закрытие
+    if (isClosedIndicator(timeStr)) {
+      return { open: '00:00', close: '00:00', isClosed: true };
+    }
+    
+    // 24/7 или круглосуточно
+    if (/24\s*(\/|часа|hours)|круглосуточно/i.test(timeStr)) {
+      return { open: '00:00', close: '23:59', isClosed: false };
+    }
+    
+    // Паттерн для времени с AM/PM: "9:00 AM – 10:00 PM"
+    const ampmMatch = timeStr.match(/(\d{1,2}:?\d{0,2}\s*(?:am|pm)?)\s*[-–—⁃]\s*(\d{1,2}:?\d{0,2}\s*(?:am|pm)?)/i);
+    if (ampmMatch) {
+      return {
+        open: convertTo24Hour(ampmMatch[1]),
+        close: convertTo24Hour(ampmMatch[2]),
+        isClosed: false,
+      };
+    }
+    
+    // Паттерн для 24h формата: "09:00-22:00"
+    const h24Match = timeStr.match(/(\d{1,2}:\d{2})\s*[-–—⁃]\s*(\d{1,2}:\d{2})/);
+    if (h24Match) {
+      return {
+        open: h24Match[1].padStart(5, '0'),
+        close: h24Match[2].padStart(5, '0'),
+        isClosed: false,
+      };
+    }
+    
+    return null;
+  };
+
+  // Если массив строк или объектов
   if (Array.isArray(hours)) {
     for (const h of hours) {
       if (typeof h === 'string') {
-        // Формат "Monday: 9:00 - 22:00" или "понедельник: 09:00-22:00"
-        const match = h.match(/([а-яёa-z]+):?\s*(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/i);
-        if (match) {
-          const dayNum = getDayNumber(match[1]);
-          if (dayNum !== undefined) {
-            result.push({ dayOfWeek: dayNum, openTime: match[2], closeTime: match[3] });
+        // Формат "Monday: 9:00 AM – 10:00 PM" или "понедельник: 09:00-22:00"
+        const colonMatch = h.match(/^([а-яёa-z]+)\s*[:\s]+(.+)$/i);
+        if (colonMatch) {
+          const dayNum = getDayNumber(colonMatch[1]);
+          const timeRange = parseTimeRange(colonMatch[2]);
+          if (dayNum !== undefined && timeRange) {
+            result.push({
+              dayOfWeek: dayNum,
+              openTime: timeRange.open,
+              closeTime: timeRange.close,
+              isClosed: timeRange.isClosed,
+            });
           }
         }
       } else if (typeof h === 'object' && h !== null) {
-        // Формат объекта { day/dayOfWeek: ..., open/openTime: ..., close/closeTime: ... }
+        // Формат объекта { day/dayOfWeek: ..., hours/open/openTime: ... }
         const dayNum = getDayNumber(h.day) ?? getDayNumber(h.dayOfWeek);
         
         if (dayNum !== undefined) {
-          result.push({
-            dayOfWeek: dayNum,
-            openTime: h.openTime || h.open || h.from || h.start || '00:00',
-            closeTime: h.closeTime || h.close || h.to || h.end || '23:59',
-          });
+          // Если есть поле hours (как в Google Maps)
+          if (h.hours) {
+            const timeRange = parseTimeRange(h.hours);
+            if (timeRange) {
+              result.push({
+                dayOfWeek: dayNum,
+                openTime: timeRange.open,
+                closeTime: timeRange.close,
+                isClosed: timeRange.isClosed,
+              });
+              continue;
+            }
+          }
+          
+          // Если есть отдельные поля open/close
+          const openTime = h.openTime || h.open || h.from || h.start;
+          const closeTime = h.closeTime || h.close || h.to || h.end;
+          
+          if (openTime && closeTime) {
+            result.push({
+              dayOfWeek: dayNum,
+              openTime: convertTo24Hour(openTime),
+              closeTime: convertTo24Hour(closeTime),
+              isClosed: h.isClosed || false,
+            });
+          } else if (h.isClosed || isClosedIndicator(String(h.hours || ''))) {
+            result.push({
+              dayOfWeek: dayNum,
+              openTime: '00:00',
+              closeTime: '00:00',
+              isClosed: true,
+            });
+          }
         }
       }
     }
@@ -282,23 +410,42 @@ function parseWorkingHours(hours: any): Array<{ dayOfWeek: number; openTime: str
       const dayNum = getDayNumber(day);
       if (dayNum !== undefined) {
         if (typeof time === 'string') {
-          const match = time.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
-          if (match) {
-            result.push({ dayOfWeek: dayNum, openTime: match[1], closeTime: match[2] });
+          const timeRange = parseTimeRange(time);
+          if (timeRange) {
+            result.push({
+              dayOfWeek: dayNum,
+              openTime: timeRange.open,
+              closeTime: timeRange.close,
+              isClosed: timeRange.isClosed,
+            });
           }
         } else if (typeof time === 'object' && time !== null) {
-          result.push({
-            dayOfWeek: dayNum,
-            openTime: (time as any).open || (time as any).from || (time as any).start || '00:00',
-            closeTime: (time as any).close || (time as any).to || (time as any).end || '23:59',
-          });
+          const t = time as any;
+          const openTime = t.open || t.from || t.start || t.openTime;
+          const closeTime = t.close || t.to || t.end || t.closeTime;
+          
+          if (openTime && closeTime) {
+            result.push({
+              dayOfWeek: dayNum,
+              openTime: convertTo24Hour(openTime),
+              closeTime: convertTo24Hour(closeTime),
+              isClosed: t.isClosed || false,
+            });
+          }
         }
       }
     }
   }
   
   // Финальная проверка - убедиться что все dayOfWeek числа
-  return result.filter(h => typeof h.dayOfWeek === 'number' && !isNaN(h.dayOfWeek));
+  return result
+    .filter(h => typeof h.dayOfWeek === 'number' && !isNaN(h.dayOfWeek))
+    .map(h => ({
+      dayOfWeek: h.dayOfWeek,
+      openTime: h.openTime || '00:00',
+      closeTime: h.closeTime || '23:59',
+      isClosed: h.isClosed,
+    }));
 }
 
 /**
@@ -489,7 +636,13 @@ export async function saveWithConsolidation(
       const existingHours = await prisma.workingHours.count({ where: { restaurantId: duplicate.id } });
       if (existingHours === 0) {
         await prisma.workingHours.createMany({
-          data: workingHours.map(h => ({ ...h, restaurantId: duplicate.id })),
+          data: workingHours.map(h => ({ 
+            dayOfWeek: h.dayOfWeek,
+            openTime: h.openTime,
+            closeTime: h.closeTime,
+            isClosed: h.isClosed || false,
+            restaurantId: duplicate.id,
+          })),
         });
       }
     }
@@ -528,7 +681,13 @@ export async function saveWithConsolidation(
     if (workingHours.length > 0) {
       await prisma.workingHours.deleteMany({ where: { restaurantId: existing.id } });
       await prisma.workingHours.createMany({
-        data: workingHours.map(h => ({ ...h, restaurantId: existing.id })),
+        data: workingHours.map(h => ({ 
+          dayOfWeek: h.dayOfWeek,
+          openTime: h.openTime,
+          closeTime: h.closeTime,
+          isClosed: h.isClosed || false,
+          restaurantId: existing.id,
+        })),
       });
     }
     
@@ -568,7 +727,12 @@ export async function saveWithConsolidation(
       sourceId,
       // Время работы
       workingHours: workingHours.length > 0 ? {
-        create: workingHours,
+        create: workingHours.map(h => ({
+          dayOfWeek: h.dayOfWeek,
+          openTime: h.openTime,
+          closeTime: h.closeTime,
+          isClosed: h.isClosed || false,
+        })),
       } : undefined,
       // Отзывы
       reviews: reviews.length > 0 ? {
