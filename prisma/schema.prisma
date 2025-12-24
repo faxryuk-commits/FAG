@@ -24,6 +24,7 @@ model Restaurant {
   phone       String?
   website     String?
   email       String?
+  menuUrl     String?  // Ссылка на меню (если есть)
   
   // Время работы
   workingHours WorkingHours[]

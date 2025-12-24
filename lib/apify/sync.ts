@@ -7,9 +7,8 @@ export type SyncSource = 'yandex' | 'google' | '2gis';
 // ID актеров в Apify
 // Можно использовать полное имя (username/actor-name) или ID
 const ACTOR_IDS = {
-  // Google Maps - пробуем разные актёры для лучшей пагинации
-  google: 'nwua/google-maps-scraper',        // Альтернативный - лучше с пагинацией
-  // google: 'compass/crawler-google-places',// Старый актёр (лимит 20)
+  // Google Maps - используем проверенный актёр
+  google: 'compass/crawler-google-places',   // Основной актёр
   yandex: 'johnvc/Scrape-Yandex',            // Яндекс.Карты
   '2gis': 'apify/web-scraper',               // 2ГИС - через универсальный web-scraper
 } as const;
@@ -177,35 +176,48 @@ function extractReviews(data: any): any[] {
 function getActorInput(source: SyncSource, searchQuery: string, location: string, maxResults: number) {
   switch (source) {
     case 'google':
-      // Используем nwua/google-maps-scraper - более надёжный для большого количества результатов
+      // compass/crawler-google-places - проверенный актёр
       console.log(`[Google Maps] Starting scrape with maxResults: ${maxResults}`);
+      
+      // Разбиваем на несколько поисковых запросов для большего охвата
+      const searchQueries = [
+        `${searchQuery} ${location}`,
+        `${searchQuery} в центре ${location}`,
+        `лучшие ${searchQuery} ${location}`,
+      ];
+      
       return {
-        // Поисковые запросы
-        queries: [`${searchQuery} ${location}`],
+        // Несколько запросов для большего охвата
+        searchStringsArray: searchQueries,
         
-        // ===== ГЛАВНЫЙ ПАРАМЕТР - КОЛИЧЕСТВО РЕЗУЛЬТАТОВ =====
-        maxResultsPerQuery: maxResults,
+        // Количество результатов НА КАЖДЫЙ запрос
+        maxCrawledPlacesPerSearch: Math.ceil(maxResults / searchQueries.length),
         
         // Язык
         language: 'ru',
-        region: 'ru',
         
-        // Данные для извлечения
-        scrapeDetails: true,      // Детальная информация
-        scrapeReviews: true,      // Отзывы
-        maxReviews: 20,           // Макс отзывов на место
-        scrapeImages: true,       // Фото
-        maxImages: 10,            // Макс фото
+        // ИЗОБРАЖЕНИЯ
+        maxImages: 10,
         
-        // Дополнительные опции
-        includeWebsiteEmail: true,
-        includePeopleAlsoSearch: false,
+        // ОТЗЫВЫ
+        maxReviews: 20,
+        reviewsSort: 'newest',
+        scrapeReviewerName: true,
+        scrapeReviewerId: true,
+        scrapeResponseFromOwnerText: true,
+        
+        // Дополнительная информация
+        additionalInfo: true,
+        
+        // МЕНЮ - извлекаем ссылки на меню если есть
+        scrapeTableReservation: true,  // Бронирование (часто связано с меню)
         
         // Производительность
-        maxConcurrency: 5,
+        maxConcurrency: 10,
+        maxPageRetries: 3,
         
-        // Прокси (если есть)
-        // proxyConfig: { useApifyProxy: true },
+        // Не пропускать закрытые
+        skipClosedPlaces: false,
       };
     
     case 'yandex':
@@ -608,6 +620,8 @@ function normalizeData(source: SyncSource, data: any) {
         _openingHours: data.openingHours || data.workingHours || data.hours || data.opening_hours || null,
         // Отзывы - проверяем все возможные поля
         _reviews: extractReviews(data),
+        // Меню - ссылка если есть
+        menuUrl: data.menu || data.menuUrl || data.menuLink || data.orderOnlineUrl || null,
       };
     }
 
