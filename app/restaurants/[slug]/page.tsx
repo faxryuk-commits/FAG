@@ -373,12 +373,6 @@ export default function RestaurantPage() {
           </div>
         </div>
 
-        {/* Scroll Indicator */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 animate-bounce">
-          <div className="w-6 h-10 rounded-full border-2 border-white/30 flex items-start justify-center p-2">
-            <div className="w-1 h-2 bg-white/50 rounded-full animate-pulse"></div>
-          </div>
-        </div>
       </section>
 
       {/* Content Section */}
@@ -575,35 +569,34 @@ export default function RestaurantPage() {
             <div className="space-y-6">
               
               {/* Working Hours */}
-              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-6 sticky top-6">
+              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-6">
                 <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                   <span>🕐</span> Время работы
                 </h2>
                 {restaurant.workingHours?.length > 0 ? (
-                  <div className="space-y-2">
-                    {restaurant.workingHours
-                      .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
-                      .map((h, i) => {
-                        const isToday = new Date().getDay() === h.dayOfWeek;
-                        return (
-                          <div
-                            key={i}
-                            className={`flex justify-between py-3 px-4 rounded-xl transition-colors ${
-                              isToday 
-                                ? 'bg-green-500/20 border border-green-500/30' 
-                                : 'hover:bg-white/5'
-                            }`}
-                          >
-                            <span className={`font-medium ${isToday ? 'text-green-300' : 'text-white/70'}`}>
-                              {DAYS_SHORT[h.dayOfWeek]}
-                              {isToday && <span className="ml-2 text-xs text-green-400">сегодня</span>}
-                            </span>
-                            <span className={h.isClosed ? 'text-red-400' : 'text-white'}>
-                              {h.isClosed ? 'Закрыто' : `${h.openTime} – ${h.closeTime}`}
-                            </span>
-                          </div>
-                        );
-                      })}
+                  <div className="space-y-1">
+                    {[1, 2, 3, 4, 5, 6, 0].map((dayNum) => {
+                      const h = restaurant.workingHours?.find(wh => wh.dayOfWeek === dayNum);
+                      const isToday = new Date().getDay() === dayNum;
+                      return (
+                        <div
+                          key={dayNum}
+                          className={`flex justify-between py-2 px-3 rounded-lg transition-colors ${
+                            isToday 
+                              ? 'bg-green-500/20 border border-green-500/30' 
+                              : 'hover:bg-white/5'
+                          }`}
+                        >
+                          <span className={`font-medium text-sm ${isToday ? 'text-green-300' : 'text-white/70'}`}>
+                            {DAYS_SHORT[dayNum]}
+                            {isToday && <span className="ml-1 text-xs text-green-400">•</span>}
+                          </span>
+                          <span className={`text-sm ${!h || h.isClosed ? 'text-white/40' : 'text-white'}`}>
+                            {!h ? '—' : h.isClosed ? 'Закрыто' : `${h.openTime} – ${h.closeTime}`}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-white/40 text-center py-4">Информация недоступна</p>
