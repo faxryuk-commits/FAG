@@ -133,29 +133,35 @@ export async function startRestaurantSync(options: SyncOptions) {
 function getActorInput(source: SyncSource, searchQuery: string, location: string, maxResults: number) {
   switch (source) {
     case 'google':
-      // compass/crawler-google-places - полная конфигурация
+      // compass/crawler-google-places - полная конфигурация с детальными отзывами
       return {
         searchStringsArray: [`${searchQuery} ${location}`],
         maxCrawledPlacesPerSearch: maxResults,
         language: 'ru',
         
-        // ИЗОБРАЖЕНИЯ - важные настройки
-        maxImages: 10,                   // До 10 фото
-        placeMinimumStars: 0,            // Не фильтруем по рейтингу
+        // ИЗОБРАЖЕНИЯ
+        maxImages: 10,
+        placeMinimumStars: 0,
         
-        // Отзывы
-        maxReviews: 10,
-        reviewsSort: 'newest',
+        // ДЕТАЛЬНЫЕ ОТЗЫВЫ - все поля
+        maxReviews: 20,                          // Больше отзывов
+        reviewsSort: 'newest',                   // Сначала новые
         reviewsTranslation: 'originalAndTranslated',
-        scrapeReviewerName: true,
-        scrapeReviewId: false,
-        scrapeReviewUrl: false,
-        scrapeReviewerId: false,
-        scrapeReviewerUrl: false,
-        scrapeResponseFromOwnerText: true,
         
-        // Дополнительная информация
-        additionalInfo: true,            // Время работы, описание и т.д.
+        // Информация об авторе отзыва
+        scrapeReviewerName: true,                // Имя автора
+        scrapeReviewerId: true,                  // ID автора
+        scrapeReviewerUrl: true,                 // Ссылка на профиль
+        scrapeReviewId: true,                    // ID отзыва
+        scrapeReviewUrl: true,                   // Ссылка на отзыв
+        scrapeResponseFromOwnerText: true,       // Ответ владельца
+        
+        // Дополнительные детали отзывов
+        reviewsFilterString: '',                 // Без фильтра
+        personalDataOptions: 'full',             // Полные данные автора
+        
+        // Дополнительная информация о месте
+        additionalInfo: true,
         scrapeDirectories: false,
         includeWebResults: false,
         
@@ -164,7 +170,7 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
         maxPageRetries: 3,
         skipClosedPlaces: false,
         
-        // Полные данные о месте
+        // Полные данные
         allPlacesNoSearch: false,
         oneReviewPerRow: false,
       };

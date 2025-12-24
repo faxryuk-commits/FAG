@@ -103,24 +103,51 @@ model Review {
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   
-  author       String   // Имя автора
+  // Основные данные
   rating       Int      // 1-5
   text         String?  @db.Text
   date         DateTime
   
-  // Метаданные
+  // Информация об авторе
+  author       String   // Имя автора
+  authorId     String?  // ID автора в источнике
+  authorUrl    String?  // Ссылка на профиль автора
+  authorAvatar String?  // URL аватара
+  authorLevel  String?  // Уровень автора (Local Guide, Эксперт и т.д.)
+  authorReviewsCount Int? // Сколько отзывов написал автор
+  authorPhotosCount  Int? // Сколько фото загрузил автор
+  isLocalGuide Boolean @default(false) // Google Local Guide
+  
+  // Медиа в отзыве
+  photos       String[] // Фото приложенные к отзыву
+  
+  // Ответ владельца
+  ownerResponse     String? @db.Text
+  ownerResponseDate DateTime?
+  
+  // Метрики
+  likesCount   Int      @default(0) // Полезность отзыва
+  
+  // Язык и перевод
+  language     String?  // Язык отзыва
+  translatedText String? @db.Text // Переведённый текст
+  
+  // Метаданные источника
   source       String   // yandex, google, 2gis, user
   sourceId     String?  // ID отзыва из источника
+  sourceUrl    String?  // Ссылка на отзыв
   
   // Модерация
   isApproved   Boolean  @default(false)
-  isVerified   Boolean  @default(false) // Проверен ли отзыв
+  isVerified   Boolean  @default(false)
   
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   
   @@index([restaurantId])
   @@index([isApproved])
+  @@index([authorId])
+  @@index([rating])
   @@map("reviews")
 }
 

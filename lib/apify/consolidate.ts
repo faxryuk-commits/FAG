@@ -268,18 +268,113 @@ function parseWorkingHours(hours: any): Array<{ dayOfWeek: number; openTime: str
 }
 
 /**
- * Парсит отзывы в формат для БД
+ * Детальный интерфейс отзыва
  */
-function parseReviews(reviews: any[], source: string): Array<{ author: string; text: string; rating: number; date: Date; source: string }> {
+interface ParsedReview {
+  author: string;
+  authorId: string | null;
+  authorUrl: string | null;
+  authorAvatar: string | null;
+  authorLevel: string | null;
+  authorReviewsCount: number | null;
+  authorPhotosCount: number | null;
+  isLocalGuide: boolean;
+  rating: number;
+  text: string;
+  date: Date;
+  photos: string[];
+  ownerResponse: string | null;
+  ownerResponseDate: Date | null;
+  likesCount: number;
+  language: string | null;
+  translatedText: string | null;
+  source: string;
+  sourceId: string | null;
+  sourceUrl: string | null;
+}
+
+/**
+ * Парсит отзывы в детальный формат для БД
+ */
+function parseReviews(reviews: any[], source: string): ParsedReview[] {
   if (!Array.isArray(reviews)) return [];
   
-  return reviews.slice(0, 10).map(r => ({
-    author: r.author || r.authorName || r.name || r.user || 'Аноним',
-    text: r.text || r.comment || r.review || r.content || '',
-    rating: r.rating || r.stars || r.score || 5,
-    date: r.date ? new Date(r.date) : new Date(),
-    source: source,
-  })).filter(r => r.text); // Только с текстом
+  return reviews.slice(0, 20).map(r => {
+    // Определяем автора
+    const author = r.author || r.authorName || r.name || r.user || r.reviewer?.name || 'Аноним';
+    
+    // ID и URL автора
+    const authorId = r.authorId || r.reviewerId || r.userId || r.reviewer?.id || null;
+    const authorUrl = r.authorUrl || r.reviewerUrl || r.userUrl || r.reviewer?.url || null;
+    
+    // Аватар автора
+    const authorAvatar = r.authorAvatar || r.reviewerAvatar || r.avatar || 
+                         r.profilePhotoUrl || r.reviewer?.avatar || r.reviewer?.profilePhoto || null;
+    
+    // Уровень автора (Local Guide и т.д.)
+    const authorLevel = r.authorLevel || r.reviewerLevel || r.badge || 
+                        r.localGuideLevel || r.reviewer?.level || null;
+    
+    // Количество отзывов/фото автора
+    const authorReviewsCount = r.reviewerNumberOfReviews || r.authorReviewsCount || 
+                               r.reviewer?.reviewsCount || null;
+    const authorPhotosCount = r.reviewerNumberOfPhotos || r.authorPhotosCount || 
+                              r.reviewer?.photosCount || null;
+    
+    // Local Guide
+    const isLocalGuide = r.isLocalGuide || r.localGuide || 
+                         (authorLevel && authorLevel.toLowerCase().includes('local guide')) || false;
+    
+    // Фото в отзыве
+    let photos: string[] = [];
+    if (r.reviewImageUrls && Array.isArray(r.reviewImageUrls)) {
+      photos = r.reviewImageUrls;
+    } else if (r.photos && Array.isArray(r.photos)) {
+      photos = r.photos.map((p: any) => typeof p === 'string' ? p : p.url);
+    } else if (r.images && Array.isArray(r.images)) {
+      photos = r.images;
+    }
+    
+    // Ответ владельца
+    const ownerResponse = r.ownerResponse || r.responseFromOwnerText || 
+                          r.ownerReply || r.reply?.text || null;
+    const ownerResponseDate = r.ownerResponseDate || r.responseFromOwnerDate || 
+                              r.reply?.date ? new Date(r.reply?.date || r.ownerResponseDate) : null;
+    
+    // Полезность
+    const likesCount = r.likesCount || r.reviewLikesCount || r.helpful || r.likes || 0;
+    
+    // Язык
+    const language = r.language || r.reviewLanguage || r.lang || null;
+    const translatedText = r.translatedText || r.textTranslated || r.translation || null;
+    
+    // ID отзыва
+    const sourceId = r.reviewId || r.id || r.sourceId || null;
+    const sourceUrl = r.reviewUrl || r.url || r.link || null;
+    
+    return {
+      author,
+      authorId,
+      authorUrl,
+      authorAvatar,
+      authorLevel,
+      authorReviewsCount,
+      authorPhotosCount,
+      isLocalGuide,
+      rating: r.rating || r.stars || r.score || 5,
+      text: r.text || r.comment || r.review || r.content || r.reviewText || '',
+      date: r.date || r.publishedAtDate || r.reviewDate ? new Date(r.date || r.publishedAtDate || r.reviewDate) : new Date(),
+      photos: photos.filter(Boolean),
+      ownerResponse,
+      ownerResponseDate,
+      likesCount,
+      language,
+      translatedText,
+      source,
+      sourceId,
+      sourceUrl,
+    };
+  }).filter(r => r.text); // Только с текстом
 }
 
 /**
