@@ -181,46 +181,47 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
         // Основной поисковый запрос - точный формат для актера
         searchStringsArray: [`${searchQuery} in ${location}`],
         
-        // ВСЕ параметры лимитов для полного охвата
-        maxCrawledPlacesPerSearch: maxResults,  // Главный параметр
-        maxCrawledPlaces: maxResults,           // Общий лимит
-        maxResults: maxResults,                  // Альтернативный
-        scrapeDirectories: false,               // Не парсить каталоги, только поиск
+        // ===== КЛЮЧЕВЫЕ ПАРАМЕТРЫ ДЛЯ ПАГИНАЦИИ =====
+        maxCrawledPlacesPerSearch: maxResults,  // Главный параметр - сколько мест на 1 поиск
+        maxCrawledPlaces: maxResults,           // Общий лимит мест
+        
+        // ВАЖНО: Прокрутка списка результатов
+        maxAutoscrolledPlaces: maxResults,      // Сколько прокручивать в списке
+        
+        // Zoom и область поиска
+        zoom: 12,                               // Уровень зума (12-14 оптимально для города)
         
         // Язык и регион
         language: 'ru',
-        geolocation: {
-          country: 'RU',
-        },
         
         // ИЗОБРАЖЕНИЯ
         maxImages: 10,
-        placeMinimumStars: '',  // пустая строка = любой рейтинг
+        placeMinimumStars: '',                  // пустая строка = любой рейтинг
         
         // ДЕТАЛЬНЫЕ ОТЗЫВЫ - все поля
-        maxReviews: 20,                          // Отзывов на каждое место
-        reviewsSort: 'newest',                   // Сначала новые
+        maxReviews: 20,                         // Отзывов на каждое место
+        reviewsSort: 'newest',                  // Сначала новые
         reviewsTranslation: 'originalAndTranslated',
         
         // Информация об авторе отзыва
-        scrapeReviewerName: true,                // Имя автора
-        scrapeReviewerId: true,                  // ID автора
-        scrapeReviewerUrl: true,                 // Ссылка на профиль
-        scrapeReviewId: true,                    // ID отзыва
-        scrapeReviewUrl: true,                   // Ссылка на отзыв
-        scrapeResponseFromOwnerText: true,       // Ответ владельца
+        scrapeReviewerName: true,
+        scrapeReviewerId: true,
+        scrapeReviewerUrl: true,
+        scrapeReviewId: true,
+        scrapeReviewUrl: true,
+        scrapeResponseFromOwnerText: true,
         
         // Дополнительные детали отзывов
-        reviewsFilterString: '',                 // Без фильтра
-        personalDataOptions: 'full',             // Полные данные автора
+        reviewsFilterString: '',
+        personalDataOptions: 'full',
         
         // Дополнительная информация о месте
         additionalInfo: true,
         includeWebResults: false,
         
-        // Производительность - увеличиваем для большего охвата
-        maxConcurrency: 20,
-        maxPageRetries: 5,
+        // ===== ПРОИЗВОДИТЕЛЬНОСТЬ =====
+        maxConcurrency: 10,                     // Параллельных запросов
+        maxPageRetries: 5,                      // Попыток при ошибке
         skipClosedPlaces: false,
         
         // Полные данные
@@ -228,20 +229,30 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
         oneReviewPerRow: false,
         
         // Глубина сканирования
-        deeperCityScrape: true,                  // Глубокое сканирование города
+        deeperCityScrape: true,                 // Глубокое сканирование города
         exportPlaceUrls: false,
+        
+        // ===== ДОПОЛНИТЕЛЬНЫЕ ПАРАМЕТРЫ ДЛЯ ОХВАТА =====
+        searchMatching: 'all',                  // Все совпадения, не только точные
+        forceEnglish: false,                    // Не форсировать английский
       };
     
     case 'yandex':
       // johnvc/Scrape-Yandex - требует поле text
+      console.log(`[Yandex] Starting scrape with maxItems: ${maxResults}`);
       return {
         text: `${searchQuery} ${location}`,
         maxItems: maxResults,
         language: 'ru',
+        // Дополнительные параметры для пагинации
+        maxPagesPerQuery: Math.ceil(maxResults / 20), // ~20 результатов на страницу
+        includePhotos: true,
+        includeReviews: true,
+        includeHours: true,
       };
     
     case '2gis': {
-      // apify/web-scraper для парсинга 2ГИС
+      // apify/web-scraper для парсинга 2ГИС с пагинацией
       const citySlug2gis = get2GisCitySlug(location);
       const searchUrl2gis = `https://2gis.ru/${citySlug2gis}/search/${encodeURIComponent(searchQuery)}`;
       
@@ -249,44 +260,90 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
         startUrls: [{ url: searchUrl2gis }],
         
         pageFunction: `async function pageFunction(context) {
-          const { request, log, jQuery } = context;
+          const { request, log, jQuery, page } = context;
           const $ = jQuery;
+          const maxItems = ${maxResults};
           
           log.info('Parsing 2GIS page: ' + request.url);
+          log.info('Target: ' + maxItems + ' items');
           
-          // Ждём загрузки
+          // Ждём начальной загрузки
           await context.waitFor(3000);
           
-          const results = [];
+          const allResults = new Map(); // Используем Map для дедупликации по имени
+          let previousCount = 0;
+          let noNewResultsCount = 0;
+          const maxScrollAttempts = 50; // Максимум попыток прокрутки
           
-          // Собираем карточки заведений
-          $('[data-id], ._1hf7139, .miniCard').each(function() {
-            const $card = $(this);
-            const name = $card.find('span._oqoid, ._1p8iqzw, .miniCard__title').first().text().trim();
-            const address = $card.find('._2lcm958, .miniCard__address').first().text().trim();
-            const rating = parseFloat($card.find('._y10azs, .miniCard__rating').text()) || null;
-            const reviewsText = $card.find('._jspzdm, .miniCard__reviews').text();
-            const reviewsCount = parseInt(reviewsText.replace(/\\D/g, '')) || 0;
-            const link = $card.find('a').first().attr('href') || '';
+          // Функция для сбора карточек
+          function collectCards() {
+            $('[data-id], ._1hf7139, .miniCard, [class*="miniCard"]').each(function() {
+              const $card = $(this);
+              const name = $card.find('span._oqoid, ._1p8iqzw, .miniCard__title, [class*="title"]').first().text().trim();
+              const address = $card.find('._2lcm958, .miniCard__address, [class*="address"]').first().text().trim();
+              const rating = parseFloat($card.find('._y10azs, .miniCard__rating, [class*="rating"]').text()) || null;
+              const reviewsText = $card.find('._jspzdm, .miniCard__reviews, [class*="reviews"]').text();
+              const reviewsCount = parseInt(reviewsText.replace(/\\\\D/g, '')) || 0;
+              const link = $card.find('a').first().attr('href') || '';
+              
+              if (name && !allResults.has(name)) {
+                allResults.set(name, {
+                  name,
+                  address,
+                  rating,
+                  reviewsCount,
+                  url: link.startsWith('http') ? link : 'https://2gis.ru' + link,
+                  city: '${location}',
+                });
+              }
+            });
+          }
+          
+          // Первичный сбор
+          collectCards();
+          log.info('Initial collection: ' + allResults.size + ' places');
+          
+          // Прокручиваем страницу для загрузки больше результатов
+          for (let i = 0; i < maxScrollAttempts && allResults.size < maxItems; i++) {
+            // Прокручиваем контейнер с результатами
+            await page.evaluate(() => {
+              const scrollContainer = document.querySelector('[class*="searchResults"], [class*="scroll"], .scroll');
+              if (scrollContainer) {
+                scrollContainer.scrollTop = scrollContainer.scrollHeight;
+              } else {
+                window.scrollTo(0, document.body.scrollHeight);
+              }
+            });
             
-            if (name) {
-              results.push({
-                name,
-                address,
-                rating,
-                reviewsCount,
-                url: link.startsWith('http') ? link : 'https://2gis.ru' + link,
-                city: '${location}',
-              });
+            // Ждём загрузки новых элементов
+            await context.waitFor(1500);
+            
+            // Собираем новые карточки
+            collectCards();
+            
+            // Проверяем, появились ли новые результаты
+            if (allResults.size === previousCount) {
+              noNewResultsCount++;
+              if (noNewResultsCount >= 3) {
+                log.info('No new results after 3 scroll attempts, stopping');
+                break;
+              }
+            } else {
+              noNewResultsCount = 0;
             }
-          });
+            
+            previousCount = allResults.size;
+            log.info('Scroll ' + (i + 1) + ': collected ' + allResults.size + ' places');
+          }
           
-          log.info('Found ' + results.length + ' places');
+          const results = Array.from(allResults.values()).slice(0, maxItems);
+          log.info('Final: ' + results.length + ' places collected');
           return results;
         }`,
         
-        maxRequestsPerCrawl: maxResults,
-        maxConcurrency: 5,
+        maxRequestsPerCrawl: 1, // Одна страница с прокруткой
+        maxConcurrency: 1,
+        waitUntil: 'networkidle',
       };
     }
     
