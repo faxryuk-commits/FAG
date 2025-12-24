@@ -153,9 +153,13 @@ export async function POST(request: NextRequest) {
       return query;
     });
 
+    // Лимит Apify - до 1000 запросов за раз
+    const maxQueries = Math.min(restaurants.length, 1000);
+    const queriesToProcess = searchQueries.slice(0, maxQueries);
+
     // Запустить Apify для обогащения
     const run = await client.actor('compass/crawler-google-places').call({
-      searchStringsArray: searchQueries.slice(0, 20), // Макс 20 за раз
+      searchStringsArray: queriesToProcess,
       maxCrawledPlacesPerSearch: 1, // Только 1 результат на запрос
       language: 'ru',
       maxImages: 10,
@@ -175,17 +179,18 @@ export async function POST(request: NextRequest) {
         stats: {
           runId: run.id,
           mode: 'enrich',
-          targetIds: restaurants.map(r => r.id),
-          searchQueries: searchQueries.slice(0, 20),
+          targetIds: restaurants.slice(0, maxQueries).map(r => r.id),
+          searchQueries: queriesToProcess,
+          totalRequested: maxQueries,
         },
       },
     });
 
     return NextResponse.json({
-      message: `Запущено обогащение ${Math.min(restaurants.length, 20)} записей`,
+      message: `Запущено обогащение ${maxQueries} записей`,
       jobId: job.id,
       runId: run.id,
-      targetCount: Math.min(restaurants.length, 20),
+      targetCount: maxQueries,
       totalIncomplete: restaurants.length,
     });
   } catch (error) {

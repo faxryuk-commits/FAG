@@ -933,6 +933,19 @@ function EnrichSection() {
               >
                 {enriching ? '⏳ Запуск...' : '🚀 Обогатить 50 записей (~$0.50)'}
               </button>
+              <button
+                onClick={() => {
+                  const total = stats?.needsEnrichment || 0;
+                  const estimatedCost = (total * 0.01).toFixed(2);
+                  if (confirm(`⚠️ Обогатить ВСЕ ${total} записей?\n\nПримерная стоимость: ~$${estimatedCost}\nВремя: ~${Math.ceil(total / 20 * 2)} мин\n\nДанные будут обрабатываться порциями по 20 записей.`)) {
+                    startEnrichment(total);
+                  }
+                }}
+                disabled={enriching}
+                className="w-full py-2.5 bg-purple-500/20 text-purple-300 text-sm rounded-lg hover:bg-purple-500/30 transition-colors font-medium disabled:opacity-50"
+              >
+                {enriching ? '⏳ Запуск...' : `🚀 Обогатить ВСЕ ${stats?.needsEnrichment || 0} записей (~$${((stats?.needsEnrichment || 0) * 0.01).toFixed(2)})`}
+              </button>
             </div>
           )}
           
