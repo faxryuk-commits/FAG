@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
 
     // Получить результаты из Apify
     const dataset = await client.dataset(runId).listItems();
-    const items = dataset.items;
+    const items = dataset.items as any[];
 
     if (!items || items.length === 0) {
       return NextResponse.json({ message: 'No items to process', updated: 0 });
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
     let updated = 0;
     let notMatched = 0;
 
-    for (const item of items) {
+    for (const item of items as any[]) {
       const matchId = findBestMatch(item, candidates);
 
       if (!matchId) {
@@ -171,8 +171,9 @@ export async function POST(request: NextRequest) {
       }
 
       // Меню
-      if (item.menu?.url || item.menuUrl) {
-        updateData.menuUrl = item.menu?.url || item.menuUrl;
+      const menu = item.menu as any;
+      if (menu?.url || item.menuUrl) {
+        updateData.menuUrl = menu?.url || item.menuUrl;
       }
 
       // Цена
