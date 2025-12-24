@@ -434,6 +434,7 @@ export default function Home() {
                                   : `${restaurant.distance.toFixed(1)}км`}
                               </span>
                             )}
+                          </div>
                         </div>
                         
                         {/* Рейтинг - плавающий бейдж внизу */}
