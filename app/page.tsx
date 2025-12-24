@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 
 interface Restaurant {
@@ -204,10 +204,14 @@ export default function Home() {
     }
   }, [currentFilters, currentOffset, userLocation, loadingMore, hasMore]);
 
-  // Начальная загрузка
+  // Начальная загрузка (только один раз!)
+  const initialLoadDone = useRef(false);
   useEffect(() => {
-    fetchRestaurants({});
-  }, [fetchRestaurants]);
+    if (!initialLoadDone.current) {
+      initialLoadDone.current = true;
+      fetchRestaurants({});
+    }
+  }, []);
 
   // Обработка выбора настроения
   const handleMoodSelect = (mood: typeof MOOD_CATEGORIES[0]) => {
