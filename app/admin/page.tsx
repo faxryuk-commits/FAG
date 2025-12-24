@@ -3,6 +3,35 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
+interface ScraperField {
+  key: string;
+  label: string;
+  type: string;
+  description: string;
+  example: any;
+  required?: boolean;
+  mapTo?: string;
+}
+
+interface InputField {
+  key: string;
+  label: string;
+  type: 'text' | 'number' | 'select';
+  placeholder?: string;
+  default: any;
+}
+
+interface Scraper {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  costPerItem: number;
+  avgTimePerItem: number;
+  fields: ScraperField[];
+  inputFields: InputField[];
+}
+
 interface SyncJob {
   id: string;
   source: string;
@@ -15,19 +44,23 @@ interface SyncJob {
 }
 
 export default function AdminPage() {
+  const [scrapers, setScrapers] = useState<Scraper[]>([]);
+  const [selectedScraper, setSelectedScraper] = useState<Scraper | null>(null);
+  const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
+  const [inputValues, setInputValues] = useState<Record<string, any>>({});
   const [jobs, setJobs] = useState<SyncJob[]>([]);
-  const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  
-  // Form state
-  const [source, setSource] = useState<'google' | 'yandex' | '2gis'>('google');
-  const [searchQuery, setSearchQuery] = useState('рестораны');
-  const [location, setLocation] = useState('Москва');
-  const [maxResults, setMaxResults] = useState(50);
+  const [step, setStep] = useState<'select' | 'configure' | 'fields' | 'confirm'>('select');
 
+  // Загрузка скреперов
   useEffect(() => {
+    fetch('/api/scrapers')
+      .then(res => res.json())
+      .then(data => setScrapers(data.scrapers || []))
+      .catch(console.error);
+    
     fetchJobs();
-    const interval = setInterval(fetchJobs, 5000); // Обновляем каждые 5 секунд
+    const interval = setInterval(fetchJobs, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -41,24 +74,72 @@ export default function AdminPage() {
     }
   };
 
-  const startSync = async () => {
+  // Выбор скрейпера
+  const selectScraper = (scraper: Scraper) => {
+    setSelectedScraper(scraper);
+    // Установка дефолтных значений
+    const defaults: Record<string, any> = {};
+    scraper.inputFields.forEach(f => {
+      defaults[f.key] = f.default;
+    });
+    setInputValues(defaults);
+    // Выбрать все обязательные поля
+    const required = new Set(scraper.fields.filter(f => f.required).map(f => f.key));
+    setSelectedFields(required);
+    setStep('configure');
+  };
+
+  // Расчет стоимости
+  const count = inputValues.maxResults || inputValues.maxReviews || 50;
+  const cost = selectedScraper ? (selectedScraper.costPerItem * count).toFixed(3) : '0';
+  const time = selectedScraper ? selectedScraper.avgTimePerItem * count : 0;
+  const timeFormatted = time < 60 ? `~${Math.round(time)} сек` : `~${Math.round(time / 60)} мин`;
+
+  // Переключение поля
+  const toggleField = (key: string) => {
+    const newSelected = new Set(selectedFields);
+    if (newSelected.has(key)) {
+      // Не даем отключить обязательные поля
+      const field = selectedScraper?.fields.find(f => f.key === key);
+      if (!field?.required) {
+        newSelected.delete(key);
+      }
+    } else {
+      newSelected.add(key);
+    }
+    setSelectedFields(newSelected);
+  };
+
+  // Запуск парсинга
+  const startScraping = async () => {
+    if (!selectedScraper) return;
+    
     setSyncing(true);
     try {
+      const sourceMap: Record<string, string> = {
+        'google-maps': 'google',
+        'google-reviews': 'google',
+        'yandex-maps': 'yandex',
+        '2gis': '2gis',
+      };
+
       const res = await fetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          source,
-          searchQuery,
-          location,
-          maxResults,
+          source: sourceMap[selectedScraper.id] || 'google',
+          searchQuery: inputValues.searchQuery || inputValues.placeUrl,
+          location: inputValues.location || inputValues.city,
+          maxResults: count,
         }),
       });
-      
+
       const data = await res.json();
-      
+
       if (res.ok) {
-        alert(`✅ Синхронизация запущена!\nJob ID: ${data.jobId}`);
+        alert(`✅ Парсинг запущен!\n\nJob ID: ${data.jobId}\nПримерное время: ${timeFormatted}\nСтоимость: ~$${cost}`);
+        setStep('select');
+        setSelectedScraper(null);
         fetchJobs();
       } else {
         alert(`❌ Ошибка: ${data.error}`);
@@ -67,24 +148,6 @@ export default function AdminPage() {
       alert(`❌ Ошибка: ${error}`);
     } finally {
       setSyncing(false);
-    }
-  };
-
-  const checkJobStatus = async (jobId: string) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/sync?jobId=${jobId}`);
-      const data = await res.json();
-      
-      if (data.results) {
-        alert(`✅ Результаты загружены!\nОбработано: ${data.results.processed}\nОшибок: ${data.results.errors}`);
-      }
-      
-      fetchJobs();
-    } catch (error) {
-      console.error('Error checking status:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -98,122 +161,249 @@ export default function AdminPage() {
     return styles[status] || styles.pending;
   };
 
-  const getSourceIcon = (source: string) => {
-    const icons: Record<string, string> = {
-      google: '🗺️',
-      yandex: '🔴',
-      '2gis': '🟢',
-    };
-    return icons[source] || '📍';
-  };
-
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Header */}
-      <header className="bg-white border-b">
+      <header className="border-b border-white/10 bg-black/20 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/" className="text-2xl">🍽️</Link>
+            <Link href="/" className="text-3xl">🍽️</Link>
             <div>
-              <h1 className="text-xl font-bold text-gray-800">Админ-панель</h1>
-              <p className="text-sm text-gray-500">Управление синхронизацией данных</p>
+              <h1 className="text-xl font-bold text-white">Центр управления</h1>
+              <p className="text-sm text-white/60">Парсинг данных • Мониторинг • Аналитика</p>
             </div>
           </div>
           <Link
             href="/"
-            className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+            className="px-4 py-2 text-white/70 hover:text-white transition-colors"
           >
-            ← На главную
+            ← На сайт
           </Link>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Sync Form */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-2xl shadow-lg p-6 sticky top-8">
-              <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                🔄 Запуск синхронизации
-              </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+          
+          {/* Main Panel */}
+          <div className="lg:col-span-3 space-y-6">
+            
+            {/* Step 1: Select Scraper */}
+            {step === 'select' && (
+              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-8">
+                <h2 className="text-2xl font-bold text-white mb-2">🔧 Выберите источник данных</h2>
+                <p className="text-white/60 mb-6">Откуда будем парсить информацию о ресторанах?</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {scrapers.map(scraper => (
+                    <button
+                      key={scraper.id}
+                      onClick={() => selectScraper(scraper)}
+                      className="p-6 rounded-2xl border-2 border-white/10 hover:border-purple-500/50 bg-white/5 hover:bg-white/10 transition-all text-left group"
+                    >
+                      <div className="text-4xl mb-3">{scraper.icon}</div>
+                      <h3 className="text-lg font-bold text-white group-hover:text-purple-300 transition-colors">
+                        {scraper.name}
+                      </h3>
+                      <p className="text-sm text-white/50 mt-1">{scraper.description}</p>
+                      <div className="mt-4 flex items-center gap-4 text-xs text-white/40">
+                        <span>~${scraper.costPerItem}/шт</span>
+                        <span>{scraper.fields.length} полей</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
-              <div className="space-y-4">
-                {/* Source */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Источник данных
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['google', 'yandex', '2gis'] as const).map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setSource(s)}
-                        className={`p-3 rounded-xl border-2 transition-all ${
-                          source === s
-                            ? 'border-red-500 bg-red-50 text-red-700'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className="text-2xl mb-1">{getSourceIcon(s)}</div>
-                        <div className="text-xs font-medium capitalize">{s}</div>
-                      </button>
+            {/* Step 2: Configure */}
+            {step === 'configure' && selectedScraper && (
+              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-8">
+                <div className="flex items-center gap-4 mb-6">
+                  <button onClick={() => setStep('select')} className="text-white/60 hover:text-white">
+                    ← Назад
+                  </button>
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">{selectedScraper.icon}</span>
+                    <div>
+                      <h2 className="text-xl font-bold text-white">{selectedScraper.name}</h2>
+                      <p className="text-sm text-white/60">Настройка параметров</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {selectedScraper.inputFields.map(field => (
+                    <div key={field.key}>
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        {field.label}
+                      </label>
+                      <input
+                        type={field.type === 'number' ? 'number' : 'text'}
+                        value={inputValues[field.key] || ''}
+                        onChange={(e) => setInputValues({
+                          ...inputValues,
+                          [field.key]: field.type === 'number' ? Number(e.target.value) : e.target.value
+                        })}
+                        placeholder={field.placeholder}
+                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setStep('fields')}
+                  className="w-full mt-6 py-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-colors"
+                >
+                  Далее: Выбор полей →
+                </button>
+              </div>
+            )}
+
+            {/* Step 3: Select Fields */}
+            {step === 'fields' && selectedScraper && (
+              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-8">
+                <div className="flex items-center gap-4 mb-6">
+                  <button onClick={() => setStep('configure')} className="text-white/60 hover:text-white">
+                    ← Назад
+                  </button>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">📋 Выберите нужные поля</h2>
+                    <p className="text-sm text-white/60">Какие данные нужно извлечь?</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {selectedScraper.fields.map(field => (
+                    <button
+                      key={field.key}
+                      onClick={() => toggleField(field.key)}
+                      disabled={field.required}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                        selectedFields.has(field.key)
+                          ? 'border-purple-500 bg-purple-500/20'
+                          : 'border-white/10 bg-white/5 hover:border-white/30'
+                      } ${field.required ? 'opacity-80' : ''}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-white">{field.label}</span>
+                        {field.required && (
+                          <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded">
+                            Обязательное
+                          </span>
+                        )}
+                        {selectedFields.has(field.key) && !field.required && (
+                          <span className="text-purple-400">✓</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-white/50 mt-1">{field.description}</p>
+                      <div className="mt-2 text-xs text-white/30 font-mono truncate">
+                        Пример: {JSON.stringify(field.example)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-6 flex gap-3">
+                  <button
+                    onClick={() => {
+                      const all = new Set(selectedScraper.fields.map(f => f.key));
+                      setSelectedFields(all);
+                    }}
+                    className="px-4 py-2 text-sm text-white/60 hover:text-white border border-white/20 rounded-lg"
+                  >
+                    Выбрать все
+                  </button>
+                  <button
+                    onClick={() => {
+                      const required = new Set(selectedScraper.fields.filter(f => f.required).map(f => f.key));
+                      setSelectedFields(required);
+                    }}
+                    className="px-4 py-2 text-sm text-white/60 hover:text-white border border-white/20 rounded-lg"
+                  >
+                    Только обязательные
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setStep('confirm')}
+                  className="w-full mt-6 py-4 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-colors"
+                >
+                  Далее: Подтверждение →
+                </button>
+              </div>
+            )}
+
+            {/* Step 4: Confirm */}
+            {step === 'confirm' && selectedScraper && (
+              <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-8">
+                <div className="flex items-center gap-4 mb-6">
+                  <button onClick={() => setStep('fields')} className="text-white/60 hover:text-white">
+                    ← Назад
+                  </button>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">🚀 Запуск парсинга</h2>
+                    <p className="text-sm text-white/60">Проверьте настройки</p>
+                  </div>
+                </div>
+
+                {/* Summary */}
+                <div className="space-y-4 mb-6">
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                    <div className="text-sm text-white/50 mb-1">Источник</div>
+                    <div className="text-white font-medium flex items-center gap-2">
+                      <span>{selectedScraper.icon}</span>
+                      {selectedScraper.name}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {selectedScraper.inputFields.map(field => (
+                      <div key={field.key} className="p-4 rounded-xl bg-white/5 border border-white/10">
+                        <div className="text-sm text-white/50 mb-1">{field.label}</div>
+                        <div className="text-white font-medium">{inputValues[field.key]}</div>
+                      </div>
                     ))}
                   </div>
-                </div>
 
-                {/* Search Query */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Поисковый запрос
-                  </label>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                    placeholder="рестораны, кафе, суши..."
-                  />
-                </div>
-
-                {/* Location */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Город / Локация
-                  </label>
-                  <input
-                    type="text"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                    placeholder="Москва, Санкт-Петербург..."
-                  />
-                </div>
-
-                {/* Max Results */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Максимум результатов: {maxResults}
-                  </label>
-                  <input
-                    type="range"
-                    min="10"
-                    max="200"
-                    step="10"
-                    value={maxResults}
-                    onChange={(e) => setMaxResults(Number(e.target.value))}
-                    className="w-full accent-red-500"
-                  />
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>10</span>
-                    <span>200</span>
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                    <div className="text-sm text-white/50 mb-2">Выбранные поля ({selectedFields.size})</div>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(selectedFields).map(key => {
+                        const field = selectedScraper.fields.find(f => f.key === key);
+                        return (
+                          <span key={key} className="px-2 py-1 bg-purple-500/20 text-purple-300 text-xs rounded">
+                            {field?.label || key}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
-                {/* Submit */}
+                {/* Cost Calculator */}
+                <div className="p-6 rounded-2xl bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 mb-6">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-3xl font-bold text-white">{count}</div>
+                      <div className="text-sm text-white/60">Записей</div>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold text-green-400">${cost}</div>
+                      <div className="text-sm text-white/60">Стоимость</div>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold text-amber-400">{timeFormatted}</div>
+                      <div className="text-sm text-white/60">Время</div>
+                    </div>
+                  </div>
+                </div>
+
                 <button
-                  onClick={startSync}
+                  onClick={startScraping}
                   disabled={syncing}
-                  className="w-full py-4 bg-gradient-to-r from-red-600 to-orange-500 text-white font-bold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {syncing ? (
                     <>
@@ -226,101 +416,75 @@ export default function AdminPage() {
                     </>
                   )}
                 </button>
-
-                <p className="text-xs text-gray-500 text-center">
-                  ⚠️ Убедитесь, что APIFY_API_TOKEN настроен в Vercel
-                </p>
               </div>
-            </div>
+            )}
+
           </div>
 
-          {/* Jobs List */}
+          {/* Sidebar - Jobs */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-2xl shadow-lg p-6">
+            <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-6 sticky top-8">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  📋 История задач
-                </h2>
-                <button
-                  onClick={fetchJobs}
-                  className="text-gray-500 hover:text-gray-700 transition-colors"
-                >
-                  🔄 Обновить
+                <h2 className="text-lg font-bold text-white">📋 История задач</h2>
+                <button onClick={fetchJobs} className="text-white/50 hover:text-white text-sm">
+                  🔄
                 </button>
               </div>
 
               {jobs.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <div className="text-5xl mb-4">📭</div>
+                <div className="text-center py-8 text-white/40">
+                  <div className="text-4xl mb-2">📭</div>
                   <p>Задач пока нет</p>
-                  <p className="text-sm">Запустите первую синхронизацию</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {jobs.map((job) => (
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                  {jobs.map(job => (
                     <div
                       key={job.id}
-                      className="border border-gray-200 rounded-xl p-4 hover:border-gray-300 transition-colors"
+                      className="p-4 rounded-xl bg-white/5 border border-white/10"
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">{getSourceIcon(job.source)}</span>
-                          <div>
-                            <div className="font-medium text-gray-800 capitalize">
-                              {job.source}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {new Date(job.createdAt).toLocaleString('ru-RU')}
-                            </div>
-                          </div>
-                        </div>
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBadge(job.status)}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-white font-medium capitalize">{job.source}</span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusBadge(job.status)}`}>
                           {job.status}
                         </span>
                       </div>
-
-                      {job.stats && (
-                        <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-3 gap-4 text-sm">
-                          {job.stats.processed !== undefined && (
-                            <>
-                              <div>
-                                <span className="text-gray-500">Обработано:</span>{' '}
-                                <span className="font-medium text-green-600">{job.stats.processed}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Ошибок:</span>{' '}
-                                <span className="font-medium text-red-600">{job.stats.errors}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Всего:</span>{' '}
-                                <span className="font-medium">{job.stats.total}</span>
-                              </div>
-                            </>
-                          )}
+                      <div className="text-xs text-white/40">
+                        {new Date(job.createdAt).toLocaleString('ru-RU')}
+                      </div>
+                      {job.stats?.processed !== undefined && (
+                        <div className="mt-2 text-xs text-white/60">
+                          ✅ {job.stats.processed} | ❌ {job.stats.errors}
                         </div>
                       )}
-
                       {job.error && (
-                        <div className="mt-3 p-3 bg-red-50 rounded-lg text-sm text-red-700">
-                          ❌ {job.error}
-                        </div>
-                      )}
-
-                      {job.status === 'running' && (
-                        <div className="mt-3">
-                          <button
-                            onClick={() => checkJobStatus(job.id)}
-                            disabled={loading}
-                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                          >
-                            {loading ? 'Проверка...' : '🔍 Проверить статус'}
-                          </button>
+                        <div className="mt-2 text-xs text-red-400 truncate">
+                          {job.error}
                         </div>
                       )}
                     </div>
                   ))}
                 </div>
               )}
+
+              {/* Quick Stats */}
+              <div className="mt-6 pt-6 border-t border-white/10">
+                <h3 className="text-sm font-medium text-white/60 mb-3">Быстрая статистика</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <div className="text-lg font-bold text-green-400">
+                      {jobs.filter(j => j.status === 'completed').length}
+                    </div>
+                    <div className="text-xs text-white/50">Завершено</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <div className="text-lg font-bold text-blue-400">
+                      {jobs.filter(j => j.status === 'running').length}
+                    </div>
+                    <div className="text-xs text-white/50">В процессе</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -328,4 +492,3 @@ export default function AdminPage() {
     </main>
   );
 }
-
