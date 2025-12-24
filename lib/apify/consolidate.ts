@@ -431,6 +431,14 @@ function parseWorkingHours(hours: any): Array<{ dayOfWeek: number; openTime: str
               closeTime: convertTo24Hour(closeTime),
               isClosed: t.isClosed || false,
             });
+          } else if (t.isClosed === true) {
+            // Обработка дня, который явно помечен как закрытый
+            result.push({
+              dayOfWeek: dayNum,
+              openTime: '00:00',
+              closeTime: '00:00',
+              isClosed: true,
+            });
           }
         }
       }
