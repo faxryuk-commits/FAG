@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     if (job.status === 'running' && job.stats) {
       const stats = job.stats as { runId?: string };
       if (stats.runId) {
-        const { status, isFinished } = await checkSyncStatus(stats.runId);
+        const { status, isFinished, itemCount, recentItems } = await checkSyncStatus(stats.runId);
         
         if (isFinished && status === 'SUCCEEDED') {
           // Загружаем и сохраняем результаты
@@ -78,6 +78,19 @@ export async function GET(request: NextRequest) {
           });
           return NextResponse.json({ job: { ...job, status: 'failed' } });
         }
+        
+        // Возвращаем промежуточные результаты для мониторинга
+        const updatedJob = {
+          ...job,
+          stats: {
+            ...stats,
+            processed: itemCount,
+            total: itemCount, // Пока не знаем финальное количество
+            processedItems: recentItems,
+            lastProcessed: recentItems[recentItems.length - 1]?.name,
+          },
+        };
+        return NextResponse.json({ job: updatedJob });
       }
     }
 

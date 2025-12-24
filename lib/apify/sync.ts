@@ -134,9 +134,12 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
   switch (source) {
     case 'google':
       // compass/crawler-google-places - полная конфигурация с детальными отзывами
+      console.log(`[Google Maps] Starting scrape with maxResults: ${maxResults}`);
       return {
         searchStringsArray: [`${searchQuery} ${location}`],
-        maxCrawledPlacesPerSearch: maxResults,
+        maxCrawledPlacesPerSearch: maxResults,  // Количество мест
+        maxCrawledPlaces: maxResults,           // Альтернативный параметр
+        maxResults: maxResults,                  // Ещё один вариант
         language: 'ru',
         
         // ИЗОБРАЖЕНИЯ
@@ -144,7 +147,7 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
         placeMinimumStars: '',  // пустая строка = любой рейтинг
         
         // ДЕТАЛЬНЫЕ ОТЗЫВЫ - все поля
-        maxReviews: 20,                          // Больше отзывов
+        maxReviews: 20,                          // Отзывов на каждое место
         reviewsSort: 'newest',                   // Сначала новые
         reviewsTranslation: 'originalAndTranslated',
         
@@ -239,13 +242,41 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
 }
 
 /**
- * Проверяет статус выполнения актера
+ * Проверяет статус выполнения актера с промежуточными результатами
  */
 export async function checkSyncStatus(runId: string) {
   const run = await apifyClient.run(runId).get();
+  
+  // Пытаемся получить промежуточные результаты
+  let itemCount = 0;
+  let recentItems: Array<{ name: string; status: 'success' | 'error' }> = [];
+  
+  if (run?.defaultDatasetId) {
+    try {
+      const datasetInfo = await apifyClient.dataset(run.defaultDatasetId).get();
+      itemCount = datasetInfo?.itemCount || 0;
+      
+      // Получаем последние элементы для мониторинга
+      if (itemCount > 0) {
+        const items = await apifyClient.dataset(run.defaultDatasetId).listItems({ 
+          limit: 10,
+          offset: Math.max(0, itemCount - 10),
+        });
+        recentItems = items.items.map((item: any) => ({
+          name: String(item.title || item.name || 'Без названия'),
+          status: 'success' as const,
+        }));
+      }
+    } catch (e) {
+      console.log('Could not get intermediate results:', e);
+    }
+  }
+  
   return {
     status: run?.status,
     isFinished: ['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'].includes(run?.status || ''),
+    itemCount,
+    recentItems,
   };
 }
 
