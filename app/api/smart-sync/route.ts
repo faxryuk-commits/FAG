@@ -35,11 +35,7 @@ export async function GET(request: NextRequest) {
         upToDate: syncNeeds.upToDate,
       },
       savings,
-      config: {
-        reviewsInterval,
-        basicInfoInterval,
-        ...config,
-      },
+      config,
       explanation: {
         full: 'Полное обновление: адрес, телефон, фото, время работы, отзывы',
         reviewsOnly: 'Только отзывы: рейтинг, новые отзывы (дешевле на 70%)',
