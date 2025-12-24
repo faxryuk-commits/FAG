@@ -1,0 +1,138 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Restaurant {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?  @db.Text
+  address     String
+  city        String
+  latitude    Float
+  longitude   Float
+  
+  // Контакты
+  phone       String?
+  website     String?
+  email       String?
+  
+  // Время работы
+  workingHours WorkingHours[]
+  
+  // Меню
+  menuItems   MenuItem[]
+  
+  // Отзывы
+  reviews     Review[]
+  
+  // Медиа
+  images      String[] // URLs изображений
+  
+  // Метаданные
+  rating      Float?   @default(0)
+  ratingCount Int      @default(0)
+  priceRange  String?  // $, $$, $$$, $$$$
+  cuisine     String[] // Типы кухни
+  
+  // Источники данных
+  source      String   // yandex, google, 2gis
+  sourceId    String   // ID из источника
+  sourceUrl   String?  // URL источника
+  
+  // Статус
+  isActive    Boolean  @default(true)
+  isVerified  Boolean  @default(false)
+  
+  // Временные метки
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastSynced  DateTime? // Последняя синхронизация с источником
+  
+  @@index([city])
+  @@index([source, sourceId])
+  @@index([latitude, longitude])
+  @@map("restaurants")
+}
+
+model WorkingHours {
+  id           String   @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  dayOfWeek    Int      // 0 = воскресенье, 1 = понедельник, ..., 6 = суббота
+  openTime     String   // "09:00"
+  closeTime    String   // "22:00"
+  isClosed     Boolean  @default(false)
+  
+  @@unique([restaurantId, dayOfWeek])
+  @@map("working_hours")
+}
+
+model MenuItem {
+  id           String   @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  name         String
+  description  String?  @db.Text
+  price        Float?
+  category     String?  // Закуски, Основные блюда, Десерты и т.д.
+  image        String?
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@index([restaurantId])
+  @@map("menu_items")
+}
+
+model Review {
+  id           String   @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  author       String   // Имя автора
+  rating       Int      // 1-5
+  text         String?  @db.Text
+  date         DateTime
+  
+  // Метаданные
+  source       String   // yandex, google, 2gis, user
+  sourceId     String?  // ID отзыва из источника
+  
+  // Модерация
+  isApproved   Boolean  @default(false)
+  isVerified   Boolean  @default(false) // Проверен ли отзыв
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@index([restaurantId])
+  @@index([isApproved])
+  @@map("reviews")
+}
+
+model SyncJob {
+  id          String   @id @default(cuid())
+  source      String   // yandex, google, 2gis
+  status      String   // pending, running, completed, failed
+  startedAt   DateTime?
+  completedAt DateTime?
+  error       String?  @db.Text
+  stats       Json?    // Статистика синхронизации
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("sync_jobs")
+}
+
