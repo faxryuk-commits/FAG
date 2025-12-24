@@ -57,6 +57,9 @@ model Restaurant {
   updatedAt   DateTime @updatedAt
   lastSynced  DateTime? // Последняя синхронизация с источником
   
+  // Метаданные синхронизации
+  syncMeta    RestaurantSyncMeta?
+  
   @@index([city])
   @@index([source, sourceId])
   @@index([latitude, longitude])
@@ -185,5 +188,27 @@ model WebhookConfig {
   updatedAt   DateTime @updatedAt
   
   @@map("webhook_configs")
+}
+
+// Метаданные синхронизации ресторана (для умного обновления)
+model RestaurantSyncMeta {
+  id                String   @id @default(cuid())
+  restaurantId      String   @unique
+  restaurant        Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  // Последние обновления разных типов данных
+  lastBasicInfoSync DateTime?  // Адрес, телефон, координаты
+  lastReviewsSync   DateTime?  // Отзывы и рейтинг
+  lastPhotosSync    DateTime?  // Фотографии
+  lastHoursSync     DateTime?  // Время работы
+  
+  // Хеши для проверки изменений
+  basicInfoHash     String?
+  reviewsHash       String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("restaurant_sync_meta")
 }
 
