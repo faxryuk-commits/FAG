@@ -32,6 +32,42 @@ function generateSlug(name: string, sourceId: string): string {
   return `${base}-${suffix}`;
 }
 
+/**
+ * Получает slug города для 2ГИС
+ */
+function get2GisCitySlug(city: string): string {
+  const cityMap: Record<string, string> = {
+    'москва': 'moscow',
+    'moscow': 'moscow',
+    'санкт-петербург': 'spb',
+    'спб': 'spb',
+    'питер': 'spb',
+    'новосибирск': 'novosibirsk',
+    'екатеринбург': 'ekaterinburg',
+    'казань': 'kazan',
+    'нижний новгород': 'n_novgorod',
+    'челябинск': 'chelyabinsk',
+    'самара': 'samara',
+    'омск': 'omsk',
+    'ростов-на-дону': 'rostov',
+    'уфа': 'ufa',
+    'красноярск': 'krasnoyarsk',
+    'пермь': 'perm',
+    'воронеж': 'voronezh',
+    'волгоград': 'volgograd',
+    'краснодар': 'krasnodar',
+    'ташкент': 'tashkent',
+    'tashkent': 'tashkent',
+    'алматы': 'almaty',
+    'астана': 'astana',
+    'минск': 'minsk',
+    'киев': 'kiev',
+  };
+  
+  const normalized = city.toLowerCase().trim();
+  return cityMap[normalized] || normalized.replace(/\s+/g, '_');
+}
+
 interface SyncOptions {
   source: SyncSource;
   searchQuery?: string;
@@ -152,25 +188,41 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
       };
     
     case '2gis':
-      // m_mamaev/2gis-places-scraper
+      // m_mamaev/2gis-places-scraper требует startUrls
+      // Формируем URL поиска 2ГИС
+      const citySlug = get2GisCitySlug(location);
+      const searchUrl = `https://2gis.ru/${citySlug}/search/${encodeURIComponent(searchQuery)}`;
+      
       return {
-        query: searchQuery,
-        searchQuery: searchQuery,
-        q: searchQuery,
-        city: location,
-        cityName: location,
+        startUrls: [{ url: searchUrl }],
         maxItems: maxResults,
-        limit: maxResults,
-        maxResults: maxResults,
-        language: 'ru',
         
-        // Расширенные данные
-        includePhotos: true,
-        includeReviews: true,
-        includeContacts: true,
-        includeSchedule: true,
-        maxPhotos: 5,
-        maxReviews: 10,
+        // pageFunction для извлечения данных
+        pageFunction: `async function pageFunction(context) {
+          const { page, request, log } = context;
+          
+          // Ждем загрузки результатов
+          await page.waitForSelector('[data-id]', { timeout: 10000 }).catch(() => {});
+          
+          // Собираем данные
+          const items = await page.evaluate(() => {
+            const results = [];
+            document.querySelectorAll('[data-id]').forEach(el => {
+              const name = el.querySelector('span')?.textContent || '';
+              const address = el.querySelector('[class*="address"]')?.textContent || '';
+              if (name) {
+                results.push({
+                  name,
+                  address,
+                  url: el.querySelector('a')?.href || '',
+                });
+              }
+            });
+            return results;
+          });
+          
+          return items;
+        }`,
       };
     
     default:

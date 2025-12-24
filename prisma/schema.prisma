@@ -130,9 +130,60 @@ model SyncJob {
   error       String?  @db.Text
   stats       Json?    // Статистика синхронизации
   
+  // Связь с запланированной задачей
+  scheduledTaskId String?
+  scheduledTask   ScheduledTask? @relation(fields: [scheduledTaskId], references: [id])
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
   @@map("sync_jobs")
+}
+
+// Запланированные задачи парсинга
+model ScheduledTask {
+  id             String   @id @default(cuid())
+  source         String   // yandex, google, 2gis
+  searchQuery    String
+  location       String
+  maxResults     Int      @default(50)
+  
+  // Расписание CRON
+  cronExpression String   // "0 3 * * *" - каждый день в 3:00
+  isActive       Boolean  @default(true)
+  
+  // Временные метки
+  lastRun        DateTime?
+  nextRun        DateTime?
+  
+  // История запусков
+  syncJobs       SyncJob[]
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  @@map("scheduled_tasks")
+}
+
+// Webhook конфигурация
+model WebhookConfig {
+  id          String   @id @default(cuid())
+  name        String
+  url         String   // URL для отправки webhook
+  secret      String?  // Секретный ключ для подписи
+  
+  // События для отправки
+  events      String[] // ["sync.completed", "sync.failed", "restaurant.created"]
+  
+  isActive    Boolean  @default(true)
+  
+  // Статистика
+  lastSent    DateTime?
+  failCount   Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("webhook_configs")
 }
 

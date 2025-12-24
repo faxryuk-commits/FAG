@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import crypto from 'crypto';
 
 /**
  * Консолидация данных из разных источников
@@ -11,6 +12,63 @@ const SOURCE_PRIORITY: Record<string, number> = {
   yandex: 2,  // Хорошие данные для РФ
   '2gis': 1,  // Базовые данные
 };
+
+/**
+ * Вычисляет хеш данных для инкрементального парсинга
+ */
+export function calculateDataHash(data: any): string {
+  // Создаём объект с ключевыми полями для сравнения
+  const hashSource = {
+    name: data.name,
+    address: data.address,
+    phone: data.phone,
+    rating: data.rating,
+    ratingCount: data.ratingCount,
+    images: data.images?.slice(0, 3), // Первые 3 фото
+  };
+  
+  return crypto
+    .createHash('md5')
+    .update(JSON.stringify(hashSource))
+    .digest('hex');
+}
+
+/**
+ * Проверяет, изменились ли данные
+ */
+export async function hasDataChanged(source: string, sourceId: string, newData: any): Promise<boolean> {
+  const existing = await prisma.restaurant.findFirst({
+    where: { source, sourceId },
+    select: { 
+      name: true, 
+      address: true, 
+      phone: true, 
+      rating: true, 
+      ratingCount: true,
+      images: true,
+    },
+  });
+  
+  if (!existing) {
+    return true; // Новая запись - считаем изменённой
+  }
+  
+  const existingHash = calculateDataHash(existing);
+  const newHash = calculateDataHash(newData);
+  
+  return existingHash !== newHash;
+}
+
+/**
+ * Статистика инкрементального парсинга
+ */
+export interface IncrementalStats {
+  total: number;
+  new: number;
+  updated: number;
+  unchanged: number;
+  merged: number;
+}
 
 /**
  * Нормализует название для сравнения
@@ -224,14 +282,37 @@ function parseReviews(reviews: any[]): Array<{ author: string; text: string; rat
 }
 
 /**
- * Сохраняет ресторан с консолидацией
+ * Тип действия при сохранении
  */
-export async function saveWithConsolidation(source: string, data: any) {
+export type SaveAction = 'created' | 'updated' | 'merged' | 'unchanged';
+
+/**
+ * Сохраняет ресторан с консолидацией и инкрементальной проверкой
+ */
+export async function saveWithConsolidation(
+  source: string, 
+  data: any,
+  options?: { incremental?: boolean }
+): Promise<{ action: SaveAction; id: string; mergedWith?: string }> {
   // Извлекаем временные поля
   const { name, latitude, longitude, sourceId, _openingHours, _reviews, ...rest } = data;
   
   if (!name || !latitude || !longitude) {
     throw new Error('Missing required fields for consolidation');
+  }
+
+  // Инкрементальная проверка - пропускаем если данные не изменились
+  if (options?.incremental) {
+    const changed = await hasDataChanged(source, sourceId, { name, ...rest });
+    if (!changed) {
+      const existing = await prisma.restaurant.findFirst({
+        where: { source, sourceId },
+        select: { id: true },
+      });
+      if (existing) {
+        return { action: 'unchanged', id: existing.id };
+      }
+    }
   }
 
   // Парсим время работы и отзывы
