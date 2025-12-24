@@ -1,14 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// Helper: найти ресторан по slug или id
+async function findRestaurantId(slugOrId: string): Promise<string | null> {
+  // Сначала пробуем по slug
+  let restaurant = await prisma.restaurant.findUnique({
+    where: { slug: slugOrId },
+    select: { id: true }
+  });
+
+  // Если не нашли, пробуем по id
+  if (!restaurant) {
+    restaurant = await prisma.restaurant.findUnique({
+      where: { id: slugOrId },
+      select: { id: true }
+    });
+  }
+
+  return restaurant?.id || null;
+}
+
 // GET - получить меню ресторана
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { slug: string } }
 ) {
   try {
+    const restaurantId = await findRestaurantId(params.slug);
+
+    if (!restaurantId) {
+      return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 });
+    }
+
     const menuItems = await prisma.menuItem.findMany({
-      where: { restaurantId: params.id },
+      where: { restaurantId },
       orderBy: [
         { category: 'asc' },
         { name: 'asc' }
@@ -37,9 +62,15 @@ export async function GET(
 // POST - добавить позицию в меню
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { slug: string } }
 ) {
   try {
+    const restaurantId = await findRestaurantId(params.slug);
+
+    if (!restaurantId) {
+      return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 });
+    }
+
     const body = await request.json();
     const { name, description, price, category, image } = body;
 
@@ -49,7 +80,7 @@ export async function POST(
 
     const menuItem = await prisma.menuItem.create({
       data: {
-        restaurantId: params.id,
+        restaurantId,
         name,
         description,
         price: price ? parseFloat(price) : null,
@@ -72,9 +103,15 @@ export async function POST(
 // PUT - массовое обновление меню
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { slug: string } }
 ) {
   try {
+    const restaurantId = await findRestaurantId(params.slug);
+
+    if (!restaurantId) {
+      return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 });
+    }
+
     const body = await request.json();
     const { items } = body;
 
@@ -84,14 +121,14 @@ export async function PUT(
 
     // Удаляем старое меню
     await prisma.menuItem.deleteMany({
-      where: { restaurantId: params.id }
+      where: { restaurantId }
     });
 
     // Создаём новое
     if (items.length > 0) {
       await prisma.menuItem.createMany({
         data: items.map((item: any) => ({
-          restaurantId: params.id,
+          restaurantId,
           name: item.name,
           description: item.description || null,
           price: item.price ? parseFloat(item.price) : null,
@@ -114,9 +151,15 @@ export async function PUT(
 // DELETE - удалить позицию меню
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: { slug: string } }
 ) {
   try {
+    const restaurantId = await findRestaurantId(params.slug);
+
+    if (!restaurantId) {
+      return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 });
+    }
+
     const { searchParams } = new URL(request.url);
     const itemId = searchParams.get('itemId');
 
@@ -132,7 +175,7 @@ export async function DELETE(
     } else {
       // Удаляем всё меню
       const result = await prisma.menuItem.deleteMany({
-        where: { restaurantId: params.id }
+        where: { restaurantId }
       });
       return NextResponse.json({
         success: true,
