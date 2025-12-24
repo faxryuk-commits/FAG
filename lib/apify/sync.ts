@@ -176,48 +176,53 @@ function extractReviews(data: any): any[] {
 function getActorInput(source: SyncSource, searchQuery: string, location: string, maxResults: number) {
   switch (source) {
     case 'google':
-      // compass/crawler-google-places - проверенный актёр
+      // compass/crawler-google-places - официальный актёр от Apify
+      // Документация: https://apify.com/compass/crawler-google-places
       console.log(`[Google Maps] Starting scrape with maxResults: ${maxResults}`);
       
-      // Разбиваем на несколько поисковых запросов для большего охвата
-      const searchQueries = [
-        `${searchQuery} ${location}`,
-        `${searchQuery} в центре ${location}`,
-        `лучшие ${searchQuery} ${location}`,
-      ];
-      
       return {
-        // Несколько запросов для большего охвата
-        searchStringsArray: searchQueries,
+        // Поисковые запросы - несколько разных для большего охвата
+        searchStringsArray: [
+          `${searchQuery} ${location}`,
+        ],
         
-        // Количество результатов НА КАЖДЫЙ запрос
-        maxCrawledPlacesPerSearch: Math.ceil(maxResults / searchQueries.length),
+        // ===== КЛЮЧЕВОЙ ПАРАМЕТР - КОЛИЧЕСТВО МЕСТ =====
+        // Актёр обходит лимит Google в 120 мест!
+        maxCrawledPlacesPerSearch: maxResults,
         
-        // Язык
+        // Язык и регион
         language: 'ru',
         
-        // ИЗОБРАЖЕНИЯ
+        // ===== ИЗОБРАЖЕНИЯ =====
         maxImages: 10,
         
-        // ОТЗЫВЫ
+        // ===== ОТЗЫВЫ - детальные =====
         maxReviews: 20,
         reviewsSort: 'newest',
         scrapeReviewerName: true,
         scrapeReviewerId: true,
+        scrapeReviewerUrl: true,
         scrapeResponseFromOwnerText: true,
         
-        // Дополнительная информация
-        additionalInfo: true,
+        // ===== ДОПОЛНИТЕЛЬНЫЕ ДАННЫЕ =====
+        additionalInfo: true,           // Характеристики заведения
+        scrapeTableReservation: true,   // Бронирование столиков
         
-        // МЕНЮ - извлекаем ссылки на меню если есть
-        scrapeTableReservation: true,  // Бронирование (часто связано с меню)
+        // ===== РЕЖИМ ПОИСКА =====
+        // deeperCityScrape разбивает город на зоны для полного охвата
+        deeperCityScrape: true,
         
-        // Производительность
+        // ===== ПРОИЗВОДИТЕЛЬНОСТЬ =====
         maxConcurrency: 10,
         maxPageRetries: 3,
         
-        // Не пропускать закрытые
+        // Не пропускать закрытые заведения
         skipClosedPlaces: false,
+        
+        // Включить все данные
+        includeHistogram: true,         // Популярные часы
+        includePeopleAlsoSearch: false, // "Люди также ищут"
+        includeWebResults: false,       // Веб-результаты не нужны
       };
     
     case 'yandex':
@@ -616,12 +621,16 @@ function normalizeData(source: SyncSource, data: any) {
         sourceUrl: data.url || data.link || data.googleMapsUrl || data.google_maps_url || `https://www.google.com/maps/place/?q=place_id:${sourceId}`,
         images: images.filter(Boolean).slice(0, 10),
         cuisine: cuisine.filter(Boolean),
-        // Время работы будет обрабатываться отдельно
+        // Время работы
         _openingHours: data.openingHours || data.workingHours || data.hours || data.opening_hours || null,
-        // Отзывы - проверяем все возможные поля
+        // Отзывы
         _reviews: extractReviews(data),
-        // Меню - ссылка если есть
+        // Меню - ссылка (из документации актёра: поле "menu")
         menuUrl: data.menu || data.menuUrl || data.menuLink || data.orderOnlineUrl || null,
+        // Популярные часы (histogram)
+        _popularTimes: data.popularTimesHistogram || data.popularTimes || null,
+        // Бронирование столиков
+        _reservationUrl: data.reserveTableUrl || data.tableReservation || null,
       };
     }
 
