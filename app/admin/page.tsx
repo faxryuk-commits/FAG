@@ -1055,6 +1055,371 @@ function ChainsSection() {
   );
 }
 
+// Секция качества данных
+function QualitySection() {
+  const [stats, setStats] = useState<any>(null);
+  const [restaurants, setRestaurants] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showModal, setShowModal] = useState(false);
+
+  const fetchQuality = async (currentFilter = filter) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/quality?filter=${currentFilter}&limit=100`);
+      const data = await res.json();
+      setStats(data.stats);
+      setRestaurants(data.restaurants || []);
+      setSelectedIds(new Set());
+    } catch (error) {
+      console.error('Error fetching quality:', error);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchQuality();
+  }, []);
+
+  const handleArchive = async (type: 'selected' | 'filter' | 'critical') => {
+    let body: any = { action: 'archive' };
+    
+    if (type === 'selected') {
+      body.ids = Array.from(selectedIds);
+    } else if (type === 'critical') {
+      body.filter = 'critical';
+    } else {
+      body.filter = filter;
+    }
+
+    if (!confirm(`Архивировать ${type === 'selected' ? selectedIds.size : 'выбранные'} записей?`)) return;
+
+    const res = await fetch('/api/quality', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    
+    if (res.ok) {
+      alert(`✅ ${data.message}`);
+      fetchQuality();
+    } else {
+      alert(`❌ ${data.error}`);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!confirm('Восстановить все архивированные записи?')) return;
+
+    const res = await fetch('/api/quality', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'restore' })
+    });
+    const data = await res.json();
+    
+    if (res.ok) {
+      alert(`✅ ${data.message}`);
+      fetchQuality();
+    } else {
+      alert(`❌ ${data.error}`);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const selectAll = () => {
+    if (selectedIds.size === restaurants.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(restaurants.map(r => r.id)));
+    }
+  };
+
+  const filters = [
+    { id: 'all', label: 'Все', count: stats?.total },
+    { id: 'no_photos', label: '📷 Без фото', count: stats?.issues?.no_photos, color: 'red' },
+    { id: 'no_rating', label: '⭐ Без рейтинга', count: stats?.issues?.no_rating, color: 'red' },
+    { id: 'no_reviews', label: '💬 Без отзывов', count: stats?.issues?.no_reviews, color: 'orange' },
+    { id: 'no_phone', label: '📞 Без телефона', count: stats?.issues?.no_phone, color: 'yellow' },
+    { id: 'low_rating', label: '👎 Низкий рейтинг', count: stats?.issues?.low_rating, color: 'orange' },
+    { id: 'low_quality', label: '⚠️ Низкое качество', count: null, color: 'red' },
+    { id: 'archived', label: '📦 Архив', count: stats?.archived, color: 'gray' },
+  ];
+
+  const getIssueLabel = (issue: string) => {
+    const labels: Record<string, string> = {
+      no_photos: '📷',
+      no_reviews: '💬',
+      no_rating: '⭐',
+      no_phone: '📞',
+      no_hours: '🕐',
+      low_rating: '👎'
+    };
+    return labels[issue] || issue;
+  };
+
+  return (
+    <div className="mt-6 pt-6 border-t border-white/10">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-white/60">📊 Качество данных</h3>
+        <button
+          onClick={() => setShowModal(true)}
+          className="text-xs text-cyan-400 hover:text-cyan-300"
+        >
+          Подробнее →
+        </button>
+      </div>
+
+      {loading && !stats ? (
+        <div className="text-white/40 text-sm">Загрузка...</div>
+      ) : stats && (
+        <>
+          {/* Статистика */}
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <div className="bg-green-500/10 rounded-lg p-2 text-center">
+              <div className="text-lg font-bold text-green-400">
+                {stats.total - (stats.issues?.no_photos || 0) - (stats.issues?.no_rating || 0)}
+              </div>
+              <div className="text-xs text-white/40">Качественных</div>
+            </div>
+            <div className="bg-red-500/10 rounded-lg p-2 text-center">
+              <div className="text-lg font-bold text-red-400">
+                {stats.issues?.critical || 0}
+              </div>
+              <div className="text-xs text-white/40">Критичных</div>
+            </div>
+          </div>
+
+          {/* Быстрые проблемы */}
+          <div className="space-y-1 mb-3">
+            {stats.issues?.no_photos > 0 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/60">📷 Без фото</span>
+                <span className="text-red-400">{stats.issues.no_photos}</span>
+              </div>
+            )}
+            {stats.issues?.no_rating > 0 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/60">⭐ Без рейтинга</span>
+                <span className="text-red-400">{stats.issues.no_rating}</span>
+              </div>
+            )}
+            {stats.issues?.no_reviews > 0 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/60">💬 Без отзывов</span>
+                <span className="text-orange-400">{stats.issues.no_reviews}</span>
+              </div>
+            )}
+            {stats.archived > 0 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-white/60">📦 В архиве</span>
+                <span className="text-white/40">{stats.archived}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Кнопки действий */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleArchive('critical')}
+              disabled={!stats.issues?.critical}
+              className="flex-1 py-2 bg-red-500/20 text-red-300 text-xs rounded-lg hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              📦 Архивировать критичные
+            </button>
+            {stats.archived > 0 && (
+              <button
+                onClick={handleRestore}
+                className="py-2 px-3 bg-green-500/20 text-green-300 text-xs rounded-lg hover:bg-green-500/30"
+              >
+                ↩️
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Модальное окно с полным списком */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1a1a2e] rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-white/10 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white">📊 Управление качеством данных</h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-white/60 hover:text-white text-xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Фильтры */}
+            <div className="p-4 border-b border-white/10">
+              <div className="flex flex-wrap gap-2">
+                {filters.map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => {
+                      setFilter(f.id);
+                      fetchQuality(f.id);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      filter === f.id
+                        ? 'bg-cyan-500 text-white'
+                        : 'bg-white/5 text-white/60 hover:bg-white/10'
+                    }`}
+                  >
+                    {f.label}
+                    {f.count !== null && f.count !== undefined && (
+                      <span className="ml-1 opacity-60">({f.count})</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Панель действий */}
+            {selectedIds.size > 0 && (
+              <div className="p-3 bg-cyan-500/10 border-b border-white/10 flex items-center justify-between">
+                <span className="text-sm text-cyan-300">
+                  Выбрано: {selectedIds.size}
+                </span>
+                <button
+                  onClick={() => handleArchive('selected')}
+                  className="px-4 py-1.5 bg-red-500/20 text-red-300 text-sm rounded-lg hover:bg-red-500/30"
+                >
+                  📦 Архивировать выбранные
+                </button>
+              </div>
+            )}
+
+            {/* Список */}
+            <div className="flex-1 overflow-auto p-4">
+              {loading ? (
+                <div className="text-center text-white/40 py-8">Загрузка...</div>
+              ) : restaurants.length === 0 ? (
+                <div className="text-center text-white/40 py-8">Нет записей</div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    <button
+                      onClick={selectAll}
+                      className="text-xs text-cyan-400 hover:text-cyan-300"
+                    >
+                      {selectedIds.size === restaurants.length ? 'Снять все' : 'Выбрать все'}
+                    </button>
+                    <span className="text-xs text-white/40">
+                      ({restaurants.length} записей)
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {restaurants.map(r => (
+                      <div
+                        key={r.id}
+                        className={`p-3 rounded-lg border transition-colors cursor-pointer ${
+                          selectedIds.has(r.id)
+                            ? 'bg-cyan-500/10 border-cyan-500/30'
+                            : 'bg-white/5 border-white/10 hover:border-white/20'
+                        } ${r.isArchived ? 'opacity-50' : ''}`}
+                        onClick={() => toggleSelect(r.id)}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(r.id)}
+                            onChange={() => toggleSelect(r.id)}
+                            className="mt-1"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-white truncate">
+                                {r.name}
+                              </span>
+                              {r.isArchived && (
+                                <span className="text-xs bg-gray-500/20 text-gray-400 px-1.5 py-0.5 rounded">
+                                  архив
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-white/40 truncate">
+                              {r.address}
+                            </div>
+                            <div className="flex items-center gap-3 mt-1.5">
+                              {/* Качество */}
+                              <div className={`text-xs font-medium ${
+                                r.qualityScore >= 70 ? 'text-green-400' :
+                                r.qualityScore >= 40 ? 'text-yellow-400' : 'text-red-400'
+                              }`}>
+                                {r.qualityScore}%
+                              </div>
+                              {/* Проблемы */}
+                              <div className="flex gap-1">
+                                {r.issues.map((issue: string) => (
+                                  <span
+                                    key={issue}
+                                    className="text-sm opacity-60"
+                                    title={issue}
+                                  >
+                                    {getIssueLabel(issue)}
+                                  </span>
+                                ))}
+                              </div>
+                              {/* Данные */}
+                              <div className="flex items-center gap-2 text-xs text-white/40 ml-auto">
+                                {r.rating && (
+                                  <span>⭐ {r.rating.toFixed(1)}</span>
+                                )}
+                                {r.ratingCount > 0 && (
+                                  <span>💬 {r.ratingCount}</span>
+                                )}
+                                {(r.images as string[])?.length > 0 && (
+                                  <span>📷 {(r.images as string[]).length}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Футер */}
+            <div className="p-4 border-t border-white/10 flex justify-between">
+              <button
+                onClick={() => fetchQuality()}
+                className="px-4 py-2 bg-white/5 text-white/60 rounded-lg hover:bg-white/10"
+              >
+                🔄 Обновить
+              </button>
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20"
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Секция обогащения данных
 function EnrichSection() {
   const [stats, setStats] = useState<EnrichStats | null>(null);
@@ -2479,6 +2844,9 @@ export default function AdminPage() {
 
               {/* Chains Section */}
               <ChainsSection />
+
+              {/* Quality Section */}
+              <QualitySection />
 
               {/* Enrich Data Section */}
               <EnrichSection />
