@@ -78,7 +78,8 @@ export default function RestaurantPage() {
       const res = await fetch(`/api/restaurants/${slug}`);
       if (res.ok) {
         const data = await res.json();
-        setRestaurant(data);
+        // API возвращает { restaurant: ... }
+        setRestaurant(data.restaurant || data);
       }
     } catch (error) {
       console.error('Error fetching restaurant:', error);
