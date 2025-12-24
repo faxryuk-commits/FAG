@@ -97,28 +97,80 @@ export async function startRestaurantSync(options: SyncOptions) {
 function getActorInput(source: SyncSource, searchQuery: string, location: string, maxResults: number) {
   switch (source) {
     case 'google':
+      // compass/crawler-google-places - полная конфигурация
       return {
         searchStringsArray: [`${searchQuery} ${location}`],
         maxCrawledPlacesPerSearch: maxResults,
         language: 'ru',
-        deeperCityScrape: false,
+        
+        // Расширенные данные
+        scrapeDirectories: false,
+        scrapeReviewerName: true,
+        scrapeReviewerId: false,
+        scrapeReviewerUrl: false,
+        scrapeReviewId: false,
+        scrapeReviewUrl: false,
+        scrapeResponseFromOwnerText: false,
+        
+        // Включаем все нужные данные
+        maxImages: 5,                    // Количество фото
+        maxReviews: 10,                  // Количество отзывов
+        reviewsSort: 'newest',           // Сортировка отзывов
+        reviewsTranslation: 'originalAndTranslated',
+        
+        // Дополнительные поля
+        additionalInfo: true,            // Время работы и доп. инфо
+        includeWebResults: false,
+        
+        // Производительность
+        maxConcurrency: 10,
+        maxPageRetries: 3,
+        
+        // Не пропускать закрытые места
         skipClosedPlaces: false,
       };
     
     case 'yandex':
+      // johnvc/Scrape-Yandex
       return {
+        search: `${searchQuery} ${location}`,
         searchQuery: `${searchQuery} ${location}`,
+        query: `${searchQuery} ${location}`,
         maxItems: maxResults,
+        limit: maxResults,
+        maxResults: maxResults,
         language: 'ru',
         region: location,
+        city: location,
+        
+        // Расширенные данные
+        includePhotos: true,
+        includeReviews: true,
+        includeHours: true,
+        maxPhotos: 5,
+        maxReviews: 10,
       };
     
     case '2gis':
+      // m_mamaev/2gis-places-scraper
       return {
         query: searchQuery,
+        searchQuery: searchQuery,
+        q: searchQuery,
         city: location,
+        cityName: location,
         maxItems: maxResults,
+        limit: maxResults,
+        maxResults: maxResults,
         language: 'ru',
+        
+        // Расширенные данные
+        includePhotos: true,
+        includeReviews: true,
+        includeContacts: true,
+        includeSchedule: true,
+        maxPhotos: 5,
+        maxReviews: 10,
       };
     
     default:
@@ -203,48 +255,93 @@ function normalizeData(source: SyncSource, data: any) {
       const name = data.title || data.name || 'Без названия';
       const sourceId = data.placeId || data.cid || String(Date.now());
       
+      // Извлекаем фото
+      let images: string[] = [];
+      if (data.imageUrls && Array.isArray(data.imageUrls)) {
+        images = data.imageUrls;
+      } else if (data.images && Array.isArray(data.images)) {
+        images = data.images.map((img: any) => typeof img === 'string' ? img : img.url || img.imageUrl);
+      } else if (data.imageUrl) {
+        images = [data.imageUrl];
+      }
+      
+      // Извлекаем категории
+      let cuisine: string[] = [];
+      if (data.categories && Array.isArray(data.categories)) {
+        cuisine = data.categories;
+      } else if (data.categoryName) {
+        cuisine = [data.categoryName];
+      } else if (data.category) {
+        cuisine = [data.category];
+      }
+      
       return {
         ...base,
         name,
         slug: generateSlug(name, sourceId),
-        address: data.address || data.street || '',
-        city: data.city || extractCity(data.address || ''),
-        latitude: data.location?.lat || data.latitude || 0,
-        longitude: data.location?.lng || data.longitude || 0,
-        phone: data.phone || data.phoneUnformatted || null,
-        website: data.website || null,
-        rating: data.totalScore || data.rating || null,
-        ratingCount: data.reviewsCount || 0,
-        priceRange: data.price || null,
+        address: data.address || data.street || data.vicinity || '',
+        city: data.city || data.neighborhood || extractCity(data.address || ''),
+        latitude: data.location?.lat || data.latitude || data.lat || 0,
+        longitude: data.location?.lng || data.longitude || data.lng || 0,
+        phone: data.phone || data.phoneUnformatted || data.internationalPhoneNumber || null,
+        website: data.website || data.url || null,
+        rating: data.totalScore || data.rating || data.stars || null,
+        ratingCount: data.reviewsCount || data.userRatingsTotal || data.reviews?.length || 0,
+        priceRange: data.price || data.priceLevel ? '$'.repeat(data.priceLevel) : null,
         sourceId,
-        sourceUrl: data.url || null,
-        images: data.imageUrls || data.images || [],
-        cuisine: data.categories || data.categoryName ? [data.categoryName] : [],
+        sourceUrl: data.url || data.googleMapsUrl || `https://www.google.com/maps/place/?q=place_id:${sourceId}`,
+        images: images.filter(Boolean).slice(0, 10),
+        cuisine: cuisine.filter(Boolean),
+        // Время работы будет обрабатываться отдельно
+        _openingHours: data.openingHours || data.workingHours || data.hours || null,
+        _reviews: data.reviews || [],
       };
     }
 
     case 'yandex': {
       // Формат от johnvc/Scrape-Yandex
       const name = data.title || data.name || data.orgName || 'Без названия';
-      const sourceId = data.id || data.oid || data.url || String(Date.now());
+      const sourceId = data.id || data.oid || String(Date.now());
+      
+      // Извлекаем фото
+      let images: string[] = [];
+      if (data.photos && Array.isArray(data.photos)) {
+        images = data.photos.map((p: any) => typeof p === 'string' ? p : p.url || p.urlTemplate);
+      } else if (data.images && Array.isArray(data.images)) {
+        images = data.images;
+      } else if (data.gallery && Array.isArray(data.gallery)) {
+        images = data.gallery;
+      }
+      
+      // Извлекаем категории
+      let cuisine: string[] = [];
+      if (data.categories && Array.isArray(data.categories)) {
+        cuisine = data.categories.map((c: any) => typeof c === 'string' ? c : c.name);
+      } else if (data.rubrics && Array.isArray(data.rubrics)) {
+        cuisine = data.rubrics;
+      } else if (data.type) {
+        cuisine = [data.type];
+      }
       
       return {
         ...base,
         name,
         slug: generateSlug(name, sourceId),
         address: data.address || data.formattedAddress || data.fullAddress || '',
-        city: data.city || data.locality || extractCity(data.address || ''),
-        latitude: data.coordinates?.lat || data.lat || data.geo?.lat || 0,
-        longitude: data.coordinates?.lon || data.lng || data.lon || data.geo?.lon || 0,
+        city: data.city || data.locality || data.cityName || extractCity(data.address || ''),
+        latitude: data.coordinates?.lat || data.lat || data.geo?.lat || data.point?.lat || 0,
+        longitude: data.coordinates?.lon || data.lng || data.lon || data.geo?.lon || data.point?.lon || 0,
         phone: data.phone || data.phones?.[0] || data.contactInfo?.phone || null,
-        website: data.website || data.site || data.url || null,
+        website: data.website || data.site || null,
         rating: data.rating || data.stars || data.score || null,
-        ratingCount: data.reviewsCount || data.reviewCount || data.reviews || 0,
+        ratingCount: data.reviewsCount || data.reviewCount || (Array.isArray(data.reviews) ? data.reviews.length : 0),
         sourceId,
         sourceUrl: data.url || data.link || `https://yandex.ru/maps/org/${sourceId}`,
-        images: data.photos || data.images || data.gallery || [],
-        cuisine: data.categories || data.rubrics || data.type ? [data.type] : [],
+        images: images.filter(Boolean).slice(0, 10),
+        cuisine: cuisine.filter(Boolean),
         priceRange: data.priceCategory || data.price || null,
+        _openingHours: data.workingHours || data.openingHours || data.schedule || null,
+        _reviews: data.reviews || [],
       };
     }
 
@@ -253,23 +350,45 @@ function normalizeData(source: SyncSource, data: any) {
       const name = data.name || data.title || 'Без названия';
       const sourceId = data.id || data.firmId || String(Date.now());
       
+      // Извлекаем фото
+      let images: string[] = [];
+      if (data.photos && Array.isArray(data.photos)) {
+        images = data.photos.map((p: any) => typeof p === 'string' ? p : p.url || p.preview_url);
+      } else if (data.images && Array.isArray(data.images)) {
+        images = data.images;
+      } else if (data.gallery && Array.isArray(data.gallery)) {
+        images = data.gallery;
+      }
+      
+      // Извлекаем категории
+      let cuisine: string[] = [];
+      if (data.rubrics && Array.isArray(data.rubrics)) {
+        cuisine = data.rubrics.map((r: any) => typeof r === 'string' ? r : r.name);
+      } else if (data.categories && Array.isArray(data.categories)) {
+        cuisine = data.categories;
+      } else if (data.type) {
+        cuisine = [data.type];
+      }
+      
       return {
         ...base,
         name,
         slug: generateSlug(name, sourceId),
         address: data.address || data.address_name || data.fullAddress || '',
         city: data.city || data.cityName || extractCity(data.address || ''),
-        latitude: data.lat || data.point?.lat || data.geo?.lat || 0,
-        longitude: data.lon || data.lng || data.point?.lon || data.geo?.lon || 0,
+        latitude: data.lat || data.point?.lat || data.geo?.lat || data.coordinates?.lat || 0,
+        longitude: data.lon || data.lng || data.point?.lon || data.geo?.lon || data.coordinates?.lon || 0,
         phone: data.phone || data.phones?.[0] || data.contacts?.phone || null,
         website: data.website || data.site || null,
         rating: data.rating || data.stars || data.reviewRating || null,
-        ratingCount: data.reviewCount || data.reviews_count || data.reviewsCount || 0,
+        ratingCount: data.reviewCount || data.reviews_count || data.reviewsCount || (Array.isArray(data.reviews) ? data.reviews.length : 0),
         sourceId,
         sourceUrl: data.link || data.url || `https://2gis.ru/firm/${sourceId}`,
-        images: data.photos || data.images || data.gallery || [],
-        cuisine: data.rubrics || data.categories || data.type ? [data.type] : [],
-        priceRange: data.priceCategory || null,
+        images: images.filter(Boolean).slice(0, 10),
+        cuisine: cuisine.filter(Boolean),
+        priceRange: data.priceCategory || data.average_bill || null,
+        _openingHours: data.schedule || data.workingHours || data.working_hours || null,
+        _reviews: data.reviews || [],
       };
     }
 

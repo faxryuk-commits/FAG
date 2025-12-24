@@ -156,21 +156,94 @@ export function mergeRestaurantData(existing: any, newData: any, newSource: stri
 }
 
 /**
+ * Парсит время работы в формат для БД
+ */
+function parseWorkingHours(hours: any): Array<{ dayOfWeek: number; openTime: string; closeTime: string }> {
+  if (!hours) return [];
+  
+  const result: Array<{ dayOfWeek: number; openTime: string; closeTime: string }> = [];
+  const dayNames: Record<string, number> = {
+    'monday': 1, 'mon': 1, 'пн': 1, 'понедельник': 1,
+    'tuesday': 2, 'tue': 2, 'вт': 2, 'вторник': 2,
+    'wednesday': 3, 'wed': 3, 'ср': 3, 'среда': 3,
+    'thursday': 4, 'thu': 4, 'чт': 4, 'четверг': 4,
+    'friday': 5, 'fri': 5, 'пт': 5, 'пятница': 5,
+    'saturday': 6, 'sat': 6, 'сб': 6, 'суббота': 6,
+    'sunday': 0, 'sun': 0, 'вс': 0, 'воскресенье': 0,
+  };
+
+  // Если массив строк вида "Monday: 9:00 - 22:00"
+  if (Array.isArray(hours)) {
+    for (const h of hours) {
+      if (typeof h === 'string') {
+        const match = h.match(/(\w+):?\s*(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/i);
+        if (match) {
+          const day = dayNames[match[1].toLowerCase()];
+          if (day !== undefined) {
+            result.push({ dayOfWeek: day, openTime: match[2], closeTime: match[3] });
+          }
+        }
+      } else if (typeof h === 'object' && h.day !== undefined) {
+        // Формат { day: 1, open: "09:00", close: "22:00" }
+        result.push({
+          dayOfWeek: h.day,
+          openTime: h.open || h.from || '00:00',
+          closeTime: h.close || h.to || '23:59',
+        });
+      }
+    }
+  }
+  // Если объект с днями { monday: "9:00-22:00", ... }
+  else if (typeof hours === 'object') {
+    for (const [day, time] of Object.entries(hours)) {
+      const dayNum = dayNames[day.toLowerCase()];
+      if (dayNum !== undefined && typeof time === 'string') {
+        const match = time.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
+        if (match) {
+          result.push({ dayOfWeek: dayNum, openTime: match[1], closeTime: match[2] });
+        }
+      }
+    }
+  }
+  
+  return result;
+}
+
+/**
+ * Парсит отзывы в формат для БД
+ */
+function parseReviews(reviews: any[]): Array<{ author: string; text: string; rating: number; date: Date }> {
+  if (!Array.isArray(reviews)) return [];
+  
+  return reviews.slice(0, 10).map(r => ({
+    author: r.author || r.authorName || r.name || r.user || 'Аноним',
+    text: r.text || r.comment || r.review || r.content || '',
+    rating: r.rating || r.stars || r.score || 5,
+    date: r.date ? new Date(r.date) : new Date(),
+  })).filter(r => r.text); // Только с текстом
+}
+
+/**
  * Сохраняет ресторан с консолидацией
  */
 export async function saveWithConsolidation(source: string, data: any) {
-  const { name, latitude, longitude, sourceId, ...rest } = data;
+  // Извлекаем временные поля
+  const { name, latitude, longitude, sourceId, _openingHours, _reviews, ...rest } = data;
   
   if (!name || !latitude || !longitude) {
     throw new Error('Missing required fields for consolidation');
   }
+
+  // Парсим время работы и отзывы
+  const workingHours = parseWorkingHours(_openingHours);
+  const reviews = parseReviews(_reviews);
 
   // Ищем существующий дубликат
   const duplicate = await findDuplicate(name, latitude, longitude, source, sourceId);
   
   if (duplicate) {
     // Объединяем данные
-    const mergedData = mergeRestaurantData(duplicate, data, source);
+    const mergedData = mergeRestaurantData(duplicate, { ...rest, name, latitude, longitude, sourceId }, source);
     
     // Обновляем существующую запись
     await prisma.restaurant.update({
@@ -178,9 +251,33 @@ export async function saveWithConsolidation(source: string, data: any) {
       data: {
         ...mergedData,
         lastSynced: new Date(),
-        // Не меняем source и sourceId основной записи
       },
     });
+    
+    // Добавляем время работы если есть и нет существующих
+    if (workingHours.length > 0) {
+      const existingHours = await prisma.workingHours.count({ where: { restaurantId: duplicate.id } });
+      if (existingHours === 0) {
+        await prisma.workingHours.createMany({
+          data: workingHours.map(h => ({ ...h, restaurantId: duplicate.id })),
+        });
+      }
+    }
+    
+    // Добавляем отзывы
+    if (reviews.length > 0) {
+      for (const review of reviews) {
+        // Проверяем дубликат отзыва по автору и тексту
+        const exists = await prisma.review.findFirst({
+          where: { restaurantId: duplicate.id, author: review.author, text: review.text },
+        });
+        if (!exists) {
+          await prisma.review.create({
+            data: { ...review, restaurantId: duplicate.id },
+          });
+        }
+      }
+    }
     
     return { action: 'merged', id: duplicate.id, mergedWith: duplicate.name };
   }
@@ -194,14 +291,38 @@ export async function saveWithConsolidation(source: string, data: any) {
     // Обновляем свою же запись
     await prisma.restaurant.update({
       where: { id: existing.id },
-      data: { ...data, lastSynced: new Date() },
+      data: { ...rest, name, latitude, longitude, lastSynced: new Date() },
     });
+    
+    // Обновляем время работы
+    if (workingHours.length > 0) {
+      await prisma.workingHours.deleteMany({ where: { restaurantId: existing.id } });
+      await prisma.workingHours.createMany({
+        data: workingHours.map(h => ({ ...h, restaurantId: existing.id })),
+      });
+    }
+    
     return { action: 'updated', id: existing.id };
   }
   
   // Создаем новую запись
   const created = await prisma.restaurant.create({
-    data: { ...data, source, sourceId },
+    data: { 
+      ...rest, 
+      name,
+      latitude,
+      longitude,
+      source, 
+      sourceId,
+      // Время работы
+      workingHours: workingHours.length > 0 ? {
+        create: workingHours,
+      } : undefined,
+      // Отзывы
+      reviews: reviews.length > 0 ? {
+        create: reviews,
+      } : undefined,
+    },
   });
   
   return { action: 'created', id: created.id };
