@@ -263,7 +263,7 @@ export async function abortSync(runId: string) {
 }
 
 /**
- * Получает результаты и сохраняет в БД
+ * Получает результаты и сохраняет в БД с реалтайм обновлением прогресса
  */
 export async function fetchAndSaveResults(runId: string, jobId: string, source: SyncSource) {
   const run = await apifyClient.run(runId).get();
@@ -277,14 +277,36 @@ export async function fetchAndSaveResults(runId: string, jobId: string, source: 
 
   let processed = 0;
   let errors = 0;
+  const processedItems: Array<{ name: string; status: 'success' | 'error'; error?: string }> = [];
 
   for (const item of results) {
+    const itemName = item.title || item.name || 'Без названия';
     try {
       await saveRestaurant(source, item);
       processed++;
+      processedItems.push({ name: itemName, status: 'success' });
+      
+      // Обновляем прогресс каждые 5 записей для реалтайм мониторинга
+      if (processed % 5 === 0 || processed === results.length) {
+        await prisma.syncJob.update({
+          where: { id: jobId },
+          data: {
+            stats: { 
+              runId, 
+              processed, 
+              errors, 
+              total: results.length,
+              lastProcessed: itemName,
+              processedItems: processedItems.slice(-10), // Последние 10 записей
+            },
+          },
+        });
+      }
     } catch (error) {
-      console.error('Error saving restaurant:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Error saving restaurant "${itemName}":`, errorMessage);
       errors++;
+      processedItems.push({ name: itemName, status: 'error', error: errorMessage });
     }
   }
 
@@ -293,11 +315,17 @@ export async function fetchAndSaveResults(runId: string, jobId: string, source: 
     data: {
       status: 'completed',
       completedAt: new Date(),
-      stats: { processed, errors, total: results.length },
+      stats: { 
+        runId,
+        processed, 
+        errors, 
+        total: results.length,
+        processedItems: processedItems.slice(-20), // Последние 20 записей
+      },
     },
   });
 
-  return { processed, errors, total: results.length };
+  return { processed, errors, total: results.length, items: processedItems };
 }
 
 /**

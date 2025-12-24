@@ -49,8 +49,28 @@ interface DbStats {
   potentialDuplicates: number;
 }
 
-// Компонент таймера
-function JobTimer({ startedAt, estimatedSeconds }: { startedAt: string; estimatedSeconds: number }) {
+// Интерфейс для статистики задачи
+interface JobStats {
+  runId?: string;
+  processed?: number;
+  errors?: number;
+  total?: number;
+  lastProcessed?: string;
+  processedItems?: Array<{ name: string; status: 'success' | 'error'; error?: string }>;
+}
+
+// Компонент таймера с реалтайм прогрессом
+function JobTimer({ 
+  startedAt, 
+  estimatedSeconds, 
+  stats,
+  onRefresh 
+}: { 
+  startedAt: string; 
+  estimatedSeconds: number;
+  stats?: JobStats;
+  onRefresh?: () => void;
+}) {
   const [elapsed, setElapsed] = useState(0);
   
   useEffect(() => {
@@ -62,8 +82,17 @@ function JobTimer({ startedAt, estimatedSeconds }: { startedAt: string; estimate
     return () => clearInterval(interval);
   }, [startedAt]);
 
+  // Авто-обновление каждые 5 секунд
+  useEffect(() => {
+    if (onRefresh) {
+      const refreshInterval = setInterval(onRefresh, 5000);
+      return () => clearInterval(refreshInterval);
+    }
+  }, [onRefresh]);
+
   const remaining = Math.max(0, estimatedSeconds - elapsed);
-  const progress = Math.min(100, (elapsed / estimatedSeconds) * 100);
+  const realProgress = stats?.total ? ((stats.processed || 0) / stats.total) * 100 : 0;
+  const progress = realProgress > 0 ? realProgress : Math.min(100, (elapsed / estimatedSeconds) * 100);
   
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -73,6 +102,39 @@ function JobTimer({ startedAt, estimatedSeconds }: { startedAt: string; estimate
 
   return (
     <div className="mt-3">
+      {/* Реалтайм статистика */}
+      {stats?.total && (
+        <div className="mb-3 p-2 rounded-lg bg-white/5">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-white/70">Обработано:</span>
+            <span className="text-white font-medium">
+              {stats.processed || 0} / {stats.total}
+              {stats.errors ? <span className="text-red-400 ml-2">({stats.errors} ошибок)</span> : ''}
+            </span>
+          </div>
+          {stats.lastProcessed && (
+            <div className="text-xs text-white/50 truncate">
+              Последний: {stats.lastProcessed}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Список последних обработанных */}
+      {stats?.processedItems && stats.processedItems.length > 0 && (
+        <div className="mb-3 max-h-32 overflow-y-auto rounded-lg bg-black/20 p-2">
+          <div className="text-xs text-white/50 mb-1">Последние записи:</div>
+          {stats.processedItems.slice(-5).reverse().map((item, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs py-0.5">
+              <span className={item.status === 'success' ? 'text-green-400' : 'text-red-400'}>
+                {item.status === 'success' ? '✓' : '✗'}
+              </span>
+              <span className="text-white/70 truncate flex-1">{item.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Progress bar */}
       <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-2">
         <div 
@@ -623,7 +685,9 @@ export default function AdminPage() {
                         <>
                           <JobTimer 
                             startedAt={job.startedAt} 
-                            estimatedSeconds={100} // ~100 секунд для 50 записей
+                            estimatedSeconds={100}
+                            stats={job.stats as JobStats}
+                            onRefresh={fetchJobs}
                           />
                           <div className="flex gap-2 mt-3">
                             <button

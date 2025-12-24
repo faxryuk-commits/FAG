@@ -230,37 +230,47 @@ function parseWorkingHours(hours: any): Array<{ dayOfWeek: number; openTime: str
     'saturday': 6, 'sat': 6, 'сб': 6, 'суббота': 6,
   };
 
+  // Вспомогательная функция для конвертации дня в число
+  const getDayNumber = (day: any): number | undefined => {
+    if (typeof day === 'number' && day >= 0 && day <= 6) {
+      return day;
+    }
+    if (typeof day === 'string') {
+      const normalized = day.toLowerCase().trim();
+      if (dayNames[normalized] !== undefined) {
+        return dayNames[normalized];
+      }
+      // Попробуем найти частичное совпадение
+      for (const [name, num] of Object.entries(dayNames)) {
+        if (normalized.includes(name) || name.includes(normalized)) {
+          return num;
+        }
+      }
+    }
+    return undefined;
+  };
+
   // Если массив строк вида "Monday: 9:00 - 22:00"
   if (Array.isArray(hours)) {
     for (const h of hours) {
       if (typeof h === 'string') {
-        const match = h.match(/(\w+):?\s*(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/i);
+        // Формат "Monday: 9:00 - 22:00" или "понедельник: 09:00-22:00"
+        const match = h.match(/([а-яёa-z]+):?\s*(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/i);
         if (match) {
-          const day = dayNames[match[1].toLowerCase()];
-          if (day !== undefined) {
-            result.push({ dayOfWeek: day, openTime: match[2], closeTime: match[3] });
+          const dayNum = getDayNumber(match[1]);
+          if (dayNum !== undefined) {
+            result.push({ dayOfWeek: dayNum, openTime: match[2], closeTime: match[3] });
           }
         }
       } else if (typeof h === 'object' && h !== null) {
-        // Формат { day: 1, open: "09:00", close: "22:00" }
-        // или { dayOfWeek: "среда", openTime: "00:00", closeTime: "23:59" }
-        let dayNum: number | undefined;
-        
-        if (typeof h.day === 'number') {
-          dayNum = h.day;
-        } else if (typeof h.dayOfWeek === 'number') {
-          dayNum = h.dayOfWeek;
-        } else if (typeof h.dayOfWeek === 'string') {
-          dayNum = dayNames[h.dayOfWeek.toLowerCase()];
-        } else if (typeof h.day === 'string') {
-          dayNum = dayNames[h.day.toLowerCase()];
-        }
+        // Формат объекта { day/dayOfWeek: ..., open/openTime: ..., close/closeTime: ... }
+        const dayNum = getDayNumber(h.day) ?? getDayNumber(h.dayOfWeek);
         
         if (dayNum !== undefined) {
           result.push({
             dayOfWeek: dayNum,
-            openTime: h.openTime || h.open || h.from || '00:00',
-            closeTime: h.closeTime || h.close || h.to || '23:59',
+            openTime: h.openTime || h.open || h.from || h.start || '00:00',
+            closeTime: h.closeTime || h.close || h.to || h.end || '23:59',
           });
         }
       }
@@ -269,17 +279,26 @@ function parseWorkingHours(hours: any): Array<{ dayOfWeek: number; openTime: str
   // Если объект с днями { monday: "9:00-22:00", ... }
   else if (typeof hours === 'object') {
     for (const [day, time] of Object.entries(hours)) {
-      const dayNum = dayNames[day.toLowerCase()];
-      if (dayNum !== undefined && typeof time === 'string') {
-        const match = time.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
-        if (match) {
-          result.push({ dayOfWeek: dayNum, openTime: match[1], closeTime: match[2] });
+      const dayNum = getDayNumber(day);
+      if (dayNum !== undefined) {
+        if (typeof time === 'string') {
+          const match = time.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
+          if (match) {
+            result.push({ dayOfWeek: dayNum, openTime: match[1], closeTime: match[2] });
+          }
+        } else if (typeof time === 'object' && time !== null) {
+          result.push({
+            dayOfWeek: dayNum,
+            openTime: (time as any).open || (time as any).from || (time as any).start || '00:00',
+            closeTime: (time as any).close || (time as any).to || (time as any).end || '23:59',
+          });
         }
       }
     }
   }
   
-  return result;
+  // Финальная проверка - убедиться что все dayOfWeek числа
+  return result.filter(h => typeof h.dayOfWeek === 'number' && !isNaN(h.dayOfWeek));
 }
 
 /**
