@@ -6,9 +6,9 @@ export type SyncSource = 'yandex' | 'google' | '2gis';
 // ID актеров в Apify
 // Можно использовать полное имя (username/actor-name) или ID
 const ACTOR_IDS = {
-  google: 'compass/crawler-google-places', // Google Maps - работает отлично
-  yandex: 'apify/web-scraper',             // Яндекс.Карты через Web Scraper
-  '2gis': 'apify/web-scraper',             // 2ГИС через Web Scraper
+  google: 'compass/crawler-google-places',   // Google Maps - работает отлично
+  yandex: 'johnvc/Scrape-Yandex',            // Яндекс.Карты - специализированный скрейпер
+  '2gis': 'm_mamaev/2gis-places-scraper',    // 2ГИС - специализированный скрейпер
 } as const;
 
 // Можно переопределить через env переменные
@@ -106,16 +106,18 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
     
     case 'yandex':
       return {
-        text: `${searchQuery} ${location}`,
-        yandex_domain: 'yandex.ru',
-        lang: 'ru',
-        max_pages: Math.ceil(maxResults / 10),
+        searchQuery: `${searchQuery} ${location}`,
+        maxItems: maxResults,
+        language: 'ru',
+        region: location,
       };
     
     case '2gis':
       return {
-        startUrls: [`https://2gis.ru/${location}/search/${encodeURIComponent(searchQuery)}`],
-        maxRequestsPerCrawl: maxResults,
+        query: searchQuery,
+        city: location,
+        maxItems: maxResults,
+        language: 'ru',
       };
     
     default:
@@ -231,48 +233,52 @@ function normalizeData(source: SyncSource, data: any) {
     }
 
     case 'yandex': {
-      const name = data.title || data.name || 'Без названия';
-      const sourceId = data.id || data.url || String(Date.now());
+      // Формат от johnvc/Scrape-Yandex
+      const name = data.title || data.name || data.orgName || 'Без названия';
+      const sourceId = data.id || data.oid || data.url || String(Date.now());
       
       return {
         ...base,
         name,
         slug: generateSlug(name, sourceId),
-        address: data.address || '',
-        city: extractCity(data.address || ''),
-        latitude: data.coordinates?.lat || 0,
-        longitude: data.coordinates?.lon || 0,
-        phone: data.phone || null,
-        website: data.url || null,
-        rating: data.rating || null,
-        ratingCount: data.reviewsCount || 0,
+        address: data.address || data.formattedAddress || data.fullAddress || '',
+        city: data.city || data.locality || extractCity(data.address || ''),
+        latitude: data.coordinates?.lat || data.lat || data.geo?.lat || 0,
+        longitude: data.coordinates?.lon || data.lng || data.lon || data.geo?.lon || 0,
+        phone: data.phone || data.phones?.[0] || data.contactInfo?.phone || null,
+        website: data.website || data.site || data.url || null,
+        rating: data.rating || data.stars || data.score || null,
+        ratingCount: data.reviewsCount || data.reviewCount || data.reviews || 0,
         sourceId,
-        sourceUrl: data.url || null,
-        images: data.photos || [],
-        cuisine: data.categories || [],
+        sourceUrl: data.url || data.link || `https://yandex.ru/maps/org/${sourceId}`,
+        images: data.photos || data.images || data.gallery || [],
+        cuisine: data.categories || data.rubrics || data.type ? [data.type] : [],
+        priceRange: data.priceCategory || data.price || null,
       };
     }
 
     case '2gis': {
-      const name = data.name || 'Без названия';
-      const sourceId = data.id || String(Date.now());
+      // Формат от m_mamaev/2gis-places-scraper
+      const name = data.name || data.title || 'Без названия';
+      const sourceId = data.id || data.firmId || String(Date.now());
       
       return {
         ...base,
         name,
         slug: generateSlug(name, sourceId),
-        address: data.address_name || data.address || '',
-        city: data.city || extractCity(data.address_name || ''),
-        latitude: data.point?.lat || data.lat || 0,
-        longitude: data.point?.lon || data.lng || 0,
-        phone: data.contacts?.phones?.[0]?.formatted || data.phone || null,
-        website: data.website || null,
-        rating: data.rating || null,
-        ratingCount: data.reviews_count || 0,
+        address: data.address || data.address_name || data.fullAddress || '',
+        city: data.city || data.cityName || extractCity(data.address || ''),
+        latitude: data.lat || data.point?.lat || data.geo?.lat || 0,
+        longitude: data.lon || data.lng || data.point?.lon || data.geo?.lon || 0,
+        phone: data.phone || data.phones?.[0] || data.contacts?.phone || null,
+        website: data.website || data.site || null,
+        rating: data.rating || data.stars || data.reviewRating || null,
+        ratingCount: data.reviewCount || data.reviews_count || data.reviewsCount || 0,
         sourceId,
-        sourceUrl: data.url || null,
-        images: [],
-        cuisine: data.rubrics || [],
+        sourceUrl: data.link || data.url || `https://2gis.ru/firm/${sourceId}`,
+        images: data.photos || data.images || data.gallery || [],
+        cuisine: data.rubrics || data.categories || data.type ? [data.type] : [],
+        priceRange: data.priceCategory || null,
       };
     }
 
