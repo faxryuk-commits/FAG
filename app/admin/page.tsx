@@ -43,6 +43,45 @@ interface SyncJob {
   createdAt: string;
 }
 
+// Компонент таймера
+function JobTimer({ startedAt, estimatedSeconds }: { startedAt: string; estimatedSeconds: number }) {
+  const [elapsed, setElapsed] = useState(0);
+  
+  useEffect(() => {
+    const start = new Date(startedAt).getTime();
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setElapsed(Math.floor((now - start) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [startedAt]);
+
+  const remaining = Math.max(0, estimatedSeconds - elapsed);
+  const progress = Math.min(100, (elapsed / estimatedSeconds) * 100);
+  
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="mt-3">
+      {/* Progress bar */}
+      <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-2">
+        <div 
+          className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-1000"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <div className="flex justify-between text-xs text-white/50">
+        <span>⏱️ {formatTime(elapsed)} прошло</span>
+        <span>~{formatTime(remaining)} осталось</span>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [scrapers, setScrapers] = useState<Scraper[]>([]);
   const [selectedScraper, setSelectedScraper] = useState<Scraper | null>(null);
@@ -463,23 +502,29 @@ export default function AdminPage() {
                         </div>
                       )}
                       
-                      {/* Кнопка проверки статуса */}
-                      {job.status === 'running' && (
-                        <button
-                          onClick={async () => {
-                            const res = await fetch(`/api/sync?jobId=${job.id}`);
-                            const data = await res.json();
-                            if (data.results) {
-                              alert(`✅ Данные загружены!\n\nОбработано: ${data.results.processed}\nОшибок: ${data.results.errors}\nВсего: ${data.results.total}`);
-                            } else if (data.job?.status === 'running') {
-                              alert('⏳ Парсинг ещё выполняется...\n\nПроверьте Apify Console для деталей:\nconsole.apify.com');
-                            }
-                            fetchJobs();
-                          }}
-                          className="mt-2 w-full py-2 bg-blue-500/20 text-blue-300 text-xs rounded-lg hover:bg-blue-500/30 transition-colors"
-                        >
-                          🔍 Проверить и загрузить данные
-                        </button>
+                      {/* Таймер и кнопка проверки статуса */}
+                      {job.status === 'running' && job.startedAt && (
+                        <>
+                          <JobTimer 
+                            startedAt={job.startedAt} 
+                            estimatedSeconds={100} // ~100 секунд для 50 записей
+                          />
+                          <button
+                            onClick={async () => {
+                              const res = await fetch(`/api/sync?jobId=${job.id}`);
+                              const data = await res.json();
+                              if (data.results) {
+                                alert(`✅ Данные загружены!\n\nОбработано: ${data.results.processed}\nОшибок: ${data.results.errors}\nВсего: ${data.results.total}`);
+                              } else if (data.job?.status === 'running') {
+                                alert('⏳ Парсинг ещё выполняется...\n\nПроверьте Apify Console для деталей:\nconsole.apify.com');
+                              }
+                              fetchJobs();
+                            }}
+                            className="mt-3 w-full py-2 bg-blue-500/20 text-blue-300 text-xs rounded-lg hover:bg-blue-500/30 transition-colors"
+                          >
+                            🔍 Проверить и загрузить данные
+                          </button>
+                        </>
                       )}
                     </div>
                   ))}
