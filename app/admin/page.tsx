@@ -1608,8 +1608,8 @@ export default function AdminPage() {
       <header className="border-b border-white/10 bg-black/20 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/" className="w-10 h-10 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-red-500/20">
-              <span className="text-white font-black text-lg">D</span>
+            <Link href="/">
+              <img src="/delever-icon.svg" alt="Delever" className="w-10 h-10 rounded-xl" />
             </Link>
             <div>
               <h1 className="text-xl font-bold text-white">Центр управления</h1>

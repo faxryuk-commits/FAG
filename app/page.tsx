@@ -442,9 +442,11 @@ export default function Home() {
           <div className="flex items-center justify-between gap-4 mb-2">
             <Link href="/" className="flex items-center gap-2 shrink-0">
               {/* Delever Logo */}
-              <div className="w-8 h-8 bg-gradient-to-br from-red-500 to-orange-500 rounded-lg flex items-center justify-center shadow-lg shadow-red-500/20">
-                <span className="text-white font-black text-sm">D</span>
-              </div>
+              <img 
+                src="/delever-icon.svg" 
+                alt="Delever" 
+                className="w-8 h-8 rounded-lg"
+              />
               <div className="hidden sm:flex flex-col leading-none">
                 <span className="font-bold text-base text-white">
                   Delever
@@ -855,13 +857,15 @@ export default function Home() {
       <footer className="border-t border-white/5 py-8">
         <div className="max-w-6xl mx-auto px-4 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-red-500 to-orange-500 rounded-md flex items-center justify-center">
-              <span className="text-white font-black text-xs">D</span>
-            </div>
+            <img src="/delever-icon.svg" alt="Delever" className="w-6 h-6 rounded" />
             <span className="font-bold text-white/80">Delever Food Map</span>
           </div>
           <p className="text-white/30 text-sm">Карта ресторанов и доставка еды</p>
-          <p className="text-white/20 text-xs mt-2">© 2025 Delever. Все права защищены.</p>
+          <div className="flex items-center justify-center gap-4 mt-3 text-xs text-white/20">
+            <a href="https://delever.io" target="_blank" rel="noopener" className="hover:text-white/50 transition">delever.io</a>
+            <span>•</span>
+            <span>© 2025 Delever</span>
+          </div>
         </div>
       </footer>
     </div>
