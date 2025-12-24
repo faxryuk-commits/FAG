@@ -904,6 +904,157 @@ function DuplicatesModal({
   );
 }
 
+// Секция сетей и франшиз
+function ChainsSection() {
+  const [stats, setStats] = useState<{
+    totalChains: number;
+    totalBranches: number;
+    franchises: number;
+    localChains: number;
+  } | null>(null);
+  const [chains, setChains] = useState<Array<{
+    brand: string;
+    type: string;
+    count: number;
+    avgRating: number | null;
+    totalReviews: number;
+  }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+
+  useEffect(() => {
+    fetchChains();
+  }, []);
+
+  const fetchChains = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/chains');
+      const data = await res.json();
+      setStats(data.stats);
+      setChains(data.chains || []);
+    } catch (error) {
+      console.error('Error fetching chains:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const autoDetectBrands = async () => {
+    if (!confirm('Автоматически определить бренды для всех ресторанов?')) return;
+    
+    setDetecting(true);
+    try {
+      const res = await fetch('/api/chains', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'autoDetect' }),
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        alert(`✅ ${data.message}`);
+        fetchChains();
+      } else {
+        alert(`❌ Ошибка: ${data.error}`);
+      }
+    } catch (error) {
+      alert(`❌ Ошибка: ${error}`);
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'franchise': return '🌍';
+      case 'chain': return '🏪';
+      case 'group': return '🏢';
+      default: return '📍';
+    }
+  };
+
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'franchise': return 'Франшиза';
+      case 'chain': return 'Сеть';
+      case 'group': return 'Группа';
+      default: return type;
+    }
+  };
+
+  return (
+    <div className="mt-6 pt-6 border-t border-white/10">
+      <h3 className="text-sm font-medium text-white/60 mb-3">🏪 Сети и франшизы</h3>
+      <p className="text-xs text-white/40 mb-3">
+        Филиалы одной сети не считаются дубликатами
+      </p>
+      
+      {loading ? (
+        <div className="text-center py-4 text-white/40">Загрузка...</div>
+      ) : stats ? (
+        <div className="space-y-3">
+          {/* Статистика */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-white/5 rounded-lg p-2">
+              <div className="text-white/40">Всего сетей</div>
+              <div className="text-blue-400 font-bold text-lg">{stats.totalChains}</div>
+            </div>
+            <div className="bg-white/5 rounded-lg p-2">
+              <div className="text-white/40">Филиалов</div>
+              <div className="text-green-400 font-bold text-lg">{stats.totalBranches}</div>
+            </div>
+            <div className="bg-white/5 rounded-lg p-2">
+              <div className="text-white/40">🌍 Франшизы</div>
+              <div className="text-purple-400 font-bold text-lg">{stats.franchises}</div>
+            </div>
+            <div className="bg-white/5 rounded-lg p-2">
+              <div className="text-white/40">🏪 Локальные</div>
+              <div className="text-amber-400 font-bold text-lg">{stats.localChains}</div>
+            </div>
+          </div>
+
+          {/* Топ сетей */}
+          {chains.length > 0 && (
+            <div className="bg-white/5 rounded-lg p-3 max-h-40 overflow-y-auto">
+              <div className="text-xs text-white/40 mb-2">Топ сетей:</div>
+              <div className="space-y-1">
+                {chains.slice(0, 10).map((chain, idx) => (
+                  <div key={chain.brand} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-white/30">{idx + 1}.</span>
+                      <span>{getTypeIcon(chain.type)}</span>
+                      <span className="text-white">{chain.brand}</span>
+                      <span className="text-xs text-white/30">({getTypeLabel(chain.type)})</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-white/50">{chain.count} точек</span>
+                      {chain.avgRating && (
+                        <span className="text-amber-400">★ {chain.avgRating}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Кнопка автоопределения */}
+          <button
+            onClick={autoDetectBrands}
+            disabled={detecting}
+            className="w-full py-2.5 bg-blue-500/20 text-blue-300 text-sm rounded-lg hover:bg-blue-500/30 transition-colors font-medium disabled:opacity-50"
+          >
+            {detecting ? '⏳ Определяю...' : '🔍 Автоопределение брендов'}
+          </button>
+        </div>
+      ) : (
+        <div className="text-center py-4 text-red-400">Ошибка загрузки</div>
+      )}
+    </div>
+  );
+}
+
 // Секция обогащения данных
 function EnrichSection() {
   const [stats, setStats] = useState<EnrichStats | null>(null);
@@ -2201,6 +2352,9 @@ export default function AdminPage() {
                   </span>
                 </label>
               </div>
+
+              {/* Chains Section */}
+              <ChainsSection />
 
               {/* Enrich Data Section */}
               <EnrichSection />

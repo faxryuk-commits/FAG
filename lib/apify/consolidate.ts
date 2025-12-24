@@ -14,6 +14,72 @@ const SOURCE_PRIORITY: Record<string, number> = {
 };
 
 /**
+ * Справочник известных сетей и франшиз
+ * Ключ - нормализованное название бренда
+ * Значение - массив ключевых слов для распознавания
+ */
+export const KNOWN_CHAINS: Record<string, { keywords: string[]; type: 'franchise' | 'chain' | 'group' }> = {
+  // Международные франшизы
+  'McDonald\'s': { keywords: ['mcdonald', 'макдональдс', 'мак', 'mcdonalds'], type: 'franchise' },
+  'KFC': { keywords: ['kfc', 'kentucky', 'кфс', 'кентуки'], type: 'franchise' },
+  'Burger King': { keywords: ['burger king', 'бургер кинг'], type: 'franchise' },
+  'Subway': { keywords: ['subway', 'сабвей', 'сабвэй'], type: 'franchise' },
+  'Pizza Hut': { keywords: ['pizza hut', 'пицца хат'], type: 'franchise' },
+  'Domino\'s': { keywords: ['domino', 'домино'], type: 'franchise' },
+  'Starbucks': { keywords: ['starbucks', 'старбакс'], type: 'franchise' },
+  'Costa Coffee': { keywords: ['costa coffee', 'коста кофе'], type: 'franchise' },
+  
+  // Локальные сети Узбекистана
+  'Evos': { keywords: ['evos', 'эвос'], type: 'chain' },
+  'Dodo Pizza': { keywords: ['dodo', 'додо'], type: 'chain' },
+  'Bellissimo': { keywords: ['bellissimo', 'беллиссимо'], type: 'chain' },
+  'Les Ailes': { keywords: ['les ailes', 'лез эйлс', 'лэз эйлз'], type: 'chain' },
+  'Safia': { keywords: ['safia', 'сафия'], type: 'chain' },
+  'Baskin Robbins': { keywords: ['baskin', 'баскин', 'robbins', 'роббинс'], type: 'franchise' },
+  'Chopar Pizza': { keywords: ['chopar', 'чопар'], type: 'chain' },
+  'Max Way': { keywords: ['max way', 'макс вей', 'maxway'], type: 'chain' },
+  'Chicken House': { keywords: ['chicken house', 'чикен хаус'], type: 'chain' },
+  'Oqtepa Lavash': { keywords: ['oqtepa', 'оқтепа', 'октепа', 'лаваш'], type: 'chain' },
+  'Afandi': { keywords: ['afandi', 'афанди'], type: 'chain' },
+  'Sushi Master': { keywords: ['sushi master', 'суши мастер'], type: 'chain' },
+  'Tekit': { keywords: ['tekit', 'текит'], type: 'chain' },
+  'National': { keywords: ['national', 'националь'], type: 'chain' },
+  'Caravan': { keywords: ['caravan', 'караван', 'karavan'], type: 'chain' },
+  'Chaykhona': { keywords: ['choyxona', 'чайхона', 'чайхана', 'chaykhona'], type: 'chain' },
+  'Milliy Taomlar': { keywords: ['milliy', 'миллий', 'таомлар'], type: 'chain' },
+  
+  // Группы компаний
+  'Рони': { keywords: ['roni', 'рони'], type: 'group' },
+  'Fish & Bread': { keywords: ['fish and bread', 'fish & bread', 'фиш энд брэд'], type: 'chain' },
+};
+
+/**
+ * Определяет бренд/сеть по названию ресторана
+ */
+export function detectBrand(name: string): { brand: string; type: string } | null {
+  if (!name) return null;
+  
+  const normalized = name.toLowerCase().trim();
+  
+  for (const [brand, config] of Object.entries(KNOWN_CHAINS)) {
+    for (const keyword of config.keywords) {
+      if (normalized.includes(keyword.toLowerCase())) {
+        return { brand, type: config.type };
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Проверяет, является ли ресторан частью известной сети
+ */
+export function isChainRestaurant(name: string): boolean {
+  return detectBrand(name) !== null;
+}
+
+/**
  * Маппинг ключевых слов на стандартизированные категории кухни
  */
 const CUISINE_MAPPING: Record<string, string[]> = {

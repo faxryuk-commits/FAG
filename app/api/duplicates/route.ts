@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { detectBrand, isChainRestaurant } from '@/lib/apify/consolidate';
 
 /**
  * Вычисляет расстояние между двумя точками (Haversine formula)
@@ -114,11 +115,22 @@ export async function GET(request: Request) {
         reason: '',
       };
 
+      // Определяем бренд первого ресторана
+      const brand1 = detectBrand(r1.name);
+
       for (let j = i + 1; j < restaurants.length; j++) {
         const r2 = restaurants[j];
         
         if (processed.has(r2.id)) continue;
-        // Убрали ограничение: теперь находим дубликаты и из одного источника тоже
+
+        // Проверяем, являются ли оба ресторана филиалами одной сети
+        const brand2 = detectBrand(r2.name);
+        
+        // Если оба принадлежат к известным сетям - это НЕ дубликаты, а филиалы
+        if (brand1 && brand2 && brand1.brand === brand2.brand) {
+          // Это филиалы одной сети - пропускаем
+          continue;
+        }
 
         const distance = calculateDistance(r1.latitude, r1.longitude, r2.latitude, r2.longitude);
         const nameSimilarity = stringSimilarity(r1.name, r2.name);
@@ -126,25 +138,31 @@ export async function GET(request: Request) {
         // Критерии дубликата:
         // 1. Расстояние < 50м И схожесть названия > 0.5
         // 2. ИЛИ расстояние < 20м (один и тот же адрес)
-        // 3. ИЛИ одинаковый телефон
+        // 3. ИЛИ одинаковый телефон (кроме сетей, у них часто единый колл-центр)
         const samePhone = r1.phone && r2.phone && 
           r1.phone.replace(/\D/g, '') === r2.phone.replace(/\D/g, '');
 
         let isDuplicate = false;
         let reason = '';
 
-        if (samePhone) {
+        // Если один из ресторанов - сеть, требуем более строгие критерии
+        const isAnyChain = brand1 || brand2;
+
+        if (samePhone && !isAnyChain) {
+          // Одинаковый телефон (игнорируем для сетей - у них единый колл-центр)
           isDuplicate = true;
           reason = `📞 Одинаковый телефон: ${r1.phone}`;
-        } else if (distance < 20) {
+        } else if (distance < 10 && nameSimilarity > 0.7) {
+          // Очень близко И похожие названия
           isDuplicate = true;
-          reason = `📍 Очень близко: ${Math.round(distance)}м`;
-        } else if (distance < 50 && nameSimilarity > 0.5) {
-          isDuplicate = true;
-          reason = `🏷️ Похожие названия (${Math.round(nameSimilarity * 100)}%) на расстоянии ${Math.round(distance)}м`;
-        } else if (distance < 100 && nameSimilarity > 0.8) {
+          reason = `📍 Практически одно место: ${Math.round(distance)}м, ${Math.round(nameSimilarity * 100)}% схожести`;
+        } else if (distance < 30 && nameSimilarity > 0.85) {
           isDuplicate = true;
           reason = `🏷️ Очень похожие названия (${Math.round(nameSimilarity * 100)}%) на расстоянии ${Math.round(distance)}м`;
+        } else if (distance < 50 && nameSimilarity > 0.9 && !isAnyChain) {
+          // Только для НЕ-сетей: близко и почти идентичные названия
+          isDuplicate = true;
+          reason = `🏷️ Похожие названия (${Math.round(nameSimilarity * 100)}%) на расстоянии ${Math.round(distance)}м`;
         }
 
         if (isDuplicate) {
