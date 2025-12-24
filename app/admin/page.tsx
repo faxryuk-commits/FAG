@@ -1793,53 +1793,139 @@ export default function AdminPage() {
                         {field.label}
                       </label>
                       
-                      {/* Выбор категории */}
-                      {field.type === 'category' && (
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap gap-2">
-                            {[
-                              { value: 'рестораны', label: '🍽️ Рестораны' },
-                              { value: 'кафе', label: '☕ Кафе' },
-                              { value: 'бары', label: '🍺 Бары' },
-                              { value: 'фастфуд', label: '🍔 Фастфуд' },
-                              { value: 'суши', label: '🍣 Суши' },
-                              { value: 'пиццерии', label: '🍕 Пиццерии' },
-                              { value: 'кофейни', label: '☕ Кофейни' },
-                              { value: 'узбекская кухня', label: '🥟 Узбекская' },
-                              { value: 'грузинская кухня', label: '🍖 Грузинская' },
-                              { value: 'азиатская кухня', label: '🥢 Азиатская' },
-                              { value: 'столовые', label: '🥘 Столовые' },
-                              { value: 'чайханы', label: '🍵 Чайханы' },
-                            ].map(cat => (
+                      {/* Выбор категории - мультивыбор */}
+                      {field.type === 'category' && (() => {
+                        const allCategories = [
+                          // Типы заведений
+                          { group: 'Заведения', items: [
+                            { value: 'рестораны', label: '🍽️ Рестораны' },
+                            { value: 'кафе', label: '☕ Кафе' },
+                            { value: 'бары', label: '🍺 Бары' },
+                            { value: 'пабы', label: '🍻 Пабы' },
+                            { value: 'столовые', label: '🥘 Столовые' },
+                            { value: 'кофейни', label: '☕ Кофейни' },
+                            { value: 'чайханы', label: '🍵 Чайханы' },
+                            { value: 'фудкорт', label: '🏬 Фудкорты' },
+                            { value: 'банкетные залы', label: '🎉 Банкетные залы' },
+                            { value: 'караоке', label: '🎤 Караоке' },
+                          ]},
+                          // Фастфуд
+                          { group: 'Фастфуд', items: [
+                            { value: 'фастфуд', label: '🍔 Фастфуд' },
+                            { value: 'бургеры', label: '🍔 Бургерные' },
+                            { value: 'шаурма', label: '🌯 Шаурма/Донер' },
+                            { value: 'хот-доги', label: '🌭 Хот-доги' },
+                            { value: 'пиццерии', label: '🍕 Пиццерии' },
+                          ]},
+                          // Кухни мира
+                          { group: 'Кухни мира', items: [
+                            { value: 'узбекская кухня', label: '🥟 Узбекская' },
+                            { value: 'русская кухня', label: '🥣 Русская' },
+                            { value: 'грузинская кухня', label: '🍖 Грузинская' },
+                            { value: 'турецкая кухня', label: '🥙 Турецкая' },
+                            { value: 'корейская кухня', label: '🍜 Корейская' },
+                            { value: 'китайская кухня', label: '🥡 Китайская' },
+                            { value: 'японская кухня', label: '🍱 Японская' },
+                            { value: 'итальянская кухня', label: '🍝 Итальянская' },
+                            { value: 'мексиканская кухня', label: '🌮 Мексиканская' },
+                            { value: 'индийская кухня', label: '🍛 Индийская' },
+                            { value: 'тайская кухня', label: '🍲 Тайская' },
+                            { value: 'вьетнамская кухня', label: '🍜 Вьетнамская' },
+                          ]},
+                          // Специализированные
+                          { group: 'Специализация', items: [
+                            { value: 'суши', label: '🍣 Суши/Роллы' },
+                            { value: 'стейкхаус', label: '🥩 Стейкхаус' },
+                            { value: 'морепродукты', label: '🦐 Морепродукты' },
+                            { value: 'вегетарианские', label: '🥗 Вегетарианские' },
+                            { value: 'халяль', label: '☪️ Халяль' },
+                            { value: 'пекарни', label: '🥐 Пекарни' },
+                            { value: 'кондитерские', label: '🎂 Кондитерские' },
+                            { value: 'мороженое', label: '🍦 Мороженое' },
+                          ]},
+                        ];
+                        
+                        const selectedCats = (inputValues[field.key] || '').split(',').filter(Boolean);
+                        const allFlat = allCategories.flatMap(g => g.items.map(i => i.value));
+                        const isAllSelected = allFlat.every(v => selectedCats.includes(v));
+                        
+                        const toggleCategory = (value: string) => {
+                          let cats = selectedCats.filter((c: string) => c !== value);
+                          if (!selectedCats.includes(value)) {
+                            cats = [...selectedCats, value];
+                          }
+                          setInputValues({
+                            ...inputValues,
+                            [field.key]: cats.join(',')
+                          });
+                        };
+                        
+                        const selectAll = () => {
+                          setInputValues({
+                            ...inputValues,
+                            [field.key]: isAllSelected ? '' : allFlat.join(',')
+                          });
+                        };
+                        
+                        return (
+                          <div className="space-y-3">
+                            {/* Кнопки управления */}
+                            <div className="flex gap-2 mb-2">
                               <button
-                                key={cat.value}
                                 type="button"
-                                onClick={() => setInputValues({
-                                  ...inputValues,
-                                  [field.key]: cat.value
-                                })}
-                                className={`px-3 py-2 rounded-lg text-sm transition-all ${
-                                  inputValues[field.key] === cat.value
-                                    ? 'bg-purple-500 text-white'
-                                    : 'bg-white/10 text-white/70 hover:bg-white/20'
+                                onClick={selectAll}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                  isAllSelected
+                                    ? 'bg-green-500 text-white'
+                                    : 'bg-white/10 text-white/60 hover:bg-white/20'
                                 }`}
                               >
-                                {cat.label}
+                                {isAllSelected ? '✓ Все выбраны' : '☐ Выбрать все'}
                               </button>
+                              {selectedCats.length > 0 && (
+                                <span className="text-xs text-white/40 py-1.5">
+                                  Выбрано: {selectedCats.length}
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* Группы категорий */}
+                            {allCategories.map(group => (
+                              <div key={group.group}>
+                                <div className="text-xs text-white/40 mb-1.5 uppercase tracking-wide">{group.group}</div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {group.items.map(cat => (
+                                    <button
+                                      key={cat.value}
+                                      type="button"
+                                      onClick={() => toggleCategory(cat.value)}
+                                      className={`px-2.5 py-1.5 rounded-lg text-xs transition-all ${
+                                        selectedCats.includes(cat.value)
+                                          ? 'bg-purple-500 text-white'
+                                          : 'bg-white/10 text-white/60 hover:bg-white/20'
+                                      }`}
+                                    >
+                                      {cat.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
                             ))}
+                            
+                            {/* Ручной ввод */}
+                            <input
+                              type="text"
+                              value={inputValues[field.key] || ''}
+                              onChange={(e) => setInputValues({
+                                ...inputValues,
+                                [field.key]: e.target.value
+                              })}
+                              placeholder="Или введите свой запрос (через запятую)..."
+                              className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white text-sm placeholder-white/40 focus:outline-none focus:border-purple-500"
+                            />
                           </div>
-                          <input
-                            type="text"
-                            value={inputValues[field.key] || ''}
-                            onChange={(e) => setInputValues({
-                              ...inputValues,
-                              [field.key]: e.target.value
-                            })}
-                            placeholder="Или введите свой запрос..."
-                            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-purple-500"
-                          />
-                        </div>
-                      )}
+                        );
+                      })()}
                       
                       {/* Выбор города */}
                       {field.type === 'city' && (
@@ -1892,26 +1978,62 @@ export default function AdminPage() {
                         </div>
                       )}
                       
-                      {/* Выпадающий список (select) */}
+                      {/* Выбор количества результатов */}
                       {field.type === 'select' && field.options && (
-                        <div className="grid grid-cols-3 gap-2">
-                          {field.options.map(opt => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => setInputValues({
+                        <div className="space-y-3">
+                          {/* Быстрый выбор */}
+                          <div className="flex flex-wrap gap-2">
+                            {field.options.map(opt => {
+                              const val = Number(opt.value);
+                              const isFullScan = val === 0;
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => setInputValues({
+                                    ...inputValues,
+                                    [field.key]: val
+                                  })}
+                                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                    inputValues[field.key] === val
+                                      ? isFullScan 
+                                        ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white' 
+                                        : 'bg-purple-500 text-white'
+                                      : isFullScan
+                                        ? 'bg-red-500/10 text-red-300 hover:bg-red-500/20 border border-red-500/30'
+                                        : 'bg-white/10 text-white/60 hover:bg-white/20'
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* Ручной ввод */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-white/40">Или введите число:</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max="10000"
+                              value={inputValues[field.key] || ''}
+                              onChange={(e) => setInputValues({
                                 ...inputValues,
-                                [field.key]: Number(opt.value)
+                                [field.key]: e.target.value ? Number(e.target.value) : ''
                               })}
-                              className={`px-3 py-3 rounded-xl text-sm font-medium transition-all ${
-                                inputValues[field.key] === Number(opt.value)
-                                  ? 'bg-purple-500 text-white'
-                                  : 'bg-white/10 text-white/70 hover:bg-white/20'
-                              }`}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
+                              placeholder="Кол-во..."
+                              className="w-28 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm placeholder-white/30 focus:outline-none focus:border-purple-500"
+                            />
+                          </div>
+                          
+                          {/* Предупреждение при полном сканировании */}
+                          {inputValues[field.key] === 0 && (
+                            <div className="p-2 bg-red-500/20 border border-red-500/30 rounded-lg text-xs text-red-300">
+                              ⚠️ <b>Полное сканирование</b> может занять много времени и средств. 
+                              Рекомендуется для первичного сбора данных по городу.
+                            </div>
+                          )}
                         </div>
                       )}
                       
