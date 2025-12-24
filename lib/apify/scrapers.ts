@@ -85,6 +85,17 @@ export interface ScraperField {
   mapTo?: string; // К какому полю в БД маппится
 }
 
+export type InputFieldType = 'text' | 'number' | 'select' | 'city' | 'category';
+
+export interface InputField {
+  key: string;
+  label: string;
+  type: InputFieldType;
+  placeholder?: string;
+  options?: { value: string; label: string }[];
+  default: any;
+}
+
 export interface ScraperConfig {
   id: string;
   name: string;
@@ -95,14 +106,7 @@ export interface ScraperConfig {
   avgTimePerItem: number; // Секунд на 1 элемент
   fields: ScraperField[];
   defaultInput: Record<string, any>;
-  inputFields: {
-    key: string;
-    label: string;
-    type: 'text' | 'number' | 'select' | 'city' | 'category';
-    placeholder?: string;
-    options?: { value: string; label: string }[];
-    default: any;
-  }[];
+  inputFields: InputField[];
 }
 
 export const SCRAPERS: ScraperConfig[] = [

@@ -16,8 +16,9 @@ interface ScraperField {
 interface InputField {
   key: string;
   label: string;
-  type: 'text' | 'number' | 'select';
+  type: 'text' | 'number' | 'select' | 'city' | 'category';
   placeholder?: string;
+  options?: { value: string; label: string }[];
   default: any;
 }
 
