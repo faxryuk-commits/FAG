@@ -660,8 +660,21 @@ export async function saveWithConsolidation(
   data: any,
   options?: { incremental?: boolean }
 ): Promise<{ action: SaveAction; id: string; mergedWith?: string }> {
-  // Извлекаем временные поля
-  const { name, latitude, longitude, sourceId, _openingHours, _reviews, cuisine: rawCuisine, brand, ...rest } = data;
+  // Извлекаем временные поля (с _ префиксом) - они не должны попасть в Prisma
+  const { 
+    name, 
+    latitude, 
+    longitude, 
+    sourceId, 
+    _openingHours, 
+    _reviews, 
+    _popularTimes,      // Временное поле - не в схеме Prisma
+    _reservationUrl,    // Временное поле - не в схеме Prisma
+    _menu,              // Временное поле - не в схеме Prisma
+    cuisine: rawCuisine, 
+    brand, 
+    ...rest 
+  } = data;
   
   if (!name || !latitude || !longitude) {
     throw new Error('Missing required fields for consolidation');

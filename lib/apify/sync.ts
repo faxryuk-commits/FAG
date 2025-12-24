@@ -181,14 +181,20 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
       console.log(`[Google Maps] Starting scrape with maxResults: ${maxResults}`);
       
       return {
-        // Поисковые запросы - несколько разных для большего охвата
-        searchStringsArray: [
-          `${searchQuery} ${location}`,
-        ],
+        // ===== МЕТОД "WHERE + WHAT" =====
+        // Разделяем поисковый запрос и местоположение для преодоления лимита 120 мест
+        searchStringsArray: [searchQuery], // Только тип заведения: "пицца", "рестораны"
+        locationQuery: location,            // Отдельно город: "Ташкент"
         
         // ===== КЛЮЧЕВОЙ ПАРАМЕТР - КОЛИЧЕСТВО МЕСТ =====
-        // Актёр обходит лимит Google в 120 мест!
+        // ВАЖНО: Явно устанавливаем большой лимит
         maxCrawledPlacesPerSearch: maxResults,
+        maxCrawledPlaces: maxResults,  // Общий лимит на весь запуск
+        
+        // ===== РЕЖИМ ПОИСКА =====
+        // deeperCityScrape разбивает город на зоны (grid) для полного охвата
+        // Это позволяет обойти лимит Google Maps в 120 результатов
+        deeperCityScrape: true,
         
         // Язык и регион
         language: 'ru',
@@ -207,10 +213,6 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
         // ===== ДОПОЛНИТЕЛЬНЫЕ ДАННЫЕ =====
         additionalInfo: true,           // Характеристики заведения
         scrapeTableReservation: true,   // Бронирование столиков
-        
-        // ===== РЕЖИМ ПОИСКА =====
-        // deeperCityScrape разбивает город на зоны для полного охвата
-        deeperCityScrape: true,
         
         // ===== ПРОИЗВОДИТЕЛЬНОСТЬ =====
         maxConcurrency: 10,
