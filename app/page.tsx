@@ -54,6 +54,7 @@ function getTimeGreeting() {
 export default function Home() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [selectedCuisine, setSelectedCuisine] = useState<string | null>(null);
@@ -61,6 +62,9 @@ export default function Home() {
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [showAll, setShowAll] = useState(false);
   const [categoryStats, setCategoryStats] = useState<CategoryStats | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 100; // Увеличили с 50 до 100
   
   const greeting = getTimeGreeting();
 
@@ -102,26 +106,39 @@ export default function Home() {
     );
   }, []);
 
+  // Текущие фильтры для loadMore
+  const [currentFilters, setCurrentFilters] = useState<{
+    search?: string;
+    mood?: string;
+    cuisineType?: string;
+  }>({});
+
   // Загрузка ресторанов
   const fetchRestaurants = useCallback(async (options?: { 
     search?: string; 
     mood?: string; 
     cuisineType?: string;
-  }) => {
-    setLoading(true);
+  }, append = false) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
+    
     try {
       const params = new URLSearchParams();
+      const filters = append ? currentFilters : options || {};
       
-      if (options?.search) {
-        params.set('search', options.search);
+      if (filters.search) {
+        params.set('search', filters.search);
       }
       
-      if (options?.mood) {
-        params.set('mood', options.mood);
+      if (filters.mood) {
+        params.set('mood', filters.mood);
       }
       
-      if (options?.cuisineType) {
-        params.set('cuisineType', options.cuisineType);
+      if (filters.cuisineType) {
+        params.set('cuisineType', filters.cuisineType);
       }
       
       if (userLocation) {
@@ -131,18 +148,40 @@ export default function Home() {
         params.set('maxDistance', '30');
       }
       
-      params.set('limit', '50');
+      params.set('limit', String(PAGE_SIZE));
+      params.set('offset', String(append ? restaurants.length : 0));
       
       const res = await fetch(`/api/restaurants?${params}`);
       const data = await res.json();
-      setRestaurants(data.restaurants || []);
+      
+      const newRestaurants = data.restaurants || [];
+      
+      if (append) {
+        setRestaurants(prev => [...prev, ...newRestaurants]);
+      } else {
+        setRestaurants(newRestaurants);
+        setCurrentFilters(filters);
+      }
+      
+      setTotalCount(data.pagination?.total || data.total || 0);
+      setHasMore(newRestaurants.length === PAGE_SIZE);
     } catch (error) {
       console.error('Error:', error);
-      setRestaurants([]);
+      if (!append) {
+        setRestaurants([]);
+      }
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [userLocation]);
+  }, [userLocation, currentFilters, restaurants.length]);
+
+  // Загрузить ещё
+  const loadMore = useCallback(() => {
+    if (!loadingMore && hasMore) {
+      fetchRestaurants(undefined, true);
+    }
+  }, [fetchRestaurants, loadingMore, hasMore]);
 
   // Начальная загрузка
   useEffect(() => {
@@ -183,7 +222,8 @@ export default function Home() {
     fetchRestaurants({ search });
   };
 
-  const displayedRestaurants = showAll ? restaurants : restaurants.slice(0, 9);
+  // Показываем все загруженные рестораны (пагинация на сервере)
+  const displayedRestaurants = restaurants;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0f0f1a] via-[#1a1a2e] to-[#16213e]">
@@ -362,7 +402,9 @@ export default function Home() {
                       : 'Все места'}
               </span>
             </h2>
-            <span className="text-white/40 text-sm">{restaurants.length} мест</span>
+            <span className="text-white/40 text-sm">
+              {restaurants.length}{totalCount > restaurants.length ? ` из ${totalCount}` : ''} мест
+            </span>
           </div>
 
           {loading ? (
@@ -493,15 +535,38 @@ export default function Home() {
                 ))}
               </div>
               
-              {/* Показать ещё */}
-              {restaurants.length > 9 && !showAll && (
+              {/* Загрузить ещё */}
+              {hasMore && restaurants.length > 0 && (
                 <div className="text-center mt-10">
                   <button
-                    onClick={() => setShowAll(true)}
-                    className="px-8 py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-semibold text-white transition-all"
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="px-8 py-4 bg-gradient-to-r from-orange-500/20 to-pink-500/20 hover:from-orange-500/30 hover:to-pink-500/30 border border-orange-500/30 rounded-2xl font-semibold text-white transition-all disabled:opacity-50 flex items-center gap-3 mx-auto"
                   >
-                    Показать ещё {restaurants.length - 9} мест
+                    {loadingMore ? (
+                      <>
+                        <span className="animate-spin">⏳</span>
+                        <span>Загрузка...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>📥</span>
+                        <span>Загрузить ещё</span>
+                        {totalCount > 0 && (
+                          <span className="text-white/50 text-sm">
+                            ({restaurants.length} из {totalCount})
+                          </span>
+                        )}
+                      </>
+                    )}
                   </button>
+                </div>
+              )}
+              
+              {/* Все загружено */}
+              {!hasMore && restaurants.length > 0 && (
+                <div className="text-center mt-10 text-white/40">
+                  ✨ Показаны все {restaurants.length} заведений
                 </div>
               )}
             </>
