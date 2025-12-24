@@ -176,24 +176,11 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
       };
     
     case 'yandex':
-      // johnvc/Scrape-Yandex
+      // johnvc/Scrape-Yandex - требует поле text
       return {
-        search: `${searchQuery} ${location}`,
-        searchQuery: `${searchQuery} ${location}`,
-        query: `${searchQuery} ${location}`,
+        text: `${searchQuery} ${location}`,
         maxItems: maxResults,
-        limit: maxResults,
-        maxResults: maxResults,
         language: 'ru',
-        region: location,
-        city: location,
-        
-        // Расширенные данные
-        includePhotos: true,
-        includeReviews: true,
-        includeHours: true,
-        maxPhotos: 5,
-        maxReviews: 10,
       };
     
     case '2gis': {
