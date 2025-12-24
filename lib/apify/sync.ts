@@ -9,7 +9,7 @@ export type SyncSource = 'yandex' | 'google' | '2gis';
 const ACTOR_IDS = {
   google: 'compass/crawler-google-places',   // Google Maps - работает отлично
   yandex: 'johnvc/Scrape-Yandex',            // Яндекс.Карты - специализированный скрейпер
-  '2gis': 'm_mamaev/2gis-places-scraper',    // 2ГИС - специализированный скрейпер
+  '2gis': 'apify/web-scraper',               // 2ГИС - через универсальный web-scraper
 } as const;
 
 // Можно переопределить через env переменные
@@ -196,43 +196,55 @@ function getActorInput(source: SyncSource, searchQuery: string, location: string
         maxReviews: 10,
       };
     
-    case '2gis':
-      // m_mamaev/2gis-places-scraper требует startUrls
-      // Формируем URL поиска 2ГИС
-      const citySlug = get2GisCitySlug(location);
-      const searchUrl = `https://2gis.ru/${citySlug}/search/${encodeURIComponent(searchQuery)}`;
+    case '2gis': {
+      // apify/web-scraper для парсинга 2ГИС
+      const citySlug2gis = get2GisCitySlug(location);
+      const searchUrl2gis = `https://2gis.ru/${citySlug2gis}/search/${encodeURIComponent(searchQuery)}`;
       
       return {
-        startUrls: [{ url: searchUrl }],
-        maxItems: maxResults,
+        startUrls: [{ url: searchUrl2gis }],
         
-        // pageFunction для извлечения данных
         pageFunction: `async function pageFunction(context) {
-          const { page, request, log } = context;
+          const { request, log, jQuery } = context;
+          const $ = jQuery;
           
-          // Ждем загрузки результатов
-          await page.waitForSelector('[data-id]', { timeout: 10000 }).catch(() => {});
+          log.info('Parsing 2GIS page: ' + request.url);
           
-          // Собираем данные
-          const items = await page.evaluate(() => {
-            const results = [];
-            document.querySelectorAll('[data-id]').forEach(el => {
-              const name = el.querySelector('span')?.textContent || '';
-              const address = el.querySelector('[class*="address"]')?.textContent || '';
-              if (name) {
-                results.push({
-                  name,
-                  address,
-                  url: el.querySelector('a')?.href || '',
-                });
-              }
-            });
-            return results;
+          // Ждём загрузки
+          await context.waitFor(3000);
+          
+          const results = [];
+          
+          // Собираем карточки заведений
+          $('[data-id], ._1hf7139, .miniCard').each(function() {
+            const $card = $(this);
+            const name = $card.find('span._oqoid, ._1p8iqzw, .miniCard__title').first().text().trim();
+            const address = $card.find('._2lcm958, .miniCard__address').first().text().trim();
+            const rating = parseFloat($card.find('._y10azs, .miniCard__rating').text()) || null;
+            const reviewsText = $card.find('._jspzdm, .miniCard__reviews').text();
+            const reviewsCount = parseInt(reviewsText.replace(/\\D/g, '')) || 0;
+            const link = $card.find('a').first().attr('href') || '';
+            
+            if (name) {
+              results.push({
+                name,
+                address,
+                rating,
+                reviewsCount,
+                url: link.startsWith('http') ? link : 'https://2gis.ru' + link,
+                city: '${location}',
+              });
+            }
           });
           
-          return items;
+          log.info('Found ' + results.length + ' places');
+          return results;
         }`,
+        
+        maxRequestsPerCrawl: maxResults,
+        maxConcurrency: 5,
       };
+    }
     
     default:
       return {};
