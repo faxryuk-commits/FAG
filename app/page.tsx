@@ -3,6 +3,49 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 
+// Популярные запросы (статические)
+const POPULAR_SEARCHES = [
+  'плов', 'пицца', 'суши', 'бургер', 'кофе', 'шашлык', 
+  'лагман', 'самса', 'стейк', 'роллы', 'шаурма', 'десерт'
+];
+
+// Ключ для localStorage
+const SEARCH_HISTORY_KEY = 'foodguide_search_history';
+
+// Получить историю из localStorage
+function getSearchHistory(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const history = localStorage.getItem(SEARCH_HISTORY_KEY);
+    return history ? JSON.parse(history) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Сохранить в историю
+function saveToHistory(query: string) {
+  if (typeof window === 'undefined' || !query.trim()) return;
+  try {
+    let history = getSearchHistory();
+    // Удаляем дубликаты и добавляем в начало
+    history = [query, ...history.filter(h => h.toLowerCase() !== query.toLowerCase())];
+    // Храним максимум 10 последних
+    history = history.slice(0, 10);
+    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+  } catch {
+    // Игнорируем ошибки localStorage
+  }
+}
+
+// Очистить историю
+function clearSearchHistory() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(SEARCH_HISTORY_KEY);
+  } catch {}
+}
+
 interface Restaurant {
   id: string;
   name: string;
@@ -58,6 +101,15 @@ export default function Home() {
   const [search, setSearch] = useState('');
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [selectedCuisine, setSelectedCuisine] = useState<string | null>(null);
+  
+  // Поиск с подсказками
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [showAll, setShowAll] = useState(false);
@@ -71,6 +123,79 @@ export default function Home() {
   
   useEffect(() => {
     setGreeting(getTimeGreeting());
+    // Загружаем историю поиска
+    setSearchHistory(getSearchHistory());
+  }, []);
+
+  // Генерация подсказок при вводе
+  useEffect(() => {
+    if (!search.trim()) {
+      // Показываем историю и популярные когда поле пустое но в фокусе
+      const historySuggestions = searchHistory.slice(0, 5);
+      const popularSuggestions = POPULAR_SEARCHES.filter(
+        p => !historySuggestions.includes(p)
+      ).slice(0, 5);
+      setSuggestions([...historySuggestions, ...popularSuggestions]);
+      return;
+    }
+
+    // Фильтруем подсказки по введённому тексту
+    const lowerSearch = search.toLowerCase();
+    const filtered: string[] = [];
+    
+    // Сначала из истории
+    for (const h of searchHistory) {
+      if (h.toLowerCase().includes(lowerSearch) && !filtered.includes(h)) {
+        filtered.push(h);
+      }
+    }
+    
+    // Затем популярные
+    for (const p of POPULAR_SEARCHES) {
+      if (p.toLowerCase().includes(lowerSearch) && !filtered.includes(p)) {
+        filtered.push(p);
+      }
+    }
+    
+    setSuggestions(filtered.slice(0, 8));
+  }, [search, searchHistory]);
+
+  // Debounced поиск - автопоиск через 400мс после остановки ввода
+  useEffect(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    
+    if (search.trim().length >= 2) {
+      debounceRef.current = setTimeout(() => {
+        setSelectedMood(null);
+        setSelectedCuisine(null);
+        fetchRestaurants({ search });
+      }, 400);
+    }
+    
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Закрытие подсказок при клике вне
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current && 
+        !suggestionsRef.current.contains(e.target as Node) &&
+        searchInputRef.current &&
+        !searchInputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Загрузка статистики по категориям
@@ -247,9 +372,62 @@ export default function Home() {
   // Поиск
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (search.trim()) {
+      saveToHistory(search.trim());
+      setSearchHistory(getSearchHistory());
+    }
+    setShowSuggestions(false);
     setSelectedMood(null);
     setSelectedCuisine(null);
     fetchRestaurants({ search });
+  };
+
+  // Выбор подсказки
+  const handleSelectSuggestion = (suggestion: string) => {
+    setSearch(suggestion);
+    saveToHistory(suggestion);
+    setSearchHistory(getSearchHistory());
+    setShowSuggestions(false);
+    setHighlightedIndex(-1);
+    setSelectedMood(null);
+    setSelectedCuisine(null);
+    fetchRestaurants({ search: suggestion });
+  };
+
+  // Обработка клавиатуры в поле поиска
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions || suggestions.length === 0) return;
+    
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightedIndex(prev => 
+          prev < suggestions.length - 1 ? prev + 1 : 0
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightedIndex(prev => 
+          prev > 0 ? prev - 1 : suggestions.length - 1
+        );
+        break;
+      case 'Enter':
+        if (highlightedIndex >= 0) {
+          e.preventDefault();
+          handleSelectSuggestion(suggestions[highlightedIndex]);
+        }
+        break;
+      case 'Escape':
+        setShowSuggestions(false);
+        setHighlightedIndex(-1);
+        break;
+    }
+  };
+
+  // Очистка истории
+  const handleClearHistory = () => {
+    clearSearchHistory();
+    setSearchHistory([]);
   };
 
   // Показываем все загруженные рестораны (пагинация на сервере)
@@ -326,23 +504,106 @@ export default function Home() {
             </span>
           </h1>
           
-          {/* Поиск */}
-          <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-8">
+          {/* Поиск с подсказками */}
+          <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-8 relative">
             <div className="flex gap-2 p-2 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Название, кухня или блюдо..."
-                className="flex-1 px-4 py-3 bg-transparent text-white placeholder-white/30 focus:outline-none"
-              />
+              <div className="relative flex-1">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onFocus={() => setShowSuggestions(true)}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Название, кухня или блюдо..."
+                  className="w-full px-4 py-3 bg-transparent text-white placeholder-white/30 focus:outline-none"
+                  autoComplete="off"
+                />
+                
+                {/* Индикатор автопоиска */}
+                {search.length >= 2 && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Автопоиск"></div>
+                  </div>
+                )}
+              </div>
+              
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setShowSuggestions(false);
+                    fetchRestaurants({});
+                  }}
+                  className="px-3 text-white/40 hover:text-white/70 transition-colors"
+                >
+                  ✕
+                </button>
+              )}
+              
               <button
                 type="submit"
                 className="px-6 py-3 bg-gradient-to-r from-orange-500 to-pink-500 rounded-xl font-semibold text-white hover:opacity-90 transition-opacity"
               >
-                🔍 Найти
+                🔍
               </button>
             </div>
+            
+            {/* Выпадающий список подсказок */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div 
+                ref={suggestionsRef}
+                className="absolute top-full left-0 right-0 mt-2 bg-[#1a1a2e]/95 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl"
+              >
+                {/* Заголовок секции */}
+                <div className="px-4 py-2 border-b border-white/10 flex justify-between items-center">
+                  <span className="text-xs text-white/40">
+                    {search ? '💡 Подсказки' : '🕐 Недавние / 🔥 Популярные'}
+                  </span>
+                  {searchHistory.length > 0 && !search && (
+                    <button
+                      type="button"
+                      onClick={handleClearHistory}
+                      className="text-xs text-white/30 hover:text-red-400 transition-colors"
+                    >
+                      Очистить историю
+                    </button>
+                  )}
+                </div>
+                
+                {suggestions.map((suggestion, index) => {
+                  const isFromHistory = searchHistory.includes(suggestion);
+                  return (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => handleSelectSuggestion(suggestion)}
+                      className={`w-full px-4 py-3 text-left flex items-center gap-3 transition-colors ${
+                        highlightedIndex === index 
+                          ? 'bg-orange-500/20 text-white' 
+                          : 'text-white/70 hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      <span className="text-white/40">
+                        {isFromHistory ? '🕐' : '🔍'}
+                      </span>
+                      <span className="flex-1">{suggestion}</span>
+                      {isFromHistory && (
+                        <span className="text-xs text-white/30">из истории</span>
+                      )}
+                    </button>
+                  );
+                })}
+                
+                {/* Подсказка про горячие клавиши */}
+                <div className="px-4 py-2 border-t border-white/10 text-xs text-white/30 flex gap-4">
+                  <span>↑↓ навигация</span>
+                  <span>Enter выбор</span>
+                  <span>Esc закрыть</span>
+                </div>
+              </div>
+            )}
           </form>
         </div>
       </section>
