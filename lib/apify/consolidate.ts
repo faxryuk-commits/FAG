@@ -221,13 +221,13 @@ function parseWorkingHours(hours: any): Array<{ dayOfWeek: number; openTime: str
   
   const result: Array<{ dayOfWeek: number; openTime: string; closeTime: string }> = [];
   const dayNames: Record<string, number> = {
+    'sunday': 0, 'sun': 0, 'вс': 0, 'воскресенье': 0,
     'monday': 1, 'mon': 1, 'пн': 1, 'понедельник': 1,
     'tuesday': 2, 'tue': 2, 'вт': 2, 'вторник': 2,
     'wednesday': 3, 'wed': 3, 'ср': 3, 'среда': 3,
     'thursday': 4, 'thu': 4, 'чт': 4, 'четверг': 4,
     'friday': 5, 'fri': 5, 'пт': 5, 'пятница': 5,
     'saturday': 6, 'sat': 6, 'сб': 6, 'суббота': 6,
-    'sunday': 0, 'sun': 0, 'вс': 0, 'воскресенье': 0,
   };
 
   // Если массив строк вида "Monday: 9:00 - 22:00"
@@ -241,13 +241,28 @@ function parseWorkingHours(hours: any): Array<{ dayOfWeek: number; openTime: str
             result.push({ dayOfWeek: day, openTime: match[2], closeTime: match[3] });
           }
         }
-      } else if (typeof h === 'object' && h.day !== undefined) {
+      } else if (typeof h === 'object' && h !== null) {
         // Формат { day: 1, open: "09:00", close: "22:00" }
-        result.push({
-          dayOfWeek: h.day,
-          openTime: h.open || h.from || '00:00',
-          closeTime: h.close || h.to || '23:59',
-        });
+        // или { dayOfWeek: "среда", openTime: "00:00", closeTime: "23:59" }
+        let dayNum: number | undefined;
+        
+        if (typeof h.day === 'number') {
+          dayNum = h.day;
+        } else if (typeof h.dayOfWeek === 'number') {
+          dayNum = h.dayOfWeek;
+        } else if (typeof h.dayOfWeek === 'string') {
+          dayNum = dayNames[h.dayOfWeek.toLowerCase()];
+        } else if (typeof h.day === 'string') {
+          dayNum = dayNames[h.day.toLowerCase()];
+        }
+        
+        if (dayNum !== undefined) {
+          result.push({
+            dayOfWeek: dayNum,
+            openTime: h.openTime || h.open || h.from || '00:00',
+            closeTime: h.closeTime || h.close || h.to || '23:59',
+          });
+        }
       }
     }
   }
@@ -338,8 +353,17 @@ function parseReviews(reviews: any[], source: string): ParsedReview[] {
     // Ответ владельца
     const ownerResponse = r.ownerResponse || r.responseFromOwnerText || 
                           r.ownerReply || r.reply?.text || null;
-    const ownerResponseDate = r.ownerResponseDate || r.responseFromOwnerDate || 
-                              r.reply?.date ? new Date(r.reply?.date || r.ownerResponseDate) : null;
+    
+    // Безопасный парсинг даты ответа владельца
+    let ownerResponseDate: Date | null = null;
+    const rawOwnerDate = r.ownerResponseDate || r.responseFromOwnerDate || r.reply?.date;
+    if (rawOwnerDate) {
+      const parsed = new Date(rawOwnerDate);
+      // Проверяем что дата валидна
+      if (!isNaN(parsed.getTime())) {
+        ownerResponseDate = parsed;
+      }
+    }
     
     // Полезность
     const likesCount = r.likesCount || r.reviewLikesCount || r.helpful || r.likes || 0;
@@ -352,6 +376,16 @@ function parseReviews(reviews: any[], source: string): ParsedReview[] {
     const sourceId = r.reviewId || r.id || r.sourceId || null;
     const sourceUrl = r.reviewUrl || r.url || r.link || null;
     
+    // Безопасный парсинг даты отзыва
+    let reviewDate = new Date();
+    const rawDate = r.date || r.publishedAtDate || r.reviewDate;
+    if (rawDate) {
+      const parsed = new Date(rawDate);
+      if (!isNaN(parsed.getTime())) {
+        reviewDate = parsed;
+      }
+    }
+    
     return {
       author,
       authorId,
@@ -363,7 +397,7 @@ function parseReviews(reviews: any[], source: string): ParsedReview[] {
       isLocalGuide,
       rating: r.rating || r.stars || r.score || 5,
       text: r.text || r.comment || r.review || r.content || r.reviewText || '',
-      date: r.date || r.publishedAtDate || r.reviewDate ? new Date(r.date || r.publishedAtDate || r.reviewDate) : new Date(),
+      date: reviewDate,
       photos: photos.filter(Boolean),
       ownerResponse,
       ownerResponseDate,
