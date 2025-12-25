@@ -1928,9 +1928,10 @@ function EnrichSection() {
     }
   };
 
-  const startEnrichment = async (batchSize: number, mode: string = 'incomplete') => {
+  const startEnrichment = async (batchSize: number, mode: string = 'incomplete', force: boolean = false) => {
     const modeLabel = mode === 'hours' ? 'обновление часов' : 'обогащение';
-    const forceNote = forceUpdate ? '\n\n⚠️ ПРИНУДИТЕЛЬНОЕ обновление (игнорирует 7-дневный кулдаун)' : '';
+    const useForce = force || forceUpdate;
+    const forceNote = useForce ? '\n\n⚠️ ПРИНУДИТЕЛЬНОЕ обновление (игнорирует 7-дневный кулдаун)' : '';
     if (!confirm(`Запустить ${modeLabel} для ${batchSize} записей?${forceNote}\n\nЭто использует Apify кредиты.`)) return;
     
     setEnriching(true);
@@ -1940,7 +1941,7 @@ function EnrichSection() {
       const res = await fetch('/api/enrich', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchSize, mode, force: forceUpdate }),
+        body: JSON.stringify({ batchSize, mode, force: useForce }),
       });
       const data = await res.json();
       
@@ -1955,6 +1956,11 @@ function EnrichSection() {
       setEnriching(false);
       fetchStats();
     }
+  };
+
+  // Принудительное обновление (без подтверждения чекбокса)
+  const startEnrichmentForce = (batchSize: number, mode: string) => {
+    startEnrichment(batchSize, mode, true);
   };
 
   return (
@@ -2042,33 +2048,62 @@ function EnrichSection() {
             <div className="mb-4 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
               <h4 className="text-orange-300 font-medium text-sm mb-2">⏰ Обновить время работы</h4>
               <p className="text-xs text-white/50 mb-3">
-                {stats.stats.badHours || 0} записей готовы к обновлению
-                {stats.stats.badHoursTotal !== stats.stats.badHours && (
-                  <span className="text-cyan-300"> (всего {stats.stats.badHoursTotal || 0}, {(stats.stats.badHoursTotal || 0) - (stats.stats.badHours || 0)} на кулдауне)</span>
+                {stats.stats.badHoursTotal || 0} записей с плейсхолдер часами (00:00-23:59)
+                {stats.stats.badHours !== stats.stats.badHoursTotal && (
+                  <span className="text-cyan-300"> • {stats.stats.badHours || 0} готовы, {(stats.stats.badHoursTotal || 0) - (stats.stats.badHours || 0)} на кулдауне</span>
                 )}
               </p>
-              {stats.stats.badHours > 0 ? (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => startEnrichment(20, 'hours')}
-                    disabled={enriching}
-                    className="flex-1 py-2 bg-orange-500/20 text-orange-300 text-xs rounded-lg hover:bg-orange-500/30 transition-colors font-medium disabled:opacity-50"
-                  >
-                    {enriching ? '⏳...' : '20 записей'}
-                  </button>
-                  <button
-                    onClick={() => startEnrichment(100, 'hours')}
-                    disabled={enriching}
-                    className="flex-1 py-2 bg-orange-500/20 text-orange-300 text-xs rounded-lg hover:bg-orange-500/30 transition-colors font-medium disabled:opacity-50"
-                  >
-                    {enriching ? '⏳...' : '100 записей'}
-                  </button>
-                </div>
-              ) : (
-                <div className="text-xs text-cyan-300/70 py-2">
-                  🛡️ Все записи на кулдауне. Используйте "Принудительно" выше для обновления.
+              
+              {/* Обычное обновление */}
+              {stats.stats.badHours > 0 && (
+                <div className="mb-3">
+                  <div className="text-xs text-white/40 mb-2">Обычное обновление:</div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => startEnrichment(20, 'hours')}
+                      disabled={enriching}
+                      className="flex-1 py-2 bg-orange-500/20 text-orange-300 text-xs rounded-lg hover:bg-orange-500/30 transition-colors font-medium disabled:opacity-50"
+                    >
+                      {enriching ? '⏳...' : '20 записей'}
+                    </button>
+                    <button
+                      onClick={() => startEnrichment(100, 'hours')}
+                      disabled={enriching}
+                      className="flex-1 py-2 bg-orange-500/20 text-orange-300 text-xs rounded-lg hover:bg-orange-500/30 transition-colors font-medium disabled:opacity-50"
+                    >
+                      {enriching ? '⏳...' : '100 записей'}
+                    </button>
+                  </div>
                 </div>
               )}
+              
+              {/* Принудительное обновление */}
+              <div>
+                <div className="text-xs text-white/40 mb-2">⚠️ Принудительно (игнорирует кулдаун):</div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => startEnrichmentForce(20, 'hours')}
+                    disabled={enriching}
+                    className="flex-1 py-2 bg-red-500/20 text-red-300 text-xs rounded-lg hover:bg-red-500/30 transition-colors font-medium disabled:opacity-50 border border-red-500/30"
+                  >
+                    {enriching ? '⏳...' : '🔄 20 записей'}
+                  </button>
+                  <button
+                    onClick={() => startEnrichmentForce(100, 'hours')}
+                    disabled={enriching}
+                    className="flex-1 py-2 bg-red-500/20 text-red-300 text-xs rounded-lg hover:bg-red-500/30 transition-colors font-medium disabled:opacity-50 border border-red-500/30"
+                  >
+                    {enriching ? '⏳...' : '🔄 100 записей'}
+                  </button>
+                  <button
+                    onClick={() => startEnrichmentForce(stats.stats.badHoursTotal || 500, 'hours')}
+                    disabled={enriching}
+                    className="flex-1 py-2 bg-red-500/20 text-red-300 text-xs rounded-lg hover:bg-red-500/30 transition-colors font-medium disabled:opacity-50 border border-red-500/30"
+                  >
+                    {enriching ? '⏳...' : `🔄 ВСЕ ${stats.stats.badHoursTotal || 0}`}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
           
