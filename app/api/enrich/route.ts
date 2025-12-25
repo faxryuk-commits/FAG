@@ -28,13 +28,25 @@ export async function GET() {
       },
     });
 
-    // Записи без рабочих часов
+    // Записи без рабочих часов (вообще нет)
     const noHours = await prisma.restaurant.count({
       where: {
         workingHours: { none: {} },
         isArchived: false,
       },
     });
+
+    // Записи с некорректными часами (00:00-23:59 для всех дней = плейсхолдер)
+    const placeholderHoursRestaurants = await prisma.$queryRaw<{count: bigint}[]>`
+      SELECT COUNT(DISTINCT r.id) as count
+      FROM restaurants r
+      JOIN working_hours wh ON wh."restaurantId" = r.id
+      WHERE r."isArchived" = false
+      AND wh."openTime" = '00:00'
+      AND wh."closeTime" = '23:59'
+      AND wh."isClosed" = false
+    `;
+    const badHours = Number(placeholderHoursRestaurants[0]?.count || 0);
 
     // Записи без отзывов
     const noReviews = await prisma.restaurant.count({
@@ -76,10 +88,12 @@ export async function GET() {
         noRating,
         noHours,
         noReviews,
+        badHours, // Новое поле - с плейсхолдер часами
         importedCount,
         incompleteImports,
       },
       needsEnrichment: incompleteImports,
+      needsHoursUpdate: badHours + noHours,
     });
   } catch (error) {
     console.error('Error getting enrich stats:', error);
@@ -96,7 +110,34 @@ export async function POST(request: NextRequest) {
     // Получить записи для обогащения
     let restaurants;
     
-    if (mode === 'incomplete') {
+    if (mode === 'hours') {
+      // Рестораны с плейсхолдер часами (00:00-23:59) или без часов
+      const restaurantIds = await prisma.$queryRaw<{id: string}[]>`
+        SELECT DISTINCT r.id
+        FROM restaurants r
+        LEFT JOIN working_hours wh ON wh."restaurantId" = r.id
+        WHERE r."isArchived" = false
+        AND (
+          wh.id IS NULL
+          OR (wh."openTime" = '00:00' AND wh."closeTime" = '23:59' AND wh."isClosed" = false)
+        )
+        LIMIT ${batchSize}
+      `;
+      
+      restaurants = await prisma.restaurant.findMany({
+        where: {
+          id: { in: restaurantIds.map(r => r.id) },
+        },
+        select: {
+          id: true,
+          name: true,
+          address: true,
+          city: true,
+          latitude: true,
+          longitude: true,
+        },
+      });
+    } else if (mode === 'incomplete') {
       // Только импортированные без фото
       restaurants = await prisma.restaurant.findMany({
         where: {

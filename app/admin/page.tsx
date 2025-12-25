@@ -122,10 +122,12 @@ interface EnrichStats {
     noRating: number;
     noHours: number;
     noReviews: number;
+    badHours: number; // Записи с плейсхолдер часами 00:00-23:59
     importedCount: number;
     incompleteImports: number;
   };
   needsEnrichment: number;
+  needsHoursUpdate: number;
 }
 
 // Компонент таймера с реалтайм прогрессом
@@ -1919,8 +1921,9 @@ function EnrichSection() {
     }
   };
 
-  const startEnrichment = async (batchSize: number) => {
-    if (!confirm(`Запустить обогащение ${batchSize} записей?\n\nЭто использует Apify кредиты.`)) return;
+  const startEnrichment = async (batchSize: number, mode: string = 'incomplete') => {
+    const modeLabel = mode === 'hours' ? 'обновление часов' : 'обогащение';
+    if (!confirm(`Запустить ${modeLabel} для ${batchSize} записей?\n\nЭто использует Apify кредиты.`)) return;
     
     setEnriching(true);
     setResult(null);
@@ -1929,7 +1932,7 @@ function EnrichSection() {
       const res = await fetch('/api/enrich', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchSize, mode: 'incomplete' }),
+        body: JSON.stringify({ batchSize, mode }),
       });
       const data = await res.json();
       
@@ -1972,23 +1975,53 @@ function EnrichSection() {
               <div className="text-blue-400 font-bold text-lg">{stats.stats.importedCount}</div>
             </div>
             <div className="bg-white/5 rounded-lg p-2">
-              <div className="text-white/40">Требует обогащения</div>
+              <div className="text-white/40">Без данных</div>
               <div className="text-red-400 font-bold text-lg">{stats.needsEnrichment}</div>
             </div>
+            <div className="bg-white/5 rounded-lg p-2">
+              <div className="text-white/40">⏰ Плейсхолдер часы</div>
+              <div className="text-orange-400 font-bold text-lg">{stats.stats.badHours || 0}</div>
+            </div>
           </div>
+          
+          {/* Секция обновления рабочих часов */}
+          {(stats.needsHoursUpdate > 0 || stats.stats.badHours > 0) && (
+            <div className="mb-4 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+              <h4 className="text-orange-300 font-medium text-sm mb-2">⏰ Обновить время работы</h4>
+              <p className="text-xs text-white/50 mb-3">
+                {stats.stats.badHours || 0} записей с плейсхолдер часами (00:00-23:59)
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => startEnrichment(20, 'hours')}
+                  disabled={enriching}
+                  className="flex-1 py-2 bg-orange-500/20 text-orange-300 text-xs rounded-lg hover:bg-orange-500/30 transition-colors font-medium disabled:opacity-50"
+                >
+                  {enriching ? '⏳...' : '20 записей'}
+                </button>
+                <button
+                  onClick={() => startEnrichment(100, 'hours')}
+                  disabled={enriching}
+                  className="flex-1 py-2 bg-orange-500/20 text-orange-300 text-xs rounded-lg hover:bg-orange-500/30 transition-colors font-medium disabled:opacity-50"
+                >
+                  {enriching ? '⏳...' : '100 записей'}
+                </button>
+              </div>
+            </div>
+          )}
           
           {/* Кнопки обогащения */}
           {stats.needsEnrichment > 0 && (
             <div className="space-y-2">
               <button
-                onClick={() => startEnrichment(20)}
+                onClick={() => startEnrichment(20, 'incomplete')}
                 disabled={enriching}
                 className="w-full py-2.5 bg-green-500/20 text-green-300 text-sm rounded-lg hover:bg-green-500/30 transition-colors font-medium disabled:opacity-50"
               >
                 {enriching ? '⏳ Запуск...' : '🚀 Обогатить 20 записей (~$0.20)'}
               </button>
               <button
-                onClick={() => startEnrichment(50)}
+                onClick={() => startEnrichment(50, 'incomplete')}
                 disabled={enriching}
                 className="w-full py-2.5 bg-blue-500/20 text-blue-300 text-sm rounded-lg hover:bg-blue-500/30 transition-colors font-medium disabled:opacity-50"
               >
@@ -1999,7 +2032,7 @@ function EnrichSection() {
                   const total = stats?.needsEnrichment || 0;
                   const estimatedCost = (total * 0.01).toFixed(2);
                   if (confirm(`⚠️ Обогатить ВСЕ ${total} записей?\n\nПримерная стоимость: ~$${estimatedCost}\nВремя: ~${Math.ceil(total / 20 * 2)} мин\n\nДанные будут обрабатываться порциями по 20 записей.`)) {
-                    startEnrichment(total);
+                    startEnrichment(total, 'incomplete');
                   }
                 }}
                 disabled={enriching}
