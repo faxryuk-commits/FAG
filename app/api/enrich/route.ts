@@ -185,37 +185,41 @@ export async function POST(request: NextRequest) {
       
       if (force) {
         restaurantIds = await prisma.$queryRaw<{id: string}[]>`
-          SELECT DISTINCT r.id
-          FROM restaurants r
-          LEFT JOIN working_hours wh ON wh."restaurantId" = r.id
-          WHERE r."isArchived" = false
-          AND (
-            wh.id IS NULL
-            OR (wh."openTime" = '00:00' AND wh."closeTime" = '23:59' AND wh."isClosed" = false)
-          )
-          ORDER BY 
-            CASE WHEN r.rating IS NOT NULL AND r.rating >= 4.0 THEN 0 ELSE 1 END,
-            CASE WHEN array_length(r.images, 1) > 0 THEN 0 ELSE 1 END,
-            COALESCE(r."ratingCount", 0) DESC,
-            r.rating DESC NULLS LAST
+          SELECT id FROM (
+            SELECT DISTINCT ON (r.id) r.id,
+              CASE WHEN r.rating IS NOT NULL AND r.rating >= 4.0 THEN 0 ELSE 1 END as rating_priority,
+              CASE WHEN array_length(r.images, 1) > 0 THEN 0 ELSE 1 END as images_priority,
+              COALESCE(r."ratingCount", 0) as review_count,
+              r.rating
+            FROM restaurants r
+            LEFT JOIN working_hours wh ON wh."restaurantId" = r.id
+            WHERE r."isArchived" = false
+            AND (
+              wh.id IS NULL
+              OR (wh."openTime" = '00:00' AND wh."closeTime" = '23:59' AND wh."isClosed" = false)
+            )
+          ) sub
+          ORDER BY rating_priority, images_priority, review_count DESC, rating DESC NULLS LAST
           LIMIT ${batchSize}
         `;
       } else {
         restaurantIds = await prisma.$queryRaw<{id: string}[]>`
-          SELECT DISTINCT r.id
-          FROM restaurants r
-          LEFT JOIN working_hours wh ON wh."restaurantId" = r.id
-          WHERE r."isArchived" = false
-          AND r."lastSynced" < ${sevenDaysAgo}
-          AND (
-            wh.id IS NULL
-            OR (wh."openTime" = '00:00' AND wh."closeTime" = '23:59' AND wh."isClosed" = false)
-          )
-          ORDER BY 
-            CASE WHEN r.rating IS NOT NULL AND r.rating >= 4.0 THEN 0 ELSE 1 END,
-            CASE WHEN array_length(r.images, 1) > 0 THEN 0 ELSE 1 END,
-            COALESCE(r."ratingCount", 0) DESC,
-            r.rating DESC NULLS LAST
+          SELECT id FROM (
+            SELECT DISTINCT ON (r.id) r.id,
+              CASE WHEN r.rating IS NOT NULL AND r.rating >= 4.0 THEN 0 ELSE 1 END as rating_priority,
+              CASE WHEN array_length(r.images, 1) > 0 THEN 0 ELSE 1 END as images_priority,
+              COALESCE(r."ratingCount", 0) as review_count,
+              r.rating
+            FROM restaurants r
+            LEFT JOIN working_hours wh ON wh."restaurantId" = r.id
+            WHERE r."isArchived" = false
+            AND r."lastSynced" < ${sevenDaysAgo}
+            AND (
+              wh.id IS NULL
+              OR (wh."openTime" = '00:00' AND wh."closeTime" = '23:59' AND wh."isClosed" = false)
+            )
+          ) sub
+          ORDER BY rating_priority, images_priority, review_count DESC, rating DESC NULLS LAST
           LIMIT ${batchSize}
         `;
       }
