@@ -57,6 +57,8 @@ interface Restaurant {
 
 const DAYS_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
+const THEME_KEY = 'foodguide_theme';
+
 export default function RestaurantPage() {
   const params = useParams();
   const slug = params.slug as string;
@@ -66,6 +68,24 @@ export default function RestaurantPage() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showGallery, setShowGallery] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+  // Загрузка темы
+  useEffect(() => {
+    const saved = localStorage.getItem(THEME_KEY) as 'dark' | 'light' | null;
+    if (saved) {
+      setTheme(saved);
+    } else {
+      const hour = new Date().getHours();
+      setTheme(hour >= 6 && hour < 20 ? 'light' : 'dark');
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem(THEME_KEY, newTheme);
+  };
 
   useEffect(() => {
     if (slug) fetchRestaurant();
@@ -111,7 +131,9 @@ export default function RestaurantPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0f0f1a] flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center ${
+        theme === 'dark' ? 'bg-[#0f0f1a]' : 'bg-gray-50'
+      }`}>
         <div className="text-4xl animate-pulse">🍽️</div>
       </div>
     );
@@ -119,11 +141,15 @@ export default function RestaurantPage() {
 
   if (!restaurant) {
     return (
-      <div className="min-h-screen bg-[#0f0f1a] flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center ${
+        theme === 'dark' ? 'bg-[#0f0f1a]' : 'bg-gray-50'
+      }`}>
         <div className="text-center">
           <div className="text-6xl mb-4">🤔</div>
-          <h1 className="text-2xl font-bold text-white mb-2">Место не найдено</h1>
-          <Link href="/" className="text-orange-400 hover:underline">← Вернуться</Link>
+          <h1 className={`text-2xl font-bold mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+            Место не найдено
+          </h1>
+          <Link href="/" className="text-orange-500 hover:underline">← Вернуться</Link>
         </div>
       </div>
     );
@@ -132,7 +158,11 @@ export default function RestaurantPage() {
   const hasImages = restaurant.images && restaurant.images.length > 0;
 
   return (
-    <main className="min-h-screen bg-[#0f0f1a]">
+    <main className={`min-h-screen transition-colors duration-300 ${
+      theme === 'dark' 
+        ? 'bg-gradient-to-br from-[#0f0f1a] via-[#1a1a2e] to-[#16213e]' 
+        : 'bg-gradient-to-br from-gray-50 via-white to-gray-100'
+    }`}>
       {/* Gallery Modal */}
       {showGallery && hasImages && (
         <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center" onClick={() => setShowGallery(false)}>
@@ -147,21 +177,39 @@ export default function RestaurantPage() {
       )}
 
       {/* Compact Header */}
-      <header className="sticky top-0 z-40 bg-[#0f0f1a]/95 backdrop-blur-md border-b border-white/5">
+      <header className={`sticky top-0 z-40 backdrop-blur-md border-b transition-colors ${
+        theme === 'dark' 
+          ? 'bg-[#0f0f1a]/95 border-white/5' 
+          : 'bg-white/95 border-gray-200 shadow-sm'
+      }`}>
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 text-white/70 hover:text-white">
+          <Link href="/" className={`flex items-center gap-2 transition-colors ${
+            theme === 'dark' ? 'text-white/70 hover:text-white' : 'text-gray-500 hover:text-gray-900'
+          }`}>
             <span>←</span>
             <span className="text-sm">Назад</span>
           </Link>
           <div className="flex items-center gap-2">
             {hasImages && (
-              <button onClick={() => setShowGallery(true)} className="px-3 py-1.5 rounded-lg bg-white/5 text-white/70 text-sm hover:bg-white/10">
+              <button onClick={() => setShowGallery(true)} className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                theme === 'dark' ? 'bg-white/5 text-white/70 hover:bg-white/10' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}>
                 📷 {restaurant.images.length}
               </button>
             )}
             <button 
+              onClick={toggleTheme}
+              className={`w-8 h-8 rounded-lg text-sm transition-colors ${
+                theme === 'dark' ? 'bg-white/5 text-white/70 hover:bg-white/10' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+            <button 
               onClick={() => setIsFavorite(!isFavorite)}
-              className={`w-8 h-8 rounded-lg bg-white/5 text-lg ${isFavorite ? 'text-red-500' : 'text-white/50'}`}
+              className={`w-8 h-8 rounded-lg text-lg ${
+                theme === 'dark' ? 'bg-white/5' : 'bg-gray-100'
+              } ${isFavorite ? 'text-red-500' : theme === 'dark' ? 'text-white/50' : 'text-gray-400'}`}
             >
               {isFavorite ? '❤️' : '🤍'}
             </button>
@@ -195,29 +243,39 @@ export default function RestaurantPage() {
             {/* Tags */}
             <div className="flex flex-wrap gap-1.5 mb-2">
               {restaurant.cuisine?.slice(0, 3).map((c, i) => (
-                <span key={i} className="px-2 py-0.5 bg-white/10 text-white/70 text-xs rounded-full">{c}</span>
+                <span key={i} className={`px-2 py-0.5 text-xs rounded-full ${
+                  theme === 'dark' ? 'bg-white/10 text-white/70' : 'bg-gray-100 text-gray-600'
+                }`}>{c}</span>
               ))}
               {restaurant.priceRange && (
-                <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full">{restaurant.priceRange}</span>
+                <span className="px-2 py-0.5 bg-green-500/20 text-green-600 text-xs rounded-full">{restaurant.priceRange}</span>
               )}
             </div>
 
             {/* Name */}
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">{restaurant.name}</h1>
+            <h1 className={`text-2xl md:text-3xl font-bold mb-2 ${
+              theme === 'dark' ? 'text-white' : 'text-gray-900'
+            }`}>{restaurant.name}</h1>
 
             {/* Rating */}
             {restaurant.rating && (
               <div className="flex items-center gap-2 mb-3">
                 <div className="flex items-center gap-1 px-2 py-1 bg-amber-500/20 rounded-lg">
-                  <span className="text-amber-400">★</span>
-                  <span className="font-bold text-white">{restaurant.rating.toFixed(1)}</span>
+                  <span className="text-amber-500">★</span>
+                  <span className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    {restaurant.rating.toFixed(1)}
+                  </span>
                 </div>
-                <span className="text-white/50 text-sm">{restaurant.ratingCount} отзывов</span>
+                <span className={theme === 'dark' ? 'text-white/50' : 'text-gray-500'} style={{fontSize: '0.875rem'}}>
+                  {restaurant.ratingCount} отзывов
+                </span>
               </div>
             )}
 
             {/* Address */}
-            <p className="text-white/60 text-sm mb-4">📍 {restaurant.address}</p>
+            <p className={`text-sm mb-4 ${theme === 'dark' ? 'text-white/60' : 'text-gray-500'}`}>
+              📍 {restaurant.address}
+            </p>
 
             {/* Actions */}
             <div className="flex flex-wrap gap-2">
@@ -227,18 +285,24 @@ export default function RestaurantPage() {
                 </a>
               )}
               {restaurant.sourceUrl && (
-                <a href={restaurant.sourceUrl} target="_blank" className="flex items-center gap-1.5 px-4 py-2 bg-white/10 text-white text-sm rounded-xl hover:bg-white/20">
+                <a href={restaurant.sourceUrl} target="_blank" className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl transition-colors ${
+                  theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}>
                   🗺️ Карта
                 </a>
               )}
               {restaurant.website && (
-                <a href={restaurant.website} target="_blank" className="flex items-center gap-1.5 px-4 py-2 bg-white/10 text-white text-sm rounded-xl hover:bg-white/20">
+                <a href={restaurant.website} target="_blank" className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl transition-colors ${
+                  theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}>
                   🌐 Сайт
                 </a>
               )}
               <button 
                 onClick={() => navigator.share?.({ title: restaurant.name, url: window.location.href })}
-                className="flex items-center gap-1.5 px-4 py-2 bg-white/10 text-white text-sm rounded-xl hover:bg-white/20"
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl transition-colors ${
+                  theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
               >
                 📤 Поделиться
               </button>
@@ -266,15 +330,17 @@ export default function RestaurantPage() {
             )}
 
             {/* Reviews */}
-            <div className="bg-white/5 rounded-2xl p-4">
+            <div className={`rounded-2xl p-4 ${
+              theme === 'dark' ? 'bg-white/5' : 'bg-white border border-gray-200 shadow-sm'
+            }`}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-bold text-white flex items-center gap-2">
-                  💬 Отзывы <span className="text-white/50 font-normal">({restaurant.reviews?.length || 0})</span>
+                <h2 className={`font-bold flex items-center gap-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                  💬 Отзывы <span className={`font-normal ${theme === 'dark' ? 'text-white/50' : 'text-gray-400'}`}>({restaurant.reviews?.length || 0})</span>
                 </h2>
                 {restaurant.rating && (
                   <div className="flex items-center gap-1">
                     <span className="text-amber-400">★★★★★</span>
-                    <span className="font-bold text-white">{restaurant.rating.toFixed(1)}</span>
+                    <span className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{restaurant.rating.toFixed(1)}</span>
                   </div>
                 )}
               </div>
@@ -282,7 +348,9 @@ export default function RestaurantPage() {
               {restaurant.reviews?.length > 0 ? (
                 <div className="space-y-3">
                   {restaurant.reviews.slice(0, 5).map((review) => (
-                    <div key={review.id} className="p-3 rounded-xl bg-white/5">
+                    <div key={review.id} className={`p-3 rounded-xl ${
+                      theme === 'dark' ? 'bg-white/5' : 'bg-gray-50'
+                    }`}>
                       <div className="flex items-start gap-3">
                         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
                           {review.authorAvatar ? (
@@ -294,22 +362,26 @@ export default function RestaurantPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2 mb-1">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium text-white text-sm">{review.author || 'Аноним'}</span>
+                              <span className={`font-medium text-sm ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                {review.author || 'Аноним'}
+                              </span>
                               {review.isLocalGuide && (
-                                <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-xs rounded">Local Guide</span>
+                                <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-500 text-xs rounded">Local Guide</span>
                               )}
                             </div>
                             <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/20 rounded">
-                              <span className="text-amber-400 text-xs">★</span>
-                              <span className="text-amber-300 text-xs font-bold">{review.rating}</span>
+                              <span className="text-amber-500 text-xs">★</span>
+                              <span className="text-amber-600 text-xs font-bold">{review.rating}</span>
                             </div>
                           </div>
-                          <p className="text-white/50 text-xs mb-1">
+                          <p className={`text-xs mb-1 ${theme === 'dark' ? 'text-white/50' : 'text-gray-400'}`}>
                             {new Date(review.date).toLocaleDateString('ru-RU')}
                             {review.authorReviewsCount && ` • ${review.authorReviewsCount} отзывов`}
                           </p>
                           {review.text && (
-                            <p className="text-white/80 text-sm leading-relaxed">{review.text}</p>
+                            <p className={`text-sm leading-relaxed ${theme === 'dark' ? 'text-white/80' : 'text-gray-700'}`}>
+                              {review.text}
+                            </p>
                           )}
                           {review.photos && review.photos.length > 0 && (
                             <div className="flex gap-1.5 mt-2">
@@ -320,8 +392,8 @@ export default function RestaurantPage() {
                           )}
                           {review.ownerResponse && (
                             <div className="mt-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                              <p className="text-emerald-400 text-xs font-medium mb-1">Ответ владельца</p>
-                              <p className="text-white/60 text-xs">{review.ownerResponse}</p>
+                              <p className="text-emerald-500 text-xs font-medium mb-1">Ответ владельца</p>
+                              <p className={`text-xs ${theme === 'dark' ? 'text-white/60' : 'text-gray-600'}`}>{review.ownerResponse}</p>
                             </div>
                           )}
                         </div>
@@ -329,13 +401,15 @@ export default function RestaurantPage() {
                     </div>
                   ))}
                   {restaurant.reviews.length > 5 && (
-                    <button className="w-full py-2 text-center text-white/50 text-sm hover:text-white/70">
+                    <button className={`w-full py-2 text-center text-sm ${
+                      theme === 'dark' ? 'text-white/50 hover:text-white/70' : 'text-gray-500 hover:text-gray-700'
+                    }`}>
                       Показать все ({restaurant.reviews.length})
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="text-center py-8 text-white/40">
+                <div className={`text-center py-8 ${theme === 'dark' ? 'text-white/40' : 'text-gray-400'}`}>
                   <div className="text-3xl mb-2">💬</div>
                   <p>Пока нет отзывов</p>
                 </div>
@@ -346,8 +420,12 @@ export default function RestaurantPage() {
           {/* Sidebar */}
           <div className="space-y-4">
             {/* Working Hours */}
-            <div className="bg-white/5 rounded-2xl p-4">
-              <h3 className="font-bold text-white mb-3 flex items-center gap-2">🕐 Время работы</h3>
+            <div className={`rounded-2xl p-4 ${
+              theme === 'dark' ? 'bg-white/5' : 'bg-white border border-gray-200 shadow-sm'
+            }`}>
+              <h3 className={`font-bold mb-3 flex items-center gap-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                🕐 Время работы
+              </h3>
               {restaurant.workingHours?.length > 0 ? (
                 <div className="space-y-1">
                   {[1, 2, 3, 4, 5, 6, 0].map((dayNum) => {
@@ -355,8 +433,13 @@ export default function RestaurantPage() {
                     const isToday = new Date().getDay() === dayNum;
                     return (
                       <div key={dayNum} className={`flex justify-between py-1.5 px-2 rounded-lg text-sm ${isToday ? 'bg-green-500/20' : ''}`}>
-                        <span className={isToday ? 'text-green-400 font-medium' : 'text-white/60'}>{DAYS_SHORT[dayNum]}</span>
-                        <span className={!h || h.isClosed ? 'text-white/40' : 'text-white'}>
+                        <span className={isToday ? 'text-green-500 font-medium' : theme === 'dark' ? 'text-white/60' : 'text-gray-500'}>
+                          {DAYS_SHORT[dayNum]}
+                        </span>
+                        <span className={!h || h.isClosed 
+                          ? theme === 'dark' ? 'text-white/40' : 'text-gray-400'
+                          : theme === 'dark' ? 'text-white' : 'text-gray-900'
+                        }>
                           {!h ? '—' : h.isClosed ? 'Закрыто' : `${h.openTime}–${h.closeTime}`}
                         </span>
                       </div>
@@ -364,35 +447,51 @@ export default function RestaurantPage() {
                   })}
                 </div>
               ) : (
-                <p className="text-white/40 text-sm text-center py-4">Нет данных</p>
+                <p className={`text-sm text-center py-4 ${theme === 'dark' ? 'text-white/40' : 'text-gray-400'}`}>
+                  Нет данных
+                </p>
               )}
             </div>
 
             {/* Contacts */}
-            <div className="bg-white/5 rounded-2xl p-4">
-              <h3 className="font-bold text-white mb-3 flex items-center gap-2">📞 Контакты</h3>
+            <div className={`rounded-2xl p-4 ${
+              theme === 'dark' ? 'bg-white/5' : 'bg-white border border-gray-200 shadow-sm'
+            }`}>
+              <h3 className={`font-bold mb-3 flex items-center gap-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                📞 Контакты
+              </h3>
               <div className="space-y-2">
                 {restaurant.phone && (
-                  <a href={`tel:${restaurant.phone}`} className="flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-                    <span className="text-green-400">📱</span>
-                    <span className="text-white text-sm">{restaurant.phone}</span>
+                  <a href={`tel:${restaurant.phone}`} className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                    theme === 'dark' ? 'bg-white/5 hover:bg-white/10' : 'bg-gray-50 hover:bg-gray-100'
+                  }`}>
+                    <span className="text-green-500">📱</span>
+                    <span className={`text-sm ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{restaurant.phone}</span>
                   </a>
                 )}
                 {restaurant.website && (
-                  <a href={restaurant.website} target="_blank" className="flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-                    <span className="text-blue-400">🌐</span>
-                    <span className="text-white text-sm truncate">{restaurant.website.replace(/^https?:\/\//, '')}</span>
+                  <a href={restaurant.website} target="_blank" className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                    theme === 'dark' ? 'bg-white/5 hover:bg-white/10' : 'bg-gray-50 hover:bg-gray-100'
+                  }`}>
+                    <span className="text-blue-500">🌐</span>
+                    <span className={`text-sm truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                      {restaurant.website.replace(/^https?:\/\//, '')}
+                    </span>
                   </a>
                 )}
-                <div className="flex items-start gap-3 p-2 rounded-lg bg-white/5">
-                  <span className="text-orange-400">📍</span>
-                  <span className="text-white/70 text-sm">{restaurant.address}</span>
+                <div className={`flex items-start gap-3 p-2 rounded-lg ${
+                  theme === 'dark' ? 'bg-white/5' : 'bg-gray-50'
+                }`}>
+                  <span className="text-orange-500">📍</span>
+                  <span className={`text-sm ${theme === 'dark' ? 'text-white/70' : 'text-gray-600'}`}>
+                    {restaurant.address}
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Source */}
-            <p className="text-center text-white/30 text-xs">
+            <p className={`text-center text-xs ${theme === 'dark' ? 'text-white/30' : 'text-gray-400'}`}>
               Данные: {restaurant.source === 'google' ? 'Google Maps' : restaurant.source === 'yandex' ? 'Яндекс' : '2ГИС'}
             </p>
           </div>
