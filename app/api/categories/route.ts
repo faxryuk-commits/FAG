@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// Принудительно динамический рендер (требует подключение к БД)
+export const dynamic = 'force-dynamic';
+
 /**
  * Стандартные категории настроений и их ключевые слова
  */

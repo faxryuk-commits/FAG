@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 // Популярные запросы (статические)
 const POPULAR_SEARCHES = [
@@ -85,6 +86,103 @@ interface CategoryStats {
   cuisines: Array<{ id: string; label: string; emoji: string; count: number }>;
   stats: { total: number; avgRating: number; withReviews: number };
 }
+
+// Мемоизированная карточка ресторана для оптимизации
+const RestaurantCard = memo(({ 
+  restaurant, 
+  theme,
+  priority = false 
+}: { 
+  restaurant: Restaurant; 
+  theme: 'dark' | 'light';
+  priority?: boolean;
+}) => (
+  <Link href={`/restaurants/${restaurant.slug}`} className="group">
+    <div className={`rounded-2xl overflow-hidden border transition-colors ${
+      theme === 'dark' 
+        ? 'bg-white/5 border-white/10 hover:border-white/20' 
+        : 'bg-white border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md'
+    }`} style={{ contentVisibility: 'auto', containIntrinsicSize: '0 320px' }}>
+      {/* Изображение */}
+      <div className="h-44 relative overflow-hidden">
+        {restaurant.images?.[0] ? (
+          <Image
+            src={restaurant.images[0]}
+            alt={restaurant.name}
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            className="object-cover"
+            loading={priority ? 'eager' : 'lazy'}
+            priority={priority}
+          />
+        ) : (
+          <div className={`w-full h-full flex items-center justify-center ${
+            theme === 'dark' 
+              ? 'bg-gradient-to-br from-orange-500/20 to-pink-500/20' 
+              : 'bg-gradient-to-br from-orange-100 to-pink-100'
+          }`}>
+            <span className="text-5xl opacity-30">🍽️</span>
+          </div>
+        )}
+        
+        {/* Градиент */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f1a] via-transparent to-transparent"></div>
+        
+        {/* Бейджи */}
+        <div className="absolute top-0 left-0 right-0 p-3 flex items-start justify-between">
+          <div className="flex flex-wrap gap-1.5 max-w-[60%]">
+            {restaurant.cuisine?.slice(0, 2).map((c, i) => (
+              <span key={i} className="px-2.5 py-1 bg-black/50 backdrop-blur-md rounded-lg text-xs font-medium text-white/90 border border-white/10">
+                {c}
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-col gap-1.5 items-end">
+            {restaurant.priceRange && (
+              <span className="px-2.5 py-1 bg-emerald-500/80 backdrop-blur-sm rounded-lg text-xs font-bold text-white shadow-lg shadow-emerald-500/30">
+                {restaurant.priceRange}
+              </span>
+            )}
+            {restaurant.distance !== undefined && (
+              <span className="px-2.5 py-1 bg-blue-500/80 backdrop-blur-sm rounded-lg text-xs font-bold text-white shadow-lg shadow-blue-500/30">
+                📍 {restaurant.distance < 1 
+                  ? `${Math.round(restaurant.distance * 1000)}м` 
+                  : `${restaurant.distance.toFixed(1)}км`}
+              </span>
+            )}
+          </div>
+        </div>
+        
+        {/* Рейтинг */}
+        {restaurant.rating && (
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-2 bg-black/70 backdrop-blur-md rounded-2xl border border-white/10 shadow-xl">
+            <span className="text-amber-400 text-lg">★</span>
+            <span className="text-white font-bold">{restaurant.rating.toFixed(1)}</span>
+            {restaurant.ratingCount > 0 && (
+              <span className="text-white/50 text-xs">({restaurant.ratingCount > 999 ? `${(restaurant.ratingCount/1000).toFixed(1)}k` : restaurant.ratingCount})</span>
+            )}
+          </div>
+        )}
+      </div>
+      
+      {/* Информация */}
+      <div className="p-4">
+        <h3 className={`font-bold text-lg mb-1.5 line-clamp-1 ${
+          theme === 'dark' ? 'text-white' : 'text-gray-900'
+        }`}>
+          {restaurant.name}
+        </h3>
+        <p className={`text-sm line-clamp-1 ${
+          theme === 'dark' ? 'text-white/50' : 'text-gray-500'
+        }`}>
+          {restaurant.address}
+        </p>
+      </div>
+    </div>
+  </Link>
+));
+
+RestaurantCard.displayName = 'RestaurantCard';
 
 function getTimeGreeting() {
   const hour = new Date().getHours();
@@ -826,121 +924,13 @@ export default function Home() {
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {displayedRestaurants.map((restaurant) => (
-                  <Link
-                    key={restaurant.id}
-                    href={`/restaurants/${restaurant.slug}`}
-                    className="group"
-                  >
-                    <div className={`rounded-2xl overflow-hidden border transition-colors ${
-                      theme === 'dark' 
-                        ? 'bg-white/5 border-white/10 hover:border-white/20' 
-                        : 'bg-white border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md'
-                    }`}>
-                      {/* Изображение */}
-                      <div className="h-44 relative overflow-hidden">
-                        {restaurant.images?.[0] ? (
-                          <img
-                            src={restaurant.images[0]}
-                            alt={restaurant.name}
-                            loading="lazy"
-                            decoding="async"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className={`w-full h-full flex items-center justify-center ${
-                            theme === 'dark' 
-                              ? 'bg-gradient-to-br from-orange-500/20 to-pink-500/20' 
-                              : 'bg-gradient-to-br from-orange-100 to-pink-100'
-                          }`}>
-                            <span className="text-5xl opacity-30">🍽️</span>
-                          </div>
-                        )}
-                        
-                        {/* Многослойный градиент для глубины */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#0f0f1a] via-transparent to-transparent"></div>
-                        <div className="absolute inset-0 bg-gradient-to-br from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                        
-                        {/* Верхняя панель с бейджами */}
-                        <div className="absolute top-0 left-0 right-0 p-3 flex items-start justify-between">
-                          {/* Левые бейджи - кухня */}
-                          <div className="flex flex-wrap gap-1.5 max-w-[60%]">
-                            {restaurant.cuisine?.slice(0, 2).map((c, i) => (
-                              <span 
-                                key={i} 
-                                className="px-2.5 py-1 bg-black/50 backdrop-blur-md rounded-lg text-xs font-medium text-white/90 border border-white/10"
-                              >
-                                {c}
-                              </span>
-                            ))}
-                          </div>
-                          
-                          {/* Правые бейджи */}
-                          <div className="flex flex-col gap-1.5 items-end">
-                            {restaurant.priceRange && (
-                              <span className="px-2.5 py-1 bg-emerald-500/80 backdrop-blur-sm rounded-lg text-xs font-bold text-white shadow-lg shadow-emerald-500/30">
-                                {restaurant.priceRange}
-                              </span>
-                            )}
-                            {restaurant.distance !== undefined && (
-                              <span className="px-2.5 py-1 bg-blue-500/80 backdrop-blur-sm rounded-lg text-xs font-bold text-white shadow-lg shadow-blue-500/30">
-                                📍 {restaurant.distance < 1 
-                                  ? `${Math.round(restaurant.distance * 1000)}м` 
-                                  : `${restaurant.distance.toFixed(1)}км`}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* Рейтинг - плавающий бейдж внизу */}
-                        {restaurant.rating && (
-                          <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-2 bg-black/70 backdrop-blur-md rounded-2xl border border-white/10 shadow-xl">
-                            <div className="flex items-center gap-1">
-                              <span className="text-amber-400 text-lg drop-shadow-glow">★</span>
-                              <span className="font-black text-lg text-white">{restaurant.rating.toFixed(1)}</span>
-                            </div>
-                            <div className="w-px h-4 bg-white/20"></div>
-                            <span className="text-white/60 text-xs">{restaurant.ratingCount} отзывов</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Контент карточки */}
-                      <div className="p-5">
-                        {/* Название */}
-                        <h3 className={`font-bold text-lg line-clamp-1 transition-colors ${
-                          theme === 'dark' ? 'text-white' : 'text-gray-900'
-                        }`}>
-                          {restaurant.name}
-                        </h3>
-                        
-                        {/* Адрес */}
-                        <div className={`flex items-center gap-2 mt-3 text-sm ${
-                          theme === 'dark' ? 'text-white/50' : 'text-gray-500'
-                        }`}>
-                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${
-                            theme === 'dark' ? 'bg-white/10' : 'bg-gray-100'
-                          }`}>
-                            📍
-                          </div>
-                          <span className="line-clamp-1">{restaurant.address}</span>
-                        </div>
-                        
-                        {/* Нижняя панель - действия */}
-                        <div className={`flex items-center justify-between mt-4 pt-4 border-t ${
-                          theme === 'dark' ? 'border-white/5' : 'border-gray-100'
-                        }`}>
-                          <span className={`text-xs ${theme === 'dark' ? 'text-white/40' : 'text-gray-400'}`}>
-                            {restaurant.cuisine?.length || 0} категорий
-                          </span>
-                          <div className="flex items-center gap-1.5 text-orange-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
-                            <span>Подробнее</span>
-                            <span>→</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
+                {displayedRestaurants.map((restaurant, index) => (
+                  <RestaurantCard 
+                    key={restaurant.id} 
+                    restaurant={restaurant} 
+                    theme={theme}
+                    priority={index < 6} // Первые 6 карточек загружаем приоритетно
+                  />
                 ))}
               </div>
               

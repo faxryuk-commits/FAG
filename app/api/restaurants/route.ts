@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// Принудительно динамический рендер (API использует query params)
+export const dynamic = 'force-dynamic';
+
 /**
  * Справочник блюд → ключевые слова для поиска заведений
  * Если пользователь ищет блюдо, находим заведения где его могут готовить
