@@ -2337,11 +2337,13 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
     setTimeout(() => {
       if (checkPassword(password)) {
         // Сохраняем сессию
-        const session = {
-          hash: simpleHash(password + Date.now().toString()),
-          expires: Date.now() + 24 * 60 * 60 * 1000 // 24 часа
-        };
-        localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
+        if (typeof window !== 'undefined') {
+          const session = {
+            hash: simpleHash(password + Date.now().toString()),
+            expires: Date.now() + 24 * 60 * 60 * 1000 // 24 часа
+          };
+          localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
+        }
         onLogin();
       } else {
         setError('Неверный пароль');
@@ -2419,6 +2421,8 @@ export default function AdminPage() {
   
   // Проверка сессии при загрузке
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     try {
       const sessionStr = localStorage.getItem(ADMIN_SESSION_KEY);
       if (sessionStr) {
@@ -2428,12 +2432,15 @@ export default function AdminPage() {
           return;
         }
       }
-    } catch {}
+    } catch (e) {
+      console.error('Session check error:', e);
+    }
     setIsAuthenticated(false);
   }, []);
   
   // Функция выхода
   const handleLogout = () => {
+    if (typeof window === 'undefined') return;
     localStorage.removeItem(ADMIN_SESSION_KEY);
     setIsAuthenticated(false);
   };
