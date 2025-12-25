@@ -121,11 +121,33 @@ export default function Home() {
   // Приветствие - рендерится только на клиенте для избежания hydration mismatch
   const [greeting, setGreeting] = useState({ emoji: '🍽️', text: 'Добро пожаловать', meal: '' });
   
+  // Тема: light / dark
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  
   useEffect(() => {
     setGreeting(getTimeGreeting());
     // Загружаем историю поиска
     setSearchHistory(getSearchHistory());
+    
+    // Определяем тему по времени суток или системной настройке
+    const hour = new Date().getHours();
+    const isDayTime = hour >= 6 && hour < 20;
+    const savedTheme = localStorage.getItem('foodguide_theme') as 'dark' | 'light' | null;
+    
+    if (savedTheme) {
+      setTheme(savedTheme);
+    } else if (isDayTime) {
+      setTheme('light');
+    } else {
+      setTheme('dark');
+    }
   }, []);
+  
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    localStorage.setItem('foodguide_theme', newTheme);
+  };
 
   // Генерация подсказок при вводе
   useEffect(() => {
@@ -445,59 +467,86 @@ export default function Home() {
   const displayedRestaurants = restaurants;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0f0f1a] via-[#1a1a2e] to-[#16213e]">
+    <div className={`min-h-screen transition-colors duration-300 ${
+      theme === 'dark' 
+        ? 'bg-gradient-to-br from-[#0f0f1a] via-[#1a1a2e] to-[#16213e]' 
+        : 'bg-gradient-to-br from-gray-50 via-white to-gray-100'
+    }`}>
       {/* Compact Header + Search */}
-      <header className="sticky top-0 z-50 backdrop-blur-xl bg-[#0f0f1a]/95 border-b border-white/10 shadow-lg shadow-black/20">
-        <div className="max-w-6xl mx-auto px-4 py-3">
-          {/* Верхняя строка: лого + действия */}
-          <div className="flex items-center justify-between gap-4 mb-2">
-            <Link href="/" className="flex items-center gap-2.5 shrink-0">
-              {/* Delever Logo with contrast */}
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-400 to-cyan-500 p-0.5 shadow-lg shadow-cyan-500/30">
-                <img 
-                  src="/delever-icon.svg" 
-                  alt="Delever" 
-                  className="w-full h-full rounded-lg"
-                />
-              </div>
-              <div className="hidden sm:flex flex-col leading-none">
-                <span className="font-bold text-base text-white drop-shadow-sm">
-                  Delever
-                </span>
-                <span className="text-[10px] text-cyan-400/80 tracking-wider uppercase font-medium">
-                  Food Map
-                </span>
-              </div>
+      <header className={`sticky top-0 z-50 backdrop-blur-xl border-b shadow-lg transition-colors duration-300 ${
+        theme === 'dark' 
+          ? 'bg-[#0f0f1a]/95 border-white/10 shadow-black/20' 
+          : 'bg-white/95 border-gray-200 shadow-gray-200/50'
+      }`}>
+        <div className="max-w-6xl mx-auto px-4 py-2.5">
+          {/* Компактная строка: лого + поиск + действия */}
+          <div className="flex items-center gap-3">
+            {/* Логотип */}
+            <Link href="/" className="flex items-center gap-2 shrink-0">
+              <img 
+                src={theme === 'dark' ? '/delever-icon.svg' : '/Delever logo original svg.svg'}
+                alt="Delever" 
+                className="h-8 w-auto"
+              />
+              <span className={`hidden sm:block font-bold text-sm ${
+                theme === 'dark' ? 'text-white' : 'text-gray-900'
+              }`}>
+                Food Map
+              </span>
             </Link>
             
-            {/* Приветствие - компактное */}
-            <div className="hidden md:flex items-center gap-2 text-sm">
+            {/* Приветствие - минимальное */}
+            <div className={`hidden lg:flex items-center gap-1.5 text-xs ${
+              theme === 'dark' ? 'text-white/40' : 'text-gray-500'
+            }`}>
               <span>{greeting.emoji}</span>
-              <span className="text-white/50">{greeting.text},</span>
+              <span>{greeting.text}</span>
               <span className="text-white/80">{greeting.meal}</span>
             </div>
             
-            <div className="flex items-center gap-2">
+            {/* Действия справа */}
+            <div className="flex items-center gap-1.5 ml-auto">
+              {/* Геолокация */}
               <button
                 onClick={requestLocation}
                 disabled={locationStatus === 'loading'}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all ${
+                className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-all ${
                   locationStatus === 'success'
-                    ? 'bg-green-500/20 text-green-400'
+                    ? 'bg-green-500/20 text-green-500'
                     : locationStatus === 'error'
                     ? 'bg-red-500/20 text-red-400'
-                    : 'bg-white/5 text-white/50 hover:bg-white/10'
+                    : theme === 'dark'
+                    ? 'bg-white/5 text-white/50 hover:bg-white/10'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                 }`}
               >
                 {locationStatus === 'loading' ? '⏳' : '📍'}
-                <span className="hidden sm:inline">
-                  {locationStatus === 'success' ? 'Рядом' : locationStatus === 'error' ? 'Нет GPS' : 'Рядом'}
+                <span className="hidden sm:inline text-[11px]">
+                  {locationStatus === 'success' ? 'GPS' : 'Рядом'}
                 </span>
               </button>
               
+              {/* Тема */}
+              <button
+                onClick={toggleTheme}
+                className={`p-1.5 rounded-lg text-sm transition-all ${
+                  theme === 'dark'
+                    ? 'bg-white/5 text-white/50 hover:bg-white/10'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+                title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+              >
+                {theme === 'dark' ? '☀️' : '🌙'}
+              </button>
+              
+              {/* Админка */}
               <Link 
                 href="/admin" 
-                className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-white/50 hover:text-white text-xs transition-all"
+                className={`p-1.5 rounded-lg text-sm transition-all ${
+                  theme === 'dark'
+                    ? 'bg-white/5 text-white/50 hover:bg-white/10'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
               >
                 ⚙️
               </Link>
@@ -505,8 +554,12 @@ export default function Home() {
           </div>
           
           {/* Строка поиска */}
-          <form onSubmit={handleSearch} className="relative">
-            <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10">
+          <form onSubmit={handleSearch} className="relative mt-2">
+            <div className={`flex items-center gap-2 rounded-xl border transition-colors ${
+              theme === 'dark' 
+                ? 'bg-white/5 border-white/10' 
+                : 'bg-gray-50 border-gray-200'
+            }`}>
               <div className="relative flex-1">
                 <input
                   ref={searchInputRef}
@@ -516,7 +569,11 @@ export default function Home() {
                   onFocus={() => setShowSuggestions(true)}
                   onKeyDown={handleSearchKeyDown}
                   placeholder="🔍 Поиск по названию, кухне или блюду..."
-                  className="w-full px-3 py-2 bg-transparent text-white text-sm placeholder-white/30 focus:outline-none"
+                  className={`w-full px-3 py-2 bg-transparent text-sm focus:outline-none ${
+                    theme === 'dark' 
+                      ? 'text-white placeholder-white/30' 
+                      : 'text-gray-900 placeholder-gray-400'
+                  }`}
                   autoComplete="off"
                 />
               </div>
@@ -733,7 +790,11 @@ export default function Home() {
                     href={`/restaurants/${restaurant.slug}`}
                     className="group"
                   >
-                    <div className="rounded-2xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-colors">
+                    <div className={`rounded-2xl overflow-hidden border transition-colors ${
+                      theme === 'dark' 
+                        ? 'bg-white/5 border-white/10 hover:border-white/20' 
+                        : 'bg-white border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md'
+                    }`}>
                       {/* Изображение */}
                       <div className="h-44 relative overflow-hidden">
                         {restaurant.images?.[0] ? (
@@ -745,7 +806,11 @@ export default function Home() {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-orange-500/20 to-pink-500/20 flex items-center justify-center">
+                          <div className={`w-full h-full flex items-center justify-center ${
+                            theme === 'dark' 
+                              ? 'bg-gradient-to-br from-orange-500/20 to-pink-500/20' 
+                              : 'bg-gradient-to-br from-orange-100 to-pink-100'
+                          }`}>
                             <span className="text-5xl opacity-30">🍽️</span>
                           </div>
                         )}
@@ -800,22 +865,30 @@ export default function Home() {
                       
                       {/* Контент карточки */}
                       <div className="p-5">
-                        {/* Название с градиентным эффектом при наведении */}
-                        <h3 className="font-bold text-lg text-white group-hover:bg-gradient-to-r group-hover:from-orange-400 group-hover:to-pink-400 group-hover:bg-clip-text group-hover:text-transparent transition-all duration-300 line-clamp-1">
+                        {/* Название */}
+                        <h3 className={`font-bold text-lg line-clamp-1 transition-colors ${
+                          theme === 'dark' ? 'text-white' : 'text-gray-900'
+                        }`}>
                           {restaurant.name}
                         </h3>
                         
                         {/* Адрес */}
-                        <div className="flex items-center gap-2 mt-3 text-white/50 text-sm">
-                          <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-xs">
+                        <div className={`flex items-center gap-2 mt-3 text-sm ${
+                          theme === 'dark' ? 'text-white/50' : 'text-gray-500'
+                        }`}>
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${
+                            theme === 'dark' ? 'bg-white/10' : 'bg-gray-100'
+                          }`}>
                             📍
                           </div>
                           <span className="line-clamp-1">{restaurant.address}</span>
                         </div>
                         
                         {/* Нижняя панель - действия */}
-                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/5">
-                          <span className="text-xs text-white/40">
+                        <div className={`flex items-center justify-between mt-4 pt-4 border-t ${
+                          theme === 'dark' ? 'border-white/5' : 'border-gray-100'
+                        }`}>
+                          <span className={`text-xs ${theme === 'dark' ? 'text-white/40' : 'text-gray-400'}`}>
                             {restaurant.cuisine?.length || 0} категорий
                           </span>
                           <div className="flex items-center gap-1.5 text-orange-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
@@ -869,17 +942,29 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/5 py-8">
+      <footer className={`border-t py-8 ${
+        theme === 'dark' ? 'border-white/5' : 'border-gray-200'
+      }`}>
         <div className="max-w-6xl mx-auto px-4 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <div className="w-6 h-6 rounded bg-gradient-to-br from-teal-400 to-cyan-500 p-0.5">
-              <img src="/delever-icon.svg" alt="Delever" className="w-full h-full rounded" />
-            </div>
-            <span className="font-bold text-white/80">Delever Food Map</span>
+            <img 
+              src={theme === 'dark' ? '/delever-icon.svg' : '/Delever logo original svg.svg'}
+              alt="Delever" 
+              className="h-5 w-auto" 
+            />
+            <span className={`font-bold ${theme === 'dark' ? 'text-white/80' : 'text-gray-700'}`}>
+              Food Map
+            </span>
           </div>
-          <p className="text-white/30 text-sm">Карта ресторанов и доставка еды</p>
-          <div className="flex items-center justify-center gap-4 mt-3 text-xs text-white/20">
-            <a href="https://delever.io" target="_blank" rel="noopener" className="hover:text-white/50 transition">delever.io</a>
+          <p className={`text-sm ${theme === 'dark' ? 'text-white/30' : 'text-gray-400'}`}>
+            Карта ресторанов и доставка еды
+          </p>
+          <div className={`flex items-center justify-center gap-4 mt-3 text-xs ${
+            theme === 'dark' ? 'text-white/20' : 'text-gray-300'
+          }`}>
+            <a href="https://delever.io" target="_blank" rel="noopener" className="hover:opacity-70 transition">
+              delever.io
+            </a>
             <span>•</span>
             <span>© 2025 Delever</span>
           </div>

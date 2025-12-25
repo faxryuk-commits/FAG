@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
     let restaurants;
     
     if (mode === 'hours') {
-      // Рестораны с плейсхолдер часами (00:00-23:59) или без часов
+      // Рестораны с плейсхолдер часами - СНАЧАЛА КАЧЕСТВЕННЫЕ (с рейтингом, отзывами, фото)
       const restaurantIds = await prisma.$queryRaw<{id: string}[]>`
         SELECT DISTINCT r.id
         FROM restaurants r
@@ -121,6 +121,11 @@ export async function POST(request: NextRequest) {
           wh.id IS NULL
           OR (wh."openTime" = '00:00' AND wh."closeTime" = '23:59' AND wh."isClosed" = false)
         )
+        ORDER BY 
+          CASE WHEN r.rating IS NOT NULL AND r.rating >= 4.0 THEN 0 ELSE 1 END,
+          CASE WHEN array_length(r.images, 1) > 0 THEN 0 ELSE 1 END,
+          COALESCE(r."ratingCount", 0) DESC,
+          r.rating DESC NULLS LAST
         LIMIT ${batchSize}
       `;
       
@@ -138,7 +143,7 @@ export async function POST(request: NextRequest) {
         },
       });
     } else if (mode === 'incomplete') {
-      // Только импортированные без фото
+      // Импортированные без фото - ПРИОРИТЕТ качественным (с рейтингом, отзывами)
       restaurants = await prisma.restaurant.findMany({
         where: {
           sourceId: { startsWith: 'import-' },
@@ -148,6 +153,10 @@ export async function POST(request: NextRequest) {
           ],
           isArchived: false,
         },
+        orderBy: [
+          { rating: 'desc' },
+          { ratingCount: 'desc' },
+        ],
         take: batchSize,
         select: {
           id: true,
@@ -159,7 +168,7 @@ export async function POST(request: NextRequest) {
         },
       });
     } else {
-      // Все без фото
+      // Все без фото - приоритет качественным
       restaurants = await prisma.restaurant.findMany({
         where: {
           OR: [
@@ -168,6 +177,10 @@ export async function POST(request: NextRequest) {
           ],
           isArchived: false,
         },
+        orderBy: [
+          { rating: 'desc' },
+          { ratingCount: 'desc' },
+        ],
         take: batchSize,
         select: {
           id: true,
