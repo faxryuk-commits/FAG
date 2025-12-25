@@ -2444,20 +2444,6 @@ export default function AdminPage() {
     localStorage.removeItem(ADMIN_SESSION_KEY);
     setIsAuthenticated(false);
   };
-  
-  // Показываем загрузку пока проверяем сессию
-  if (isAuthenticated === null) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0f0f1a] via-[#1a1a2e] to-[#16213e] flex items-center justify-center">
-        <div className="text-white/50">⏳ Загрузка...</div>
-      </div>
-    );
-  }
-  
-  // Показываем форму входа если не авторизован
-  if (!isAuthenticated) {
-    return <LoginForm onLogin={() => setIsAuthenticated(true)} />;
-  }
 
   // Загрузка использования Apify
   const fetchApifyUsage = async () => {
@@ -2472,11 +2458,23 @@ export default function AdminPage() {
     }
   };
 
+  const fetchJobs = async () => {
+    try {
+      const res = await fetch('/api/sync');
+      const data = await res.json();
+      setJobs(data.jobs || []);
+    } catch (error) {
+      console.error('Error fetching jobs:', error);
+    }
+  };
+
   // Проверяем есть ли активные задачи
   const hasRunningJobs = jobs.some(j => j.status === 'running');
 
-  // Загрузка скреперов и статистики (один раз при монтировании)
+  // Загрузка скреперов и статистики (только когда авторизован)
   useEffect(() => {
+    if (!isAuthenticated) return;
+    
     fetch('/api/scrapers')
       .then(res => res.json())
       .then(data => setScrapers(data.scrapers || []))
@@ -2493,26 +2491,30 @@ export default function AdminPage() {
     
     // Начальная загрузка задач
     fetchJobs();
-  }, []);
+  }, [isAuthenticated]);
 
   // Polling только когда есть активные задачи
   useEffect(() => {
-    if (!hasRunningJobs) return;
+    if (!isAuthenticated || !hasRunningJobs) return;
     
     // Polling каждые 10 сек только если есть running задачи
     const interval = setInterval(fetchJobs, 10000);
     return () => clearInterval(interval);
-  }, [hasRunningJobs]);
-
-  const fetchJobs = async () => {
-    try {
-      const res = await fetch('/api/sync');
-      const data = await res.json();
-      setJobs(data.jobs || []);
-    } catch (error) {
-      console.error('Error fetching jobs:', error);
-    }
-  };
+  }, [isAuthenticated, hasRunningJobs]);
+  
+  // Показываем загрузку пока проверяем сессию
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0f0f1a] via-[#1a1a2e] to-[#16213e] flex items-center justify-center">
+        <div className="text-white/50">⏳ Загрузка...</div>
+      </div>
+    );
+  }
+  
+  // Показываем форму входа если не авторизован
+  if (!isAuthenticated) {
+    return <LoginForm onLogin={() => setIsAuthenticated(true)} />;
+  }
 
   // Выбор скрейпера
   const selectScraper = (scraper: Scraper) => {
