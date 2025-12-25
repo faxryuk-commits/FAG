@@ -603,14 +603,22 @@ export default function Home() {
             {showSuggestions && suggestions.length > 0 && (
               <div 
                 ref={suggestionsRef}
-                className="absolute top-full left-0 right-0 mt-2 bg-[#12121f] border border-white/20 rounded-xl overflow-hidden z-[100] shadow-2xl shadow-black/50"
+                className={`absolute top-full left-0 right-0 mt-2 rounded-xl overflow-hidden z-[100] shadow-2xl ${
+                  theme === 'dark'
+                    ? 'bg-slate-900 border border-white/10 shadow-black/50'
+                    : 'bg-white border border-gray-200 shadow-gray-300/50'
+                }`}
               >
-                <div className="px-3 py-2 bg-white/5 border-b border-white/10 flex justify-between items-center">
-                  <span className="text-xs text-white/50 font-medium">
+                <div className={`px-3 py-2 border-b flex justify-between items-center ${
+                  theme === 'dark' 
+                    ? 'bg-white/5 border-white/10' 
+                    : 'bg-gray-50 border-gray-100'
+                }`}>
+                  <span className={`text-xs font-medium ${theme === 'dark' ? 'text-white/50' : 'text-gray-500'}`}>
                     {search ? '💡 Подсказки' : '🕐 Недавние поиски'}
                   </span>
                   {searchHistory.length > 0 && !search && (
-                    <button type="button" onClick={handleClearHistory} className="text-xs text-white/40 hover:text-red-400">
+                    <button type="button" onClick={handleClearHistory} className="text-xs text-red-400 hover:text-red-500">
                       Очистить
                     </button>
                   )}
@@ -621,13 +629,19 @@ export default function Home() {
                     key={suggestion}
                     type="button"
                     onClick={() => handleSelectSuggestion(suggestion)}
-                    className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors border-b border-white/5 last:border-0 ${
+                    className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-2 transition-colors border-b last:border-0 ${
+                      theme === 'dark' ? 'border-white/5' : 'border-gray-100'
+                    } ${
                       highlightedIndex === index 
-                        ? 'bg-orange-500/30 text-white' 
-                        : 'text-white/70 hover:bg-white/10'
+                        ? 'bg-orange-500 text-white' 
+                        : theme === 'dark'
+                          ? 'text-white/80 hover:bg-white/10'
+                          : 'text-gray-700 hover:bg-gray-50'
                     }`}
                   >
-                    <span className="text-white/40">{searchHistory.includes(suggestion) ? '🕐' : '🔍'}</span>
+                    <span className={highlightedIndex === index ? 'text-white/80' : theme === 'dark' ? 'text-white/40' : 'text-gray-400'}>
+                      {searchHistory.includes(suggestion) ? '🕐' : '🔍'}
+                    </span>
                     <span>{suggestion}</span>
                   </button>
                 ))}
@@ -639,21 +653,21 @@ export default function Home() {
           {(search || selectedMood || selectedCuisine) && (
             <div className="mt-2 flex items-center justify-center gap-2 text-xs">
               {loading ? (
-                <span className="text-white/40 flex items-center gap-1">
+                <span className={`flex items-center gap-1 ${theme === 'dark' ? 'text-white/40' : 'text-gray-400'}`}>
                   <span className="w-3 h-3 border border-orange-500/30 border-t-orange-500 rounded-full animate-spin"></span>
                   Ищем...
                 </span>
               ) : restaurants.length > 0 ? (
-                <span className="text-white/50">
-                  Найдено: <span className="text-orange-400">{restaurants.length}</span>
-                  {totalCount > restaurants.length && <span className="text-white/30"> / {totalCount}</span>}
+                <span className={theme === 'dark' ? 'text-white/50' : 'text-gray-500'}>
+                  Найдено: <span className="text-orange-500 font-medium">{restaurants.length}</span>
+                  {totalCount > restaurants.length && <span className={theme === 'dark' ? 'text-white/30' : 'text-gray-400'}> / {totalCount}</span>}
                 </span>
               ) : (
-                <span className="text-red-400/70">Не найдено</span>
+                <span className="text-red-500">Не найдено</span>
               )}
               <button
                 onClick={() => { setSearch(''); setSelectedMood(null); setSelectedCuisine(null); fetchRestaurants({}); }}
-                className="text-white/30 hover:text-white/60"
+                className={`hover:text-red-500 transition-colors ${theme === 'dark' ? 'text-white/30' : 'text-gray-400'}`}
               >
                 ✕ сброс
               </button>
@@ -664,13 +678,19 @@ export default function Home() {
 
       {/* Категории - скрываем при активном поиске */}
       {!search && (
-        <div className="bg-[#12121f]/50 border-b border-white/5">
+        <div className={`border-b ${
+          theme === 'dark' 
+            ? 'bg-slate-900/50 border-white/5' 
+            : 'bg-white/80 border-gray-200 shadow-sm'
+        }`}>
           {/* Быстрые фильтры */}
           <section className="px-4 pt-3 pb-2">
             <div className="max-w-6xl mx-auto">
               <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-                <span className="text-white/30 text-xs shrink-0 uppercase tracking-wide">Настроение</span>
-                <span className="text-white/20">|</span>
+                <span className={`text-xs shrink-0 uppercase tracking-wide font-medium ${
+                  theme === 'dark' ? 'text-white/40' : 'text-gray-400'
+                }`}>Настроение</span>
+                <span className={theme === 'dark' ? 'text-white/20' : 'text-gray-300'}>|</span>
                 {MOOD_CATEGORIES.map((mood) => {
                   const moodStat = categoryStats?.moods.find(m => m.id === mood.id);
                   const count = moodStat?.count || 0;
@@ -679,18 +699,26 @@ export default function Home() {
                       key={mood.id}
                       onClick={() => handleMoodSelect(mood)}
                       disabled={count === 0}
-                      className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
+                      className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${
                         selectedMood === mood.id
-                          ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-lg shadow-orange-500/20'
+                          ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-lg shadow-orange-500/30'
                           : count === 0 
-                            ? 'bg-white/5 text-white/20 cursor-not-allowed'
-                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 border border-white/10'
+                            ? theme === 'dark' 
+                              ? 'bg-white/5 text-white/20 cursor-not-allowed'
+                              : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                            : theme === 'dark'
+                              ? 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white border border-white/10'
+                              : 'bg-gray-100 text-gray-600 hover:bg-orange-50 hover:text-orange-600 border border-gray-200 hover:border-orange-300'
                       }`}
                     >
                       <span>{mood.emoji}</span>
                       <span className="hidden sm:inline">{mood.label}</span>
                       {count > 0 && (
-                        <span className="text-xs bg-white/10 px-1.5 rounded">{count}</span>
+                        <span className={`text-xs px-1.5 rounded-full ${
+                          selectedMood === mood.id 
+                            ? 'bg-white/20' 
+                            : theme === 'dark' ? 'bg-white/10' : 'bg-gray-200 text-gray-500'
+                        }`}>{count}</span>
                       )}
                     </button>
                   );
@@ -703,8 +731,10 @@ export default function Home() {
           <section className="px-4 pb-3">
             <div className="max-w-6xl mx-auto">
               <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-                <span className="text-white/30 text-xs shrink-0 uppercase tracking-wide">Кухня</span>
-                <span className="text-white/20">|</span>
+                <span className={`text-xs shrink-0 uppercase tracking-wide font-medium ${
+                  theme === 'dark' ? 'text-white/40' : 'text-gray-400'
+                }`}>Кухня</span>
+                <span className={theme === 'dark' ? 'text-white/20' : 'text-gray-300'}>|</span>
                 {CUISINES.map((cuisine) => {
                   const cuisineStat = categoryStats?.cuisines.find(c => c.id === cuisine.id);
                   const count = cuisineStat?.count || 0;
@@ -713,17 +743,25 @@ export default function Home() {
                       key={cuisine.id}
                       onClick={() => handleCuisineSelect(cuisine)}
                       disabled={count === 0}
-                      className={`shrink-0 px-3 py-1.5 rounded-lg text-sm transition-all flex items-center gap-1.5 ${
+                      className={`shrink-0 px-3 py-1.5 rounded-full text-sm transition-all flex items-center gap-1.5 ${
                         selectedCuisine === cuisine.id
-                          ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white font-medium shadow-lg shadow-orange-500/20'
+                          ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white font-medium shadow-lg shadow-orange-500/30'
                           : count === 0 
-                            ? 'bg-white/5 text-white/20 cursor-not-allowed'
-                            : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 border border-white/10'
+                            ? theme === 'dark'
+                              ? 'bg-white/5 text-white/20 cursor-not-allowed'
+                              : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                            : theme === 'dark'
+                              ? 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white border border-white/10'
+                              : 'bg-gray-100 text-gray-600 hover:bg-orange-50 hover:text-orange-600 border border-gray-200 hover:border-orange-300'
                       }`}
                     >
                       <span>{cuisine.label}</span>
                       {count > 0 && (
-                        <span className="text-xs bg-white/10 px-1.5 rounded">{count}</span>
+                        <span className={`text-xs px-1.5 rounded-full ${
+                          selectedCuisine === cuisine.id 
+                            ? 'bg-white/20' 
+                            : theme === 'dark' ? 'bg-white/10' : 'bg-gray-200 text-gray-500'
+                        }`}>{count}</span>
                       )}
                     </button>
                   );
@@ -735,10 +773,12 @@ export default function Home() {
       )}
 
       {/* Результаты */}
-      <section className="px-4 pb-16">
+      <section className="px-4 pb-16 pt-6">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <h2 className={`text-xl font-bold flex items-center gap-2 ${
+              theme === 'dark' ? 'text-white' : 'text-gray-900'
+            }`}>
               {selectedMood && <span>{MOOD_CATEGORIES.find(m => m.id === selectedMood)?.emoji}</span>}
               {selectedCuisine && <span>{CUISINES.find(c => c.id === selectedCuisine)?.label.split(' ')[0]}</span>}
               <span>
@@ -751,7 +791,7 @@ export default function Home() {
                       : 'Все места'}
               </span>
             </h2>
-            <span className="text-white/40 text-sm">
+            <span className={`text-sm ${theme === 'dark' ? 'text-white/40' : 'text-gray-400'}`}>
               {restaurants.length}{totalCount > restaurants.length ? ` из ${totalCount}` : ''} мест
             </span>
           </div>
@@ -759,11 +799,13 @@ export default function Home() {
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {[...Array(6)].map((_, i) => (
-                <div key={i} className="rounded-2xl overflow-hidden bg-white/5 animate-pulse border border-white/5">
-                  <div className="h-48 bg-white/10"></div>
+                <div key={i} className={`rounded-2xl overflow-hidden animate-pulse border ${
+                  theme === 'dark' ? 'bg-white/5 border-white/5' : 'bg-gray-100 border-gray-200'
+                }`}>
+                  <div className={theme === 'dark' ? 'h-48 bg-white/10' : 'h-48 bg-gray-200'}></div>
                   <div className="p-4 space-y-3">
-                    <div className="h-5 bg-white/10 rounded-lg w-3/4"></div>
-                    <div className="h-4 bg-white/10 rounded-lg w-1/2"></div>
+                    <div className={`h-5 rounded-lg w-3/4 ${theme === 'dark' ? 'bg-white/10' : 'bg-gray-200'}`}></div>
+                    <div className={`h-4 rounded-lg w-1/2 ${theme === 'dark' ? 'bg-white/10' : 'bg-gray-200'}`}></div>
                   </div>
                 </div>
               ))}
