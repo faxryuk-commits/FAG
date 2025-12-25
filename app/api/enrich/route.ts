@@ -59,7 +59,7 @@ export async function GET() {
       },
     });
 
-    // Записи с некорректными часами (00:00-23:59 для всех дней = плейсхолдер)
+    // Записи с некорректными часами (00:00-23:59 для всех дней = плейсхолдер) - готовые к обновлению
     const placeholderHoursRestaurants = await prisma.$queryRaw<{count: bigint}[]>`
       SELECT COUNT(DISTINCT r.id) as count
       FROM restaurants r
@@ -71,6 +71,18 @@ export async function GET() {
       AND wh."isClosed" = false
     `;
     const badHours = Number(placeholderHoursRestaurants[0]?.count || 0);
+
+    // ВСЕ записи с плейсхолдер часами (включая на кулдауне)
+    const placeholderHoursTotal = await prisma.$queryRaw<{count: bigint}[]>`
+      SELECT COUNT(DISTINCT r.id) as count
+      FROM restaurants r
+      JOIN working_hours wh ON wh."restaurantId" = r.id
+      WHERE r."isArchived" = false
+      AND wh."openTime" = '00:00'
+      AND wh."closeTime" = '23:59'
+      AND wh."isClosed" = false
+    `;
+    const badHoursTotal = Number(placeholderHoursTotal[0]?.count || 0);
 
     // Записи без отзывов
     const noReviews = await prisma.restaurant.count({
@@ -136,6 +148,7 @@ export async function GET() {
         noHours,
         noReviews,
         badHours,
+        badHoursTotal, // Всего с плейсхолдер часами (вкл. недавние)
         importedCount,
         incompleteImports,
         incompleteImportsTotal, // Всего неполных (вкл. недавние)
@@ -143,6 +156,7 @@ export async function GET() {
       },
       needsEnrichment: incompleteImports,
       needsHoursUpdate: badHours + noHours,
+      needsHoursUpdateTotal: badHoursTotal + noHours, // Всего (вкл. кулдаун)
       cooldownDays: 7,
     });
   } catch (error) {
