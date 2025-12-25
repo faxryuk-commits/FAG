@@ -451,18 +451,20 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 py-3">
           {/* Верхняя строка: лого + действия */}
           <div className="flex items-center justify-between gap-4 mb-2">
-            <Link href="/" className="flex items-center gap-2 shrink-0">
-              {/* Delever Logo */}
-              <img 
-                src="/delever-icon.svg" 
-                alt="Delever" 
-                className="w-8 h-8 rounded-lg"
-              />
+            <Link href="/" className="flex items-center gap-2.5 shrink-0">
+              {/* Delever Logo with contrast */}
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-400 to-cyan-500 p-0.5 shadow-lg shadow-cyan-500/30">
+                <img 
+                  src="/delever-icon.svg" 
+                  alt="Delever" 
+                  className="w-full h-full rounded-lg"
+                />
+              </div>
               <div className="hidden sm:flex flex-col leading-none">
-                <span className="font-bold text-base text-white">
+                <span className="font-bold text-base text-white drop-shadow-sm">
                   Delever
                 </span>
-                <span className="text-[10px] text-white/50 tracking-wider uppercase">
+                <span className="text-[10px] text-cyan-400/80 tracking-wider uppercase font-medium">
                   Food Map
                 </span>
               </div>
@@ -731,18 +733,20 @@ export default function Home() {
                     href={`/restaurants/${restaurant.slug}`}
                     className="group"
                   >
-                    <div className="rounded-3xl overflow-hidden bg-gradient-to-b from-white/[0.08] to-white/[0.02] border border-white/10 hover:border-orange-500/50 transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-orange-500/20">
-                      {/* Изображение с улучшенным хедером */}
-                      <div className="h-52 relative overflow-hidden">
+                    <div className="rounded-2xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-colors">
+                      {/* Изображение */}
+                      <div className="h-44 relative overflow-hidden">
                         {restaurant.images?.[0] ? (
                           <img
                             src={restaurant.images[0]}
                             alt={restaurant.name}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-orange-500/30 via-pink-500/20 to-purple-500/30 flex items-center justify-center">
-                            <span className="text-7xl opacity-40 group-hover:scale-110 transition-transform duration-500">🍽️</span>
+                          <div className="w-full h-full bg-gradient-to-br from-orange-500/20 to-pink-500/20 flex items-center justify-center">
+                            <span className="text-5xl opacity-30">🍽️</span>
                           </div>
                         )}
                         
@@ -868,7 +872,9 @@ export default function Home() {
       <footer className="border-t border-white/5 py-8">
         <div className="max-w-6xl mx-auto px-4 text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <img src="/delever-icon.svg" alt="Delever" className="w-6 h-6 rounded" />
+            <div className="w-6 h-6 rounded bg-gradient-to-br from-teal-400 to-cyan-500 p-0.5">
+              <img src="/delever-icon.svg" alt="Delever" className="w-full h-full rounded" />
+            </div>
             <span className="font-bold text-white/80">Delever Food Map</span>
           </div>
           <p className="text-white/30 text-sm">Карта ресторанов и доставка еды</p>
