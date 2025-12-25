@@ -2302,7 +2302,106 @@ function ParsingMonitorModal({
   );
 }
 
+// Хеш пароля для проверки (простая защита)
+const ADMIN_PASSWORD_HASH = 'a3f2b8c9d4e5f6a7b8c9d0e1f2a3b4c5'; // placeholder
+const ADMIN_SESSION_KEY = 'foodguide_admin_session';
+
+// Простая хеш-функция
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(16);
+}
+
+// Проверка пароля
+function checkPassword(password: string): boolean {
+  return password === 'F^%r!dd!n1988';
+}
+
+// Компонент формы входа
+function LoginForm({ onLogin }: { onLogin: () => void }) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    
+    // Небольшая задержка для UX
+    setTimeout(() => {
+      if (checkPassword(password)) {
+        // Сохраняем сессию
+        const session = {
+          hash: simpleHash(password + Date.now().toString()),
+          expires: Date.now() + 24 * 60 * 60 * 1000 // 24 часа
+        };
+        localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
+        onLogin();
+      } else {
+        setError('Неверный пароль');
+        setLoading(false);
+      }
+    }, 500);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0f0f1a] via-[#1a1a2e] to-[#16213e] flex items-center justify-center p-4">
+      <div className="w-full max-w-sm">
+        <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-8">
+          <div className="text-center mb-8">
+            <div className="text-4xl mb-3">🔐</div>
+            <h1 className="text-xl font-bold text-white">Админ-панель</h1>
+            <p className="text-white/40 text-sm mt-1">Delever Food Map</p>
+          </div>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Введите пароль"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-orange-500/50 transition-colors"
+                autoFocus
+              />
+            </div>
+            
+            {error && (
+              <div className="text-red-400 text-sm text-center bg-red-500/10 py-2 rounded-lg">
+                {error}
+              </div>
+            )}
+            
+            <button
+              type="submit"
+              disabled={loading || !password}
+              className="w-full py-3 bg-gradient-to-r from-orange-500 to-pink-500 text-white font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              {loading ? '⏳ Проверка...' : 'Войти'}
+            </button>
+          </form>
+          
+          <div className="mt-6 text-center">
+            <a href="/" className="text-white/30 text-sm hover:text-white/50 transition-colors">
+              ← Вернуться на сайт
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
+  // Состояние авторизации
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  
   const [scrapers, setScrapers] = useState<Scraper[]>([]);
   const [selectedScraper, setSelectedScraper] = useState<Scraper | null>(null);
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
@@ -2317,6 +2416,41 @@ export default function AdminPage() {
   const [activeSource, setActiveSource] = useState<string>('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
+  
+  // Проверка сессии при загрузке
+  useEffect(() => {
+    try {
+      const sessionStr = localStorage.getItem(ADMIN_SESSION_KEY);
+      if (sessionStr) {
+        const session = JSON.parse(sessionStr);
+        if (session.expires > Date.now()) {
+          setIsAuthenticated(true);
+          return;
+        }
+      }
+    } catch {}
+    setIsAuthenticated(false);
+  }, []);
+  
+  // Функция выхода
+  const handleLogout = () => {
+    localStorage.removeItem(ADMIN_SESSION_KEY);
+    setIsAuthenticated(false);
+  };
+  
+  // Показываем загрузку пока проверяем сессию
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0f0f1a] via-[#1a1a2e] to-[#16213e] flex items-center justify-center">
+        <div className="text-white/50">⏳ Загрузка...</div>
+      </div>
+    );
+  }
+  
+  // Показываем форму входа если не авторизован
+  if (!isAuthenticated) {
+    return <LoginForm onLogin={() => setIsAuthenticated(true)} />;
+  }
 
   // Загрузка использования Apify
   const fetchApifyUsage = async () => {
@@ -2489,12 +2623,20 @@ export default function AdminPage() {
               <p className="text-sm text-white/60">Парсинг данных • Мониторинг • Аналитика</p>
             </div>
           </div>
-          <Link
-            href="/"
-            className="px-4 py-2 text-white/70 hover:text-white transition-colors"
-          >
-            ← На сайт
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="px-4 py-2 text-white/70 hover:text-white transition-colors"
+            >
+              ← На сайт
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 rounded-lg transition-colors text-sm"
+            >
+              🚪 Выйти
+            </button>
+          </div>
         </div>
       </header>
 
