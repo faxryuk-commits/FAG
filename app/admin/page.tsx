@@ -119,15 +119,19 @@ interface EnrichStats {
   total: number;
   stats: {
     noImages: number;
+    noImagesTotal: number; // Всего без фото (вкл. недавние)
     noRating: number;
     noHours: number;
     noReviews: number;
     badHours: number; // Записи с плейсхолдер часами 00:00-23:59
     importedCount: number;
     incompleteImports: number;
+    incompleteImportsTotal: number; // Всего неполных (вкл. недавние)
+    recentlyUpdated: number; // На кулдауне (обновлены < 7 дней)
   };
   needsEnrichment: number;
   needsHoursUpdate: number;
+  cooldownDays: number;
 }
 
 // Компонент таймера с реалтайм прогрессом
@@ -1902,6 +1906,7 @@ function EnrichSection() {
   const [stats, setStats] = useState<EnrichStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [enriching, setEnriching] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(false);
   const [result, setResult] = useState<{ jobId?: string; message?: string; error?: string } | null>(null);
 
   useEffect(() => {
@@ -1923,7 +1928,8 @@ function EnrichSection() {
 
   const startEnrichment = async (batchSize: number, mode: string = 'incomplete') => {
     const modeLabel = mode === 'hours' ? 'обновление часов' : 'обогащение';
-    if (!confirm(`Запустить ${modeLabel} для ${batchSize} записей?\n\nЭто использует Apify кредиты.`)) return;
+    const forceNote = forceUpdate ? '\n\n⚠️ ПРИНУДИТЕЛЬНОЕ обновление (игнорирует 7-дневный кулдаун)' : '';
+    if (!confirm(`Запустить ${modeLabel} для ${batchSize} записей?${forceNote}\n\nЭто использует Apify кредиты.`)) return;
     
     setEnriching(true);
     setResult(null);
@@ -1932,7 +1938,7 @@ function EnrichSection() {
       const res = await fetch('/api/enrich', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchSize, mode }),
+        body: JSON.stringify({ batchSize, mode, force: forceUpdate }),
       });
       const data = await res.json();
       
@@ -1960,11 +1966,45 @@ function EnrichSection() {
         <div className="text-center py-4 text-white/40">Загрузка...</div>
       ) : stats ? (
         <div className="space-y-3">
+          {/* Информация о кулдауне */}
+          {stats.stats.recentlyUpdated > 0 && (
+            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+              <div className="flex items-center gap-2 text-blue-300 text-sm font-medium mb-1">
+                <span>🛡️</span>
+                <span>{stats.stats.recentlyUpdated} записей на кулдауне</span>
+              </div>
+              <p className="text-xs text-white/50">
+                Обновлены за последние {stats.cooldownDays || 7} дней. 
+                Используйте "Принудительно" для повторного обновления.
+              </p>
+            </div>
+          )}
+          
+          {/* Чекбокс принудительного обновления */}
+          <label className="flex items-center gap-2 cursor-pointer p-2 bg-white/5 rounded-lg hover:bg-white/10 transition-colors">
+            <input
+              type="checkbox"
+              checked={forceUpdate}
+              onChange={(e) => setForceUpdate(e.target.checked)}
+              className="w-4 h-4 rounded accent-orange-500"
+            />
+            <span className="text-sm text-white/70">
+              ⚠️ Принудительно (игнорировать 7-дневный кулдаун)
+            </span>
+          </label>
+          
           {/* Статистика */}
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-white/5 rounded-lg p-2">
               <div className="text-white/40">Без фото</div>
-              <div className="text-orange-400 font-bold text-lg">{stats.stats.noImages}</div>
+              <div className="text-orange-400 font-bold text-lg">
+                {stats.stats.noImages}
+                {stats.stats.noImagesTotal !== stats.stats.noImages && (
+                  <span className="text-xs text-white/30 ml-1">
+                    (всего {stats.stats.noImagesTotal})
+                  </span>
+                )}
+              </div>
             </div>
             <div className="bg-white/5 rounded-lg p-2">
               <div className="text-white/40">Без рейтинга</div>
@@ -1975,12 +2015,23 @@ function EnrichSection() {
               <div className="text-blue-400 font-bold text-lg">{stats.stats.importedCount}</div>
             </div>
             <div className="bg-white/5 rounded-lg p-2">
-              <div className="text-white/40">Без данных</div>
-              <div className="text-red-400 font-bold text-lg">{stats.needsEnrichment}</div>
+              <div className="text-white/40">К обогащению</div>
+              <div className="text-red-400 font-bold text-lg">
+                {stats.needsEnrichment}
+                {stats.stats.incompleteImportsTotal !== stats.stats.incompleteImports && (
+                  <span className="text-xs text-white/30 ml-1">
+                    (всего {stats.stats.incompleteImportsTotal})
+                  </span>
+                )}
+              </div>
             </div>
             <div className="bg-white/5 rounded-lg p-2">
               <div className="text-white/40">⏰ Плейсхолдер часы</div>
               <div className="text-orange-400 font-bold text-lg">{stats.stats.badHours || 0}</div>
+            </div>
+            <div className="bg-white/5 rounded-lg p-2">
+              <div className="text-white/40">🛡️ На кулдауне</div>
+              <div className="text-cyan-400 font-bold text-lg">{stats.stats.recentlyUpdated || 0}</div>
             </div>
           </div>
           

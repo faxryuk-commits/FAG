@@ -6,11 +6,32 @@ const client = new ApifyClient({
   token: process.env.APIFY_API_TOKEN,
 });
 
+// Дата 7 дней назад
+const getSevenDaysAgo = () => {
+  const date = new Date();
+  date.setDate(date.getDate() - 7);
+  return date;
+};
+
 // GET - получить статистику неполных записей
 export async function GET() {
   try {
-    // Записи без фото
+    const sevenDaysAgo = getSevenDaysAgo();
+    
+    // Записи без фото (исключая обновлённые за 7 дней)
     const noImages = await prisma.restaurant.count({
+      where: {
+        OR: [
+          { images: { equals: [] } },
+          { images: { equals: null } },
+        ],
+        isArchived: false,
+        lastSynced: { lt: sevenDaysAgo },
+      },
+    });
+
+    // Все записи без фото (включая недавно обновлённые)
+    const noImagesTotal = await prisma.restaurant.count({
       where: {
         OR: [
           { images: { equals: [] } },
@@ -25,6 +46,7 @@ export async function GET() {
       where: {
         rating: null,
         isArchived: false,
+        lastSynced: { lt: sevenDaysAgo },
       },
     });
 
@@ -33,6 +55,7 @@ export async function GET() {
       where: {
         workingHours: { none: {} },
         isArchived: false,
+        lastSynced: { lt: sevenDaysAgo },
       },
     });
 
@@ -42,6 +65,7 @@ export async function GET() {
       FROM restaurants r
       JOIN working_hours wh ON wh."restaurantId" = r.id
       WHERE r."isArchived" = false
+      AND r."lastSynced" < ${sevenDaysAgo}
       AND wh."openTime" = '00:00'
       AND wh."closeTime" = '23:59'
       AND wh."isClosed" = false
@@ -53,12 +77,21 @@ export async function GET() {
       where: {
         reviews: { none: {} },
         isArchived: false,
+        lastSynced: { lt: sevenDaysAgo },
       },
     });
 
     // Всего активных
     const total = await prisma.restaurant.count({
       where: { isArchived: false },
+    });
+
+    // Записи обновлённые за последние 7 дней (на "кулдауне")
+    const recentlyUpdated = await prisma.restaurant.count({
+      where: {
+        isArchived: false,
+        lastSynced: { gte: sevenDaysAgo },
+      },
     });
 
     // Записи из импорта (sourceId начинается с "import-")
@@ -69,8 +102,21 @@ export async function GET() {
       },
     });
 
-    // Неполные записи (импорт без фото)
+    // Неполные записи (импорт без фото, исключая обновлённые за 7 дней)
     const incompleteImports = await prisma.restaurant.count({
+      where: {
+        sourceId: { startsWith: 'import-' },
+        OR: [
+          { images: { equals: [] } },
+          { images: { equals: null } },
+        ],
+        isArchived: false,
+        lastSynced: { lt: sevenDaysAgo },
+      },
+    });
+
+    // Все неполные импорты (включая недавно обновлённые)
+    const incompleteImportsTotal = await prisma.restaurant.count({
       where: {
         sourceId: { startsWith: 'import-' },
         OR: [
@@ -85,15 +131,19 @@ export async function GET() {
       total,
       stats: {
         noImages,
+        noImagesTotal, // Всего без фото (вкл. недавние)
         noRating,
         noHours,
         noReviews,
-        badHours, // Новое поле - с плейсхолдер часами
+        badHours,
         importedCount,
         incompleteImports,
+        incompleteImportsTotal, // Всего неполных (вкл. недавние)
+        recentlyUpdated, // На кулдауне (обновлены < 7 дней)
       },
       needsEnrichment: incompleteImports,
       needsHoursUpdate: badHours + noHours,
+      cooldownDays: 7,
     });
   } catch (error) {
     console.error('Error getting enrich stats:', error);
@@ -105,29 +155,56 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { batchSize = 50, mode = 'incomplete' } = body;
+    const { batchSize = 50, mode = 'incomplete', force = false } = body;
+    
+    const sevenDaysAgo = getSevenDaysAgo();
+    
+    // Базовый фильтр по дате (пропускаем если force=true)
+    const dateFilter = force ? {} : { lastSynced: { lt: sevenDaysAgo } };
 
     // Получить записи для обогащения
     let restaurants;
     
     if (mode === 'hours') {
       // Рестораны с плейсхолдер часами - СНАЧАЛА КАЧЕСТВЕННЫЕ (с рейтингом, отзывами, фото)
-      const restaurantIds = await prisma.$queryRaw<{id: string}[]>`
-        SELECT DISTINCT r.id
-        FROM restaurants r
-        LEFT JOIN working_hours wh ON wh."restaurantId" = r.id
-        WHERE r."isArchived" = false
-        AND (
-          wh.id IS NULL
-          OR (wh."openTime" = '00:00' AND wh."closeTime" = '23:59' AND wh."isClosed" = false)
-        )
-        ORDER BY 
-          CASE WHEN r.rating IS NOT NULL AND r.rating >= 4.0 THEN 0 ELSE 1 END,
-          CASE WHEN array_length(r.images, 1) > 0 THEN 0 ELSE 1 END,
-          COALESCE(r."ratingCount", 0) DESC,
-          r.rating DESC NULLS LAST
-        LIMIT ${batchSize}
-      `;
+      let restaurantIds: {id: string}[];
+      
+      if (force) {
+        restaurantIds = await prisma.$queryRaw<{id: string}[]>`
+          SELECT DISTINCT r.id
+          FROM restaurants r
+          LEFT JOIN working_hours wh ON wh."restaurantId" = r.id
+          WHERE r."isArchived" = false
+          AND (
+            wh.id IS NULL
+            OR (wh."openTime" = '00:00' AND wh."closeTime" = '23:59' AND wh."isClosed" = false)
+          )
+          ORDER BY 
+            CASE WHEN r.rating IS NOT NULL AND r.rating >= 4.0 THEN 0 ELSE 1 END,
+            CASE WHEN array_length(r.images, 1) > 0 THEN 0 ELSE 1 END,
+            COALESCE(r."ratingCount", 0) DESC,
+            r.rating DESC NULLS LAST
+          LIMIT ${batchSize}
+        `;
+      } else {
+        restaurantIds = await prisma.$queryRaw<{id: string}[]>`
+          SELECT DISTINCT r.id
+          FROM restaurants r
+          LEFT JOIN working_hours wh ON wh."restaurantId" = r.id
+          WHERE r."isArchived" = false
+          AND r."lastSynced" < ${sevenDaysAgo}
+          AND (
+            wh.id IS NULL
+            OR (wh."openTime" = '00:00' AND wh."closeTime" = '23:59' AND wh."isClosed" = false)
+          )
+          ORDER BY 
+            CASE WHEN r.rating IS NOT NULL AND r.rating >= 4.0 THEN 0 ELSE 1 END,
+            CASE WHEN array_length(r.images, 1) > 0 THEN 0 ELSE 1 END,
+            COALESCE(r."ratingCount", 0) DESC,
+            r.rating DESC NULLS LAST
+          LIMIT ${batchSize}
+        `;
+      }
       
       restaurants = await prisma.restaurant.findMany({
         where: {
@@ -152,6 +229,7 @@ export async function POST(request: NextRequest) {
             { images: { equals: null } },
           ],
           isArchived: false,
+          ...dateFilter,
         },
         orderBy: [
           { rating: 'desc' },
@@ -176,6 +254,7 @@ export async function POST(request: NextRequest) {
             { images: { equals: null } },
           ],
           isArchived: false,
+          ...dateFilter,
         },
         orderBy: [
           { rating: 'desc' },
