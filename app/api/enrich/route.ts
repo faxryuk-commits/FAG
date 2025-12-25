@@ -220,19 +220,24 @@ export async function POST(request: NextRequest) {
         `;
       }
       
-      restaurants = await prisma.restaurant.findMany({
-        where: {
-          id: { in: restaurantIds.map(r => r.id) },
-        },
-        select: {
-          id: true,
-          name: true,
-          address: true,
-          city: true,
-          latitude: true,
-          longitude: true,
-        },
-      });
+      // Защита от пустого массива
+      if (restaurantIds.length === 0) {
+        restaurants = [];
+      } else {
+        restaurants = await prisma.restaurant.findMany({
+          where: {
+            id: { in: restaurantIds.map(r => r.id) },
+          },
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            city: true,
+            latitude: true,
+            longitude: true,
+          },
+        });
+      }
     } else if (mode === 'incomplete') {
       // Импортированные без фото - ПРИОРИТЕТ качественным (с рейтингом, отзывами)
       restaurants = await prisma.restaurant.findMany({
@@ -340,10 +345,15 @@ export async function POST(request: NextRequest) {
       targetCount: maxQueries,
       totalIncomplete: restaurants.length,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error starting enrichment:', error);
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
     return NextResponse.json(
-      { error: 'Failed to start enrichment' },
+      { 
+        error: 'Failed to start enrichment', 
+        details: errorMessage,
+        stack: process.env.NODE_ENV === 'development' ? error?.stack : undefined
+      },
       { status: 500 }
     );
   }

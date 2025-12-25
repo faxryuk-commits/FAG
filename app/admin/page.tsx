@@ -1948,10 +1948,13 @@ function EnrichSection() {
       if (res.ok) {
         setResult({ message: data.message, jobId: data.jobId });
       } else {
-        setResult({ error: data.error || 'Ошибка запуска' });
+        const errorMsg = data.details 
+          ? `${data.error}: ${data.details}` 
+          : data.error || 'Ошибка запуска';
+        setResult({ error: errorMsg });
       }
-    } catch (error) {
-      setResult({ error: 'Сетевая ошибка' });
+    } catch (error: any) {
+      setResult({ error: `Сетевая ошибка: ${error?.message || error}` });
     } finally {
       setEnriching(false);
       fetchStats();
