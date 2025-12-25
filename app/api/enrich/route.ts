@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
     const dateFilter = force ? {} : { lastSynced: { lt: sevenDaysAgo } };
 
     // Получить записи для обогащения
-    let restaurants;
+    let restaurants: { id: string; name: string; address: string | null; city: string | null; latitude: number | null; longitude: number | null; }[];
     
     if (mode === 'hours') {
       // Рестораны с плейсхолдер часами - СНАЧАЛА КАЧЕСТВЕННЫЕ (с рейтингом, отзывами, фото)
