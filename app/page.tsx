@@ -62,8 +62,10 @@ interface Restaurant {
   id: string;
   name: string;
   slug: string;
-  address: string;
+  address: string | null;
   city: string;
+  latitude: number | null;
+  longitude: number | null;
   rating: number | null;
   ratingCount: number;
   images: string[];
