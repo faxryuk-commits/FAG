@@ -441,6 +441,7 @@ export async function GET(request: NextRequest) {
         id: true,
         name: true,
         slug: true,
+        description: true, // Нужно для поиска
         address: true,
         city: true,
         latitude: true,
@@ -455,7 +456,7 @@ export async function GET(request: NextRequest) {
         // Не загружаем тяжёлые данные для списка:
         // reviews - не нужны для карточек
         // workingHours - не нужны для карточек
-        // description, phone, website, email, menuUrl и т.д.
+        // phone, website, email, menuUrl и т.д.
       },
     });
     
