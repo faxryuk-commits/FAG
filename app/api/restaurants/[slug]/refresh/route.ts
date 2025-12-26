@@ -2,38 +2,56 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 /**
- * Точечное обновление данных заведения через Google Places API
+ * Точечное обновление данных заведения через Google Places API (New)
  * 
- * Стоимость: ~$0.017 за запрос (vs $0.10-0.50 через Apify)
+ * Цены Google Places API (актуально на декабрь 2024):
+ * - Place Details (Basic): $0.00 (ID only)
+ * - Place Details (Contact): $0.003
+ * - Place Details (Atmosphere): $0.005  
+ * - Text Search: $0.032
+ * - Place Photos: $0.007
  * 
- * Обновляет:
- * - rating, ratingCount
- * - phone, website
- * - openingHours
- * - photos (опционально)
+ * Бесплатно: $200/месяц (~6000 запросов Place Details Advanced)
  */
 
 const GOOGLE_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 
-// Какие поля обновлять
-const FIELD_MASKS = {
-  basic: 'displayName,rating,userRatingCount,currentOpeningHours,nationalPhoneNumber,websiteUri',
-  photos: 'photos',
-  reviews: 'reviews',
-  full: 'displayName,rating,userRatingCount,currentOpeningHours,nationalPhoneNumber,websiteUri,photos,reviews,priceLevel',
+// Referer для API запросов (если ключ настроен с referrer restriction)
+const API_REFERER = process.env.GOOGLE_API_REFERER || 'https://fag-zeta.vercel.app';
+
+// Какие поля обновлять и их стоимость
+const FIELD_CONFIGS = {
+  basic: {
+    mask: 'displayName,rating,userRatingCount,nationalPhoneNumber,websiteUri',
+    cost: 0.003, // Contact fields
+    label: 'Основное (рейтинг, контакты)',
+  },
+  hours: {
+    mask: 'currentOpeningHours,regularOpeningHours',
+    cost: 0.005, // Atmosphere fields
+    label: 'Время работы',
+  },
+  photos: {
+    mask: 'photos',
+    cost: 0.007, // Per photo request
+    label: 'Фотографии',
+  },
+  reviews: {
+    mask: 'reviews',
+    cost: 0.005, // Atmosphere fields
+    label: 'Отзывы',
+  },
+  full: {
+    mask: 'displayName,rating,userRatingCount,currentOpeningHours,nationalPhoneNumber,websiteUri,photos,reviews,priceLevel',
+    cost: 0.017, // All fields combined
+    label: 'Всё сразу',
+  },
 };
 
 interface RefreshOptions {
-  fields?: 'basic' | 'photos' | 'reviews' | 'full';
+  fields?: keyof typeof FIELD_CONFIGS;
   force?: boolean;
 }
-
-// Стоимость операций Google Places API (New)
-const COSTS = {
-  place_details: 0.017,    // Place Details
-  text_search: 0.032,      // Text Search
-  photo: 0.007,            // Place Photo
-};
 
 // Логирование использования API
 async function logApiUsage(endpoint: string, cost: number) {
@@ -135,17 +153,18 @@ export async function POST(
     }
 
     // Запрашиваем данные из Google Places API (новый API)
-    const fieldMask = FIELD_MASKS[body.fields || 'basic'];
-    const placeData = await fetchPlaceDetails(placeId, fieldMask);
+    const fieldConfig = FIELD_CONFIGS[body.fields || 'basic'];
+    const placeData = await fetchPlaceDetails(placeId, fieldConfig.mask);
 
     if (!placeData) {
       return NextResponse.json({
         error: 'Failed to fetch place details',
+        hint: 'Проверьте настройки API ключа в Google Cloud Console. Уберите ограничение "HTTP referrers" или настройте "IP addresses".',
       }, { status: 502 });
     }
 
     // Логируем использование API
-    await logApiUsage('place_details', COSTS.place_details);
+    await logApiUsage('place_details', fieldConfig.cost);
 
     // Обновляем данные в БД
     const updateData: any = {
@@ -214,7 +233,8 @@ export async function POST(
         website: updateData.website,
         priceRange: updateData.priceRange,
       },
-      cost: '~$0.017', // Примерная стоимость запроса
+      cost: `~$${fieldConfig.cost.toFixed(3)}`,
+      fieldType: body.fields || 'basic',
     });
 
   } catch (error) {
@@ -229,7 +249,7 @@ export async function POST(
 // Поиск place_id по координатам и названию
 async function findPlaceByLocation(name: string, lat: number, lng: number): Promise<string | null> {
   try {
-    const url = new URL('https://places.googleapis.com/v1/places:searchText');
+    const url = 'https://places.googleapis.com/v1/places:searchText';
     
     const response = await fetch(url, {
       method: 'POST',
@@ -237,6 +257,8 @@ async function findPlaceByLocation(name: string, lat: number, lng: number): Prom
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': GOOGLE_API_KEY!,
         'X-Goog-FieldMask': 'places.id',
+        'Referer': API_REFERER,
+        'Origin': API_REFERER,
       },
       body: JSON.stringify({
         textQuery: name,
@@ -268,11 +290,20 @@ async function fetchPlaceDetails(placeId: string, fieldMask: string): Promise<an
       headers: {
         'X-Goog-Api-Key': GOOGLE_API_KEY!,
         'X-Goog-FieldMask': fieldMask,
+        'Referer': API_REFERER,
+        'Origin': API_REFERER,
       },
     });
 
     if (!response.ok) {
-      console.error('Google API error:', await response.text());
+      const errorText = await response.text();
+      console.error('Google API error:', errorText);
+      
+      // Если ошибка связана с referrer - даём подсказку
+      if (errorText.includes('referer') || errorText.includes('REFERRER')) {
+        console.error('💡 Подсказка: В Google Cloud Console снимите ограничение "HTTP referrers" для API ключа, или используйте "IP addresses" ограничение');
+      }
+      
       return null;
     }
 
@@ -371,10 +402,15 @@ export async function GET(
       ? new Date(restaurant.lastSynced.getTime() + 24 * 60 * 60 * 1000)
       : null,
     pricing: {
-      perRequest: '$0.017',
-      note: 'Google Places API (New) - значительно дешевле чем Apify scraping',
+      basic: '$0.003 (рейтинг, контакты)',
+      hours: '$0.005 (время работы)',
+      photos: '$0.007 (фотографии)',
+      full: '$0.017 (всё вместе)',
+      freeMonthly: '$200 (~11,700 базовых запросов)',
     },
-    setupRequired: !hasApiKey ? 'Добавьте GOOGLE_PLACES_API_KEY в Vercel Environment Variables' : null,
+    setupRequired: !hasApiKey 
+      ? 'Добавьте GOOGLE_PLACES_API_KEY в Vercel Environment Variables. В Google Cloud Console уберите ограничение "HTTP referrers" для ключа.' 
+      : null,
   });
 }
 

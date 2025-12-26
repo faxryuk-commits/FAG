@@ -2244,13 +2244,14 @@ interface RestaurantDetail {
   }>;
 }
 
-// Опции обновления через Google API
+// Опции обновления через Google Places API (New)
+// Актуальные цены: https://developers.google.com/maps/documentation/places/web-service/usage-and-billing
 const REFRESH_OPTIONS = [
-  { id: 'basic', label: 'Основное', desc: 'Рейтинг, телефон, сайт, цена', cost: '$0.017' },
-  { id: 'hours', label: 'Время работы', desc: 'Расписание по дням', cost: '$0.017' },
-  { id: 'photos', label: 'Фотографии', desc: 'Новые фото из Google', cost: '$0.025' },
-  { id: 'reviews', label: 'Отзывы', desc: 'Последние отзывы', cost: '$0.025' },
-  { id: 'full', label: 'Всё сразу', desc: 'Полное обновление', cost: '$0.040' },
+  { id: 'basic', label: 'Основное', desc: 'Рейтинг, телефон, сайт', cost: '$0.003' },
+  { id: 'hours', label: 'Время работы', desc: 'Расписание по дням', cost: '$0.005' },
+  { id: 'photos', label: 'Фотографии', desc: 'Новые фото из Google', cost: '$0.007' },
+  { id: 'reviews', label: 'Отзывы', desc: 'Последние отзывы', cost: '$0.005' },
+  { id: 'full', label: 'Всё сразу', desc: 'Полное обновление', cost: '$0.017' },
 ];
 
 // Модальное окно детального редактирования ресторана
