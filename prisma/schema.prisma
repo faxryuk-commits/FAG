@@ -57,8 +57,10 @@ model Restaurant {
   isVerified  Boolean  @default(false)
   isArchived  Boolean  @default(false) // Архивированные (скрытые) записи
   
-  // Страна для фильтрации
-  country     String?  // UZ, RU, KZ, и т.д.
+  // Географические данные
+  country     String?  // Узбекистан, Россия, Казахстан
+  region      String?  // Ташкентская область, Московская область
+  district    String?  // Яккасарайский район, Мирзо-Улугбекский район
   
   // Временные метки
   createdAt   DateTime @default(now())
@@ -69,6 +71,9 @@ model Restaurant {
   syncMeta    RestaurantSyncMeta?
   
   @@index([city])
+  @@index([country])
+  @@index([region])
+  @@index([district])
   @@index([source, sourceId])
   @@index([latitude, longitude])
   @@map("restaurants")

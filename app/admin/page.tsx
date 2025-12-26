@@ -2922,8 +2922,14 @@ function RestaurantManagementPanel() {
   // Географические фильтры
   const [cities, setCities] = useState<Array<{ name: string; count: number }>>([]);
   const [countries, setCountries] = useState<Array<{ name: string; count: number }>>([]);
+  const [regions, setRegions] = useState<Array<{ name: string; count: number }>>([]);
+  const [districts, setDistricts] = useState<Array<{ name: string; count: number }>>([]);
   const [selectedCity, setSelectedCity] = useState<string>('');
   const [selectedCountry, setSelectedCountry] = useState<string>('');
+  const [selectedRegion, setSelectedRegion] = useState<string>('');
+  const [selectedDistrict, setSelectedDistrict] = useState<string>('');
+  const [geoStats, setGeoStats] = useState<{ total: number; withCountry: number; withRegion: number; withDistrict: number } | null>(null);
+  const [updatingGeo, setUpdatingGeo] = useState(false);
 
   // Загрузка списка городов и стран
   useEffect(() => {
@@ -2932,14 +2938,43 @@ function RestaurantManagementPanel() {
       .then(data => {
         setCities(data.cities || []);
         setCountries(data.countries || []);
+        setRegions(data.regions || []);
+        setDistricts(data.districts || []);
       })
       .catch(console.error);
+    
+    // Статистика географии
+    fetch('/api/geo-update')
+      .then(res => res.json())
+      .then(data => setGeoStats(data))
+      .catch(console.error);
   }, []);
+
+  // Обновить географию для всех
+  const updateAllGeo = async () => {
+    setUpdatingGeo(true);
+    try {
+      const res = await fetch('/api/geo-update', { method: 'POST' });
+      const data = await res.json();
+      alert(data.message || 'Готово');
+      // Обновляем списки
+      const locRes = await fetch('/api/locations');
+      const locData = await locRes.json();
+      setCities(locData.cities || []);
+      setCountries(locData.countries || []);
+      setRegions(locData.regions || []);
+      setDistricts(locData.districts || []);
+    } catch (error) {
+      alert('Ошибка: ' + error);
+    } finally {
+      setUpdatingGeo(false);
+    }
+  };
 
   useEffect(() => {
     fetchRestaurants();
     fetchStats();
-  }, [filter, page, limit, selectedCity, selectedCountry]);
+  }, [filter, page, limit, selectedCity, selectedCountry, selectedRegion, selectedDistrict]);
 
   const fetchStats = async () => {
     try {
@@ -2980,6 +3015,8 @@ function RestaurantManagementPanel() {
       // Географические фильтры
       if (selectedCity) params.append('filterCity', selectedCity);
       if (selectedCountry) params.append('country', selectedCountry);
+      if (selectedRegion) params.append('region', selectedRegion);
+      if (selectedDistrict) params.append('district', selectedDistrict);
       
       const res = await fetch(`/api/restaurants?${params}`);
       const data = await res.json();
@@ -3061,68 +3098,122 @@ function RestaurantManagementPanel() {
       )}
 
       {/* Поиск и географические фильтры */}
-      <div className="flex flex-wrap gap-3">
-        <div className="flex-1 min-w-[200px]">
-          <input
-            type="text"
-            placeholder="🔍 Поиск по названию, адресу, телефону..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && fetchRestaurants()}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-white/30"
-          />
+      <div className="space-y-3">
+        {/* Строка поиска */}
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="🔍 Поиск по названию, адресу, телефону..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && fetchRestaurants()}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+            />
+          </div>
+          <button
+            onClick={() => { setPage(0); fetchRestaurants(); }}
+            className="px-6 py-3 bg-blue-500/30 text-blue-300 rounded-xl hover:bg-blue-500/40 font-medium"
+          >
+            Найти
+          </button>
         </div>
         
-        {/* Фильтр по стране */}
-        <select
-          value={selectedCountry}
-          onChange={e => { setSelectedCountry(e.target.value); setPage(0); }}
-          className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-white/30 min-w-[150px]"
-        >
-          <option value="">🌍 Все страны</option>
-          {countries.map(c => (
-            <option key={c.name} value={c.name || ''}>
-              {c.name || 'Не указана'} ({c.count})
-            </option>
-          ))}
-        </select>
-        
-        {/* Фильтр по городу */}
-        <select
-          value={selectedCity}
-          onChange={e => { setSelectedCity(e.target.value); setPage(0); }}
-          className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-white/30 min-w-[150px]"
-        >
-          <option value="">🏙️ Все города</option>
-          {cities.slice(0, 50).map(c => (
-            <option key={c.name} value={c.name}>
-              {c.name} ({c.count})
-            </option>
-          ))}
-        </select>
-        
-        <button
-          onClick={() => { setPage(0); fetchRestaurants(); }}
-          className="px-6 py-3 bg-blue-500/30 text-blue-300 rounded-xl hover:bg-blue-500/40 font-medium"
-        >
-          Найти
-        </button>
-        
-        {/* Кнопка сброса фильтров */}
-        {(selectedCity || selectedCountry || searchQuery) && (
-          <button
-            onClick={() => { 
-              setSelectedCity(''); 
-              setSelectedCountry(''); 
-              setSearchQuery('');
-              setFilter('all');
-              setPage(0);
-            }}
-            className="px-4 py-3 bg-red-500/20 text-red-300 rounded-xl hover:bg-red-500/30"
+        {/* Географические фильтры */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-white/40 text-sm">📍 География:</span>
+          
+          {/* Страна */}
+          <select
+            value={selectedCountry}
+            onChange={e => { setSelectedCountry(e.target.value); setPage(0); }}
+            className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-white/30"
           >
-            ✕ Сбросить
+            <option value="">Все страны</option>
+            {countries.map(c => (
+              <option key={c.name} value={c.name || ''}>
+                {c.name || 'Не указана'} ({c.count})
+              </option>
+            ))}
+          </select>
+          
+          {/* Регион */}
+          <select
+            value={selectedRegion}
+            onChange={e => { setSelectedRegion(e.target.value); setPage(0); }}
+            className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-white/30"
+          >
+            <option value="">Все регионы</option>
+            {regions.slice(0, 30).map(r => (
+              <option key={r.name} value={r.name || ''}>
+                {r.name || 'Не указан'} ({r.count})
+              </option>
+            ))}
+          </select>
+          
+          {/* Город */}
+          <select
+            value={selectedCity}
+            onChange={e => { setSelectedCity(e.target.value); setPage(0); }}
+            className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-white/30"
+          >
+            <option value="">Все города</option>
+            {cities.slice(0, 50).map(c => (
+              <option key={c.name} value={c.name}>
+                {c.name} ({c.count})
+              </option>
+            ))}
+          </select>
+          
+          {/* Район */}
+          <select
+            value={selectedDistrict}
+            onChange={e => { setSelectedDistrict(e.target.value); setPage(0); }}
+            className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-white/30"
+          >
+            <option value="">Все районы</option>
+            {districts.slice(0, 30).map(d => (
+              <option key={d.name} value={d.name || ''}>
+                {d.name || 'Не указан'} ({d.count})
+              </option>
+            ))}
+          </select>
+          
+          {/* Кнопка сброса фильтров */}
+          {(selectedCity || selectedCountry || selectedRegion || selectedDistrict || searchQuery) && (
+            <button
+              onClick={() => { 
+                setSelectedCity(''); 
+                setSelectedCountry(''); 
+                setSelectedRegion('');
+                setSelectedDistrict('');
+                setSearchQuery('');
+                setFilter('all');
+                setPage(0);
+              }}
+              className="px-3 py-2 bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30 text-sm"
+            >
+              ✕ Сбросить
+            </button>
+          )}
+          
+          {/* Кнопка авто-определения */}
+          <button
+            onClick={updateAllGeo}
+            disabled={updatingGeo}
+            className="px-3 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm disabled:opacity-50"
+            title="Автоматически определить страну, регион и район из адресов"
+          >
+            {updatingGeo ? '⏳' : '🔄'} Авто-определение
           </button>
-        )}
+          
+          {/* Статистика покрытия */}
+          {geoStats && (
+            <span className="text-xs text-white/30 ml-2">
+              Покрытие: страны {geoStats.withCountry}/{geoStats.total}, регионы {geoStats.withRegion}/{geoStats.total}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Настройки отображения */}

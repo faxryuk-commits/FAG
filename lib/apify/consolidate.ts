@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
+import { parseGeoFromAddress, normalizeCity } from '@/lib/geo-parser';
 
 /**
  * Консолидация данных из разных источников
@@ -784,6 +785,16 @@ export async function saveWithConsolidation(
   const workingHours = parseWorkingHours(_openingHours);
   const reviews = parseReviews(_reviews, source);
   const menuItems = Array.isArray(_menuItems) ? _menuItems.filter((item: any) => item?.name) : [];
+  
+  // Автоматическое определение географии
+  const geoData = parseGeoFromAddress(rest.address || '', rest.city || '');
+  const normalizedCity = rest.city ? normalizeCity(rest.city) : null;
+  
+  // Дополняем данные географией если она не указана
+  if (!rest.country && geoData.country) rest.country = geoData.country;
+  if (!rest.region && geoData.region) rest.region = geoData.region;
+  if (!rest.district && geoData.district) rest.district = geoData.district;
+  if (normalizedCity && rest.city !== normalizedCity) rest.city = normalizedCity;
 
   // Ищем существующий дубликат
   const duplicate = await findDuplicate(name, latitude, longitude, source, sourceId);

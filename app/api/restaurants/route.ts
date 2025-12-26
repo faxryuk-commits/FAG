@@ -388,8 +388,11 @@ export async function GET(request: NextRequest) {
         where.city = { contains: filterCity, mode: 'insensitive' };
       }
       if (filterRegion) {
-        // Регион может быть в адресе
-        where.address = { contains: filterRegion, mode: 'insensitive' };
+        where.region = { contains: filterRegion, mode: 'insensitive' };
+      }
+      const filterDistrict = searchParams.get('district');
+      if (filterDistrict) {
+        where.district = { contains: filterDistrict, mode: 'insensitive' };
       }
     } else {
       // Для публичного API - только активные
