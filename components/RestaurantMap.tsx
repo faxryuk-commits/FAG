@@ -17,8 +17,8 @@ const Marker = dynamic(
   () => import('react-leaflet').then(mod => mod.Marker),
   { ssr: false }
 );
-const Tooltip = dynamic(
-  () => import('react-leaflet').then(mod => mod.Tooltip),
+const Popup = dynamic(
+  () => import('react-leaflet').then(mod => mod.Popup),
   { ssr: false }
 );
 
@@ -230,15 +230,7 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
           <Marker 
             position={[userLocation.lat, userLocation.lng]}
             icon={userIcon}
-          >
-            <Tooltip 
-              direction="top" 
-              offset={[0, -10]}
-              className="custom-tooltip"
-            >
-              <div className="text-center font-medium text-sm px-2 py-1">📍 Вы здесь</div>
-            </Tooltip>
-          </Marker>
+          />
         )}
         
         {/* Маркеры ресторанов */}
@@ -256,87 +248,7 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
               mouseout: () => setHoveredId(null),
               click: () => handleMarkerClick(restaurant)
             }}
-          >
-            <Tooltip 
-              direction="top" 
-              offset={[0, -20]} 
-              opacity={1}
-              permanent={false}
-              sticky={false}
-              className="restaurant-tooltip"
-            >
-              <div className="w-72 bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-100">
-                {/* Изображение с градиентом */}
-                <div className="h-36 relative overflow-hidden">
-                  {restaurant.images?.[0] ? (
-                    <img 
-                      src={restaurant.images[0]} 
-                      alt={restaurant.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-orange-400 via-pink-500 to-purple-500 flex items-center justify-center">
-                      <span className="text-5xl drop-shadow-lg">🍽️</span>
-                    </div>
-                  )}
-                  
-                  {/* Градиент для читаемости */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                  
-                  {/* Рейтинг и расстояние */}
-                  <div className="absolute bottom-2 left-2 right-2 flex justify-between items-end">
-                    {restaurant.rating && (
-                      <div className="px-2.5 py-1 bg-white/95 backdrop-blur-sm rounded-lg text-sm font-bold flex items-center gap-1.5 shadow-lg">
-                        <span className="text-amber-500 text-base">★</span>
-                        <span className="text-gray-900">{restaurant.rating.toFixed(1)}</span>
-                      </div>
-                    )}
-                    {restaurant.distance !== undefined && (
-                      <div className="px-2.5 py-1 bg-blue-500/90 backdrop-blur-sm rounded-lg text-xs font-semibold text-white shadow-lg">
-                        {restaurant.distance < 1 
-                          ? `${Math.round(restaurant.distance * 1000)} м` 
-                          : `${restaurant.distance.toFixed(1)} км`}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                {/* Информация */}
-                <div className="p-3">
-                  <h3 className="font-bold text-gray-900 line-clamp-1 text-base">
-                    {restaurant.name}
-                  </h3>
-                  
-                  <p className="text-xs text-gray-500 line-clamp-1 mt-1 flex items-center gap-1">
-                    <span className="text-gray-400">📍</span>
-                    {restaurant.address || 'Адрес не указан'}
-                  </p>
-                  
-                  {/* Теги кухни */}
-                  {restaurant.cuisine?.length > 0 && (
-                    <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      {restaurant.cuisine.slice(0, 3).map((c, i) => (
-                        <span 
-                          key={i} 
-                          className="px-2 py-0.5 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200/50 rounded-full text-xs text-orange-700 font-medium"
-                        >
-                          {c}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  
-                  {/* CTA */}
-                  <div className="mt-3 pt-2.5 border-t border-gray-100">
-                    <div className="text-xs text-center text-orange-600 font-semibold flex items-center justify-center gap-1.5">
-                      <span>Кликните для подробностей</span>
-                      <span className="text-sm">→</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Tooltip>
-          </Marker>
+          />
         ))}
       </MapContainer>
       
@@ -371,6 +283,72 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
       }`}>
         📍 {validRestaurants.length} мест на карте
       </div>
+
+      {/* Карточка превью при наведении - фиксирована в правом нижнем углу */}
+      {hoveredId && (() => {
+        const hovered = validRestaurants.find(r => r.id === hoveredId);
+        if (!hovered) return null;
+        return (
+          <div 
+            className="absolute bottom-4 right-4 w-72 bg-white rounded-xl shadow-2xl overflow-hidden z-[1000] border border-gray-200"
+            style={{ animation: 'modalOpen 0.1s ease-out' }}
+          >
+            {/* Изображение */}
+            <div className="h-32 relative overflow-hidden">
+              {hovered.images?.[0] ? (
+                <img 
+                  src={hovered.images[0]} 
+                  alt={hovered.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-orange-400 via-pink-500 to-purple-500 flex items-center justify-center">
+                  <span className="text-4xl">🍽️</span>
+                </div>
+              )}
+              
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              
+              {/* Рейтинг */}
+              <div className="absolute bottom-2 left-2 right-2 flex justify-between items-end">
+                {hovered.rating && (
+                  <div className="px-2 py-1 bg-white/95 rounded-lg text-sm font-bold flex items-center gap-1">
+                    <span className="text-amber-500">★</span>
+                    <span className="text-gray-900">{hovered.rating.toFixed(1)}</span>
+                  </div>
+                )}
+                {hovered.distance !== undefined && (
+                  <div className="px-2 py-1 bg-blue-500 rounded-lg text-xs font-semibold text-white">
+                    {hovered.distance < 1 
+                      ? `${Math.round(hovered.distance * 1000)} м` 
+                      : `${hovered.distance.toFixed(1)} км`}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Инфо */}
+            <div className="p-3">
+              <h3 className="font-bold text-gray-900 line-clamp-1">{hovered.name}</h3>
+              <p className="text-xs text-gray-500 line-clamp-1 mt-1">
+                📍 {hovered.address || 'Адрес не указан'}
+              </p>
+              {hovered.cuisine?.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {hovered.cuisine.slice(0, 2).map((c, i) => (
+                    <span key={i} className="px-2 py-0.5 bg-orange-50 border border-orange-200/50 rounded-full text-xs text-orange-700">
+                      {c}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-center text-orange-600 font-medium">
+                Нажмите для подробностей →
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Модальное окно с деталями ресторана */}
       {selectedRestaurant && (
