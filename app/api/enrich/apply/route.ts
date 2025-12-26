@@ -265,30 +265,34 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Парсинг рабочих часов
+// Парсинг рабочих часов - улучшенная версия
 function parseOpeningHours(openingHours: any, restaurantId: string) {
   const result: any[] = [];
   const dayMap: Record<string, number> = {
-    'sunday': 0, 'sun': 0, 'воскресенье': 0, 'вс': 0,
-    'monday': 1, 'mon': 1, 'понедельник': 1, 'пн': 1,
-    'tuesday': 2, 'tue': 2, 'вторник': 2, 'вт': 2,
-    'wednesday': 3, 'wed': 3, 'среда': 3, 'ср': 3,
-    'thursday': 4, 'thu': 4, 'четверг': 4, 'чт': 4,
-    'friday': 5, 'fri': 5, 'пятница': 5, 'пт': 5,
-    'saturday': 6, 'sat': 6, 'суббота': 6, 'сб': 6,
+    'sunday': 0, 'sun': 0, 'su': 0, 'воскресенье': 0, 'вс': 0,
+    'monday': 1, 'mon': 1, 'mo': 1, 'понедельник': 1, 'пн': 1,
+    'tuesday': 2, 'tue': 2, 'tu': 2, 'вторник': 2, 'вт': 2,
+    'wednesday': 3, 'wed': 3, 'we': 3, 'среда': 3, 'ср': 3,
+    'thursday': 4, 'thu': 4, 'th': 4, 'четверг': 4, 'чт': 4,
+    'friday': 5, 'fri': 5, 'fr': 5, 'пятница': 5, 'пт': 5,
+    'saturday': 6, 'sat': 6, 'sa': 6, 'суббота': 6, 'сб': 6,
   };
 
+  const processedDays = new Set<number>();
+
+  // Если это массив строк (формат Google Maps)
   if (Array.isArray(openingHours)) {
     for (const entry of openingHours) {
       if (typeof entry === 'string') {
-        // Формат: "Monday: 9:00 AM – 10:00 PM"
-        const match = entry.match(/^(\w+):\s*(.+)$/i);
+        // Формат: "Monday: 9:00 AM – 10:00 PM" или "Понедельник: 09:00 - 22:00"
+        const match = entry.match(/^([а-яa-z]+)[\s:,]+(.+)$/i);
         if (match) {
           const dayName = match[1].toLowerCase();
           const dayNum = dayMap[dayName];
-          if (dayNum !== undefined) {
+          
+          if (dayNum !== undefined && !processedDays.has(dayNum)) {
             const timeRange = match[2].trim();
-            const isClosed = /closed|закрыто|выходной/i.test(timeRange);
+            const isClosed = /closed|закрыто|выходной|off|休/i.test(timeRange);
             
             if (isClosed) {
               result.push({
@@ -298,17 +302,62 @@ function parseOpeningHours(openingHours: any, restaurantId: string) {
                 closeTime: '00:00',
                 isClosed: true,
               });
+              processedDays.add(dayNum);
             } else {
-              const times = timeRange.split(/[–-]/).map(t => t.trim());
-              if (times.length === 2) {
+              // Попробуем распарсить время
+              const parsed = parseTimeRange(timeRange);
+              if (parsed) {
                 result.push({
                   restaurantId,
                   dayOfWeek: dayNum,
-                  openTime: convertTo24Hour(times[0]),
-                  closeTime: convertTo24Hour(times[1]),
+                  openTime: parsed.open,
+                  closeTime: parsed.close,
                   isClosed: false,
                 });
+                processedDays.add(dayNum);
               }
+            }
+          }
+        }
+      } else if (typeof entry === 'object' && entry !== null) {
+        // Объектный формат: { day: "Monday", hours: "9:00 AM - 10:00 PM" }
+        const dayName = (entry.day || entry.dayOfWeek || '').toString().toLowerCase();
+        const dayNum = dayMap[dayName] ?? (typeof entry.dayOfWeek === 'number' ? entry.dayOfWeek : null);
+        
+        if (dayNum !== null && !processedDays.has(dayNum)) {
+          const hours = entry.hours || entry.time || entry.openingHours || '';
+          const isClosed = entry.isClosed || /closed|закрыто|выходной/i.test(hours);
+          
+          if (isClosed) {
+            result.push({
+              restaurantId,
+              dayOfWeek: dayNum,
+              openTime: '00:00',
+              closeTime: '00:00',
+              isClosed: true,
+            });
+            processedDays.add(dayNum);
+          } else {
+            const parsed = parseTimeRange(hours);
+            if (parsed) {
+              result.push({
+                restaurantId,
+                dayOfWeek: dayNum,
+                openTime: parsed.open,
+                closeTime: parsed.close,
+                isClosed: false,
+              });
+              processedDays.add(dayNum);
+            } else if (entry.openTime && entry.closeTime) {
+              // Прямые поля openTime/closeTime
+              result.push({
+                restaurantId,
+                dayOfWeek: dayNum,
+                openTime: convertTo24Hour(entry.openTime),
+                closeTime: convertTo24Hour(entry.closeTime),
+                isClosed: false,
+              });
+              processedDays.add(dayNum);
             }
           }
         }
@@ -319,17 +368,65 @@ function parseOpeningHours(openingHours: any, restaurantId: string) {
   return result;
 }
 
+// Парсинг диапазона времени
+function parseTimeRange(timeStr: string): { open: string; close: string } | null {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  
+  // 24/7 или круглосуточно
+  if (/24\s*[\/]\s*7|24\s*hours|круглосуточно/i.test(timeStr)) {
+    return { open: '00:00', close: '23:59' };
+  }
+  
+  // Разделители: –, -, —, to, до
+  const parts = timeStr.split(/\s*[–\-—]\s*|\s+to\s+|\s+до\s+/i).map(t => t.trim());
+  
+  if (parts.length >= 2) {
+    const open = convertTo24Hour(parts[0]);
+    const close = convertTo24Hour(parts[1]);
+    
+    // Проверяем что это валидное время
+    if (/^\d{2}:\d{2}$/.test(open) && /^\d{2}:\d{2}$/.test(close)) {
+      return { open, close };
+    }
+  }
+  
+  return null;
+}
+
+// Конвертация в 24-часовой формат
 function convertTo24Hour(time: string): string {
-  const match = time.match(/(\d{1,2}):?(\d{2})?\s*(AM|PM)?/i);
-  if (!match) return time;
-
-  let hours = parseInt(match[1]);
-  const minutes = match[2] || '00';
-  const period = (match[3] || '').toUpperCase();
-
-  if (period === 'PM' && hours !== 12) hours += 12;
-  if (period === 'AM' && hours === 12) hours = 0;
-
-  return `${hours.toString().padStart(2, '0')}:${minutes}`;
+  if (!time || typeof time !== 'string') return '00:00';
+  
+  time = time.trim();
+  
+  // Уже в 24-часовом формате: "09:00" или "9:00"
+  const simple24 = time.match(/^(\d{1,2}):(\d{2})$/);
+  if (simple24) {
+    const h = parseInt(simple24[1]);
+    const m = simple24[2];
+    return `${h.toString().padStart(2, '0')}:${m}`;
+  }
+  
+  // AM/PM формат: "9:00 AM", "10:30 PM", "9 AM"
+  const ampmMatch = time.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm|a\.m\.|p\.m\.)/i);
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1]);
+    const minutes = ampmMatch[2] || '00';
+    const period = ampmMatch[3].toUpperCase().replace(/\./g, '');
+    
+    if (period.startsWith('P') && hours !== 12) hours += 12;
+    if (period.startsWith('A') && hours === 12) hours = 0;
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes}`;
+  }
+  
+  // Только число: "9" -> "09:00"
+  const justNumber = time.match(/^(\d{1,2})$/);
+  if (justNumber) {
+    const h = parseInt(justNumber[1]);
+    return `${h.toString().padStart(2, '0')}:00`;
+  }
+  
+  return '00:00';
 }
 

@@ -22,6 +22,12 @@ const Tooltip = dynamic(
   { ssr: false }
 );
 
+interface WorkingHour {
+  dayOfWeek: number;
+  openTime: string;
+  closeTime: string;
+}
+
 interface Restaurant {
   id: string;
   name: string;
@@ -34,6 +40,9 @@ interface Restaurant {
   images: string[];
   cuisine: string[];
   distance?: number;
+  phone?: string;
+  website?: string;
+  workingHours?: WorkingHour[];
 }
 
 interface RestaurantMapProps {
@@ -42,9 +51,15 @@ interface RestaurantMapProps {
   theme: 'dark' | 'light';
 }
 
+// Названия дней недели
+const DAYS = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+
 export default function RestaurantMap({ restaurants, userLocation, theme }: RestaurantMapProps) {
   const [isClient, setIsClient] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+  const [restaurantDetails, setRestaurantDetails] = useState<any>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const [L, setL] = useState<any>(null);
 
   useEffect(() => {
@@ -54,6 +69,61 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
       setL(leaflet.default);
     });
   }, []);
+
+  // Загрузка деталей ресторана
+  const fetchRestaurantDetails = async (slug: string) => {
+    setLoadingDetails(true);
+    try {
+      const res = await fetch(`/api/restaurants/${slug}`);
+      const data = await res.json();
+      // API возвращает { restaurant: ... }
+      setRestaurantDetails(data.restaurant || data);
+    } catch (error) {
+      console.error('Error fetching restaurant details:', error);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  // Открытие попапа с деталями
+  const handleMarkerClick = (restaurant: Restaurant) => {
+    setSelectedRestaurant(restaurant);
+    fetchRestaurantDetails(restaurant.slug);
+  };
+
+  // Закрытие попапа
+  const closeModal = () => {
+    setSelectedRestaurant(null);
+    setRestaurantDetails(null);
+  };
+
+  // Форматирование времени работы
+  const formatWorkingHours = (hours: WorkingHour[] | undefined) => {
+    if (!hours || hours.length === 0) return null;
+    
+    const today = new Date().getDay();
+    const todayHours = hours.find(h => h.dayOfWeek === today);
+    
+    if (!todayHours) return null;
+    if (todayHours.openTime === '00:00' && todayHours.closeTime === '23:59') return null;
+    
+    return todayHours;
+  };
+
+  // Проверка открыт ли сейчас
+  const isOpenNow = (hours: WorkingHour[] | undefined) => {
+    if (!hours || hours.length === 0) return null;
+    
+    const now = new Date();
+    const today = now.getDay();
+    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    const todayHours = hours.find(h => h.dayOfWeek === today);
+    if (!todayHours) return null;
+    if (todayHours.openTime === '00:00' && todayHours.closeTime === '23:59') return null;
+    
+    return currentTime >= todayHours.openTime && currentTime <= todayHours.closeTime;
+  };
 
   if (!isClient || !L) {
     return (
@@ -169,7 +239,7 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
             eventHandlers={{
               mouseover: () => setHoveredId(restaurant.id),
               mouseout: () => setHoveredId(null),
-              click: () => window.location.href = `/restaurants/${restaurant.slug}`
+              click: () => handleMarkerClick(restaurant)
             }}
           >
             <Tooltip 
@@ -284,6 +354,194 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
       }`}>
         📍 {validRestaurants.length} мест на карте
       </div>
+
+      {/* Модальное окно с деталями ресторана */}
+      {selectedRestaurant && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[2000] flex items-center justify-center p-4"
+          onClick={closeModal}
+        >
+          <div 
+            className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Шапка с изображением */}
+            <div className="h-52 relative">
+              {selectedRestaurant.images?.[0] ? (
+                <img 
+                  src={selectedRestaurant.images[0]} 
+                  alt={selectedRestaurant.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-orange-400 via-pink-500 to-purple-500 flex items-center justify-center">
+                  <span className="text-7xl drop-shadow-lg">🍽️</span>
+                </div>
+              )}
+              
+              {/* Градиент */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+              
+              {/* Кнопка закрытия */}
+              <button 
+                onClick={closeModal}
+                className="absolute top-3 right-3 w-10 h-10 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white text-xl transition-colors"
+              >
+                ✕
+              </button>
+              
+              {/* Галерея миниатюр */}
+              {selectedRestaurant.images?.length > 1 && (
+                <div className="absolute bottom-3 left-3 right-3 flex gap-2 overflow-x-auto scrollbar-hide">
+                  {selectedRestaurant.images.slice(0, 5).map((img, i) => (
+                    <div key={i} className="w-12 h-12 flex-shrink-0 rounded-lg overflow-hidden border-2 border-white/50">
+                      <img src={img} alt="" className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                  {selectedRestaurant.images.length > 5 && (
+                    <div className="w-12 h-12 flex-shrink-0 rounded-lg bg-black/50 flex items-center justify-center text-white text-xs font-bold">
+                      +{selectedRestaurant.images.length - 5}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* Контент */}
+            <div className="p-5 overflow-y-auto max-h-[calc(85vh-208px)]">
+              {/* Название и рейтинг */}
+              <div className="flex items-start justify-between gap-4">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {selectedRestaurant.name}
+                </h2>
+                {selectedRestaurant.rating && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 rounded-xl">
+                    <span className="text-amber-500 text-lg">★</span>
+                    <span className="font-bold text-gray-900">{selectedRestaurant.rating.toFixed(1)}</span>
+                    {selectedRestaurant.ratingCount > 0 && (
+                      <span className="text-xs text-gray-500">({selectedRestaurant.ratingCount})</span>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              {/* Адрес и расстояние */}
+              <div className="mt-3 flex items-center gap-3 text-sm text-gray-600">
+                <span className="text-gray-400">📍</span>
+                <span>{selectedRestaurant.address || 'Адрес не указан'}</span>
+                {selectedRestaurant.distance !== undefined && (
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                    {selectedRestaurant.distance < 1 
+                      ? `${Math.round(selectedRestaurant.distance * 1000)} м` 
+                      : `${selectedRestaurant.distance.toFixed(1)} км`}
+                  </span>
+                )}
+              </div>
+              
+              {/* Кухня */}
+              {selectedRestaurant.cuisine?.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {selectedRestaurant.cuisine.map((c, i) => (
+                    <span 
+                      key={i} 
+                      className="px-3 py-1 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200/50 rounded-full text-sm text-orange-700 font-medium"
+                    >
+                      {c}
+                    </span>
+                  ))}
+                </div>
+              )}
+              
+              {/* Время работы */}
+              {loadingDetails ? (
+                <div className="mt-4 p-4 bg-gray-50 rounded-xl animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                </div>
+              ) : restaurantDetails?.workingHours?.length > 0 && (
+                <div className="mt-4 p-4 bg-gray-50 rounded-xl">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-medium text-gray-900 flex items-center gap-2">
+                      🕐 Время работы
+                    </span>
+                    {isOpenNow(restaurantDetails.workingHours) !== null && (
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        isOpenNow(restaurantDetails.workingHours) 
+                          ? 'bg-green-100 text-green-700' 
+                          : 'bg-red-100 text-red-700'
+                      }`}>
+                        {isOpenNow(restaurantDetails.workingHours) ? '🟢 Открыто' : '🔴 Закрыто'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 text-sm">
+                    {restaurantDetails.workingHours
+                      .filter((h: WorkingHour) => !(h.openTime === '00:00' && h.closeTime === '23:59'))
+                      .sort((a: WorkingHour, b: WorkingHour) => a.dayOfWeek - b.dayOfWeek)
+                      .map((hour: WorkingHour) => {
+                        const isToday = new Date().getDay() === hour.dayOfWeek;
+                        return (
+                          <div 
+                            key={hour.dayOfWeek} 
+                            className={`flex justify-between ${isToday ? 'font-semibold text-orange-600' : 'text-gray-600'}`}
+                          >
+                            <span>{DAYS[hour.dayOfWeek]}</span>
+                            <span>{hour.openTime} - {hour.closeTime}</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+              
+              {/* Контакты */}
+              {restaurantDetails && (restaurantDetails.phone || restaurantDetails.website) && (
+                <div className="mt-4 space-y-2">
+                  {restaurantDetails.phone && (
+                    <a 
+                      href={`tel:${restaurantDetails.phone}`}
+                      className="flex items-center gap-3 p-3 bg-green-50 hover:bg-green-100 rounded-xl text-green-700 transition-colors"
+                    >
+                      <span className="text-lg">📞</span>
+                      <span className="font-medium">{restaurantDetails.phone}</span>
+                    </a>
+                  )}
+                  {restaurantDetails.website && (
+                    <a 
+                      href={restaurantDetails.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 bg-blue-50 hover:bg-blue-100 rounded-xl text-blue-700 transition-colors"
+                    >
+                      <span className="text-lg">🌐</span>
+                      <span className="font-medium truncate">{restaurantDetails.website.replace(/^https?:\/\//, '')}</span>
+                    </a>
+                  )}
+                </div>
+              )}
+              
+              {/* Кнопки действий */}
+              <div className="mt-5 flex gap-3">
+                <Link 
+                  href={`/restaurants/${selectedRestaurant.slug}`}
+                  className="flex-1 py-3 px-4 bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white font-semibold rounded-xl text-center transition-all shadow-lg shadow-orange-500/25"
+                >
+                  Подробнее →
+                </Link>
+                {restaurantDetails?.latitude && restaurantDetails?.longitude && (
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${restaurantDetails.latitude},${restaurantDetails.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-colors"
+                  >
+                    🗺️ Маршрут
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
