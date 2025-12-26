@@ -2244,6 +2244,15 @@ interface RestaurantDetail {
   }>;
 }
 
+// Опции обновления через Google API
+const REFRESH_OPTIONS = [
+  { id: 'basic', label: 'Основное', desc: 'Рейтинг, телефон, сайт, цена', cost: '$0.017' },
+  { id: 'hours', label: 'Время работы', desc: 'Расписание по дням', cost: '$0.017' },
+  { id: 'photos', label: 'Фотографии', desc: 'Новые фото из Google', cost: '$0.025' },
+  { id: 'reviews', label: 'Отзывы', desc: 'Последние отзывы', cost: '$0.025' },
+  { id: 'full', label: 'Всё сразу', desc: 'Полное обновление', cost: '$0.040' },
+];
+
 // Модальное окно детального редактирования ресторана
 function RestaurantDetailModal({
   isOpen,
@@ -2259,14 +2268,19 @@ function RestaurantDetailModal({
   const [restaurant, setRestaurant] = useState<RestaurantDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activeSection, setActiveSection] = useState<'info' | 'hours' | 'menu' | 'photos' | 'reviews' | 'meta'>('info');
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeSection, setActiveSection] = useState<'info' | 'hours' | 'menu' | 'photos' | 'reviews' | 'meta' | 'update'>('info');
   const [editedData, setEditedData] = useState<Partial<RestaurantDetail>>({});
   const [editedHours, setEditedHours] = useState<RestaurantDetail['workingHours']>([]);
   const [newMenuItem, setNewMenuItem] = useState({ name: '', price: '', category: '', description: '' });
+  const [selectedRefreshFields, setSelectedRefreshFields] = useState<string[]>(['basic']);
+  const [refreshResult, setRefreshResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     if (isOpen && restaurantId) {
       fetchRestaurantDetail();
+      setActiveSection('info');
+      setRefreshResult(null);
     }
   }, [isOpen, restaurantId]);
 
@@ -2337,27 +2351,34 @@ function RestaurantDetailModal({
     }
   };
 
-  const handleRefresh = async () => {
+  const handleRefresh = async (fields: string = 'basic') => {
     if (!restaurant) return;
-    setSaving(true);
+    setRefreshing(true);
+    setRefreshResult(null);
+    
     try {
       const res = await fetch(`/api/restaurants/${restaurant.id}/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: 'full', force: true }),
+        body: JSON.stringify({ fields, force: true }),
       });
       
+      const data = await res.json();
+      
       if (res.ok) {
-        alert('✅ Данные обновлены из Google');
+        setRefreshResult({ success: true, message: '✅ Данные успешно обновлены из Google' });
         fetchRestaurantDetail();
+      } else if (res.status === 429) {
+        setRefreshResult({ success: false, message: `⏳ Кулдаун активен. Попробуйте позже.` });
+      } else if (res.status === 501) {
+        setRefreshResult({ success: false, message: `🔧 Google API не настроен: ${data.hint || ''}` });
       } else {
-        const data = await res.json();
-        alert(`❌ ${data.error}`);
+        setRefreshResult({ success: false, message: `❌ ${data.error || 'Ошибка обновления'}` });
       }
     } catch (error) {
-      alert(`❌ Ошибка: ${error}`);
+      setRefreshResult({ success: false, message: `❌ Ошибка сети: ${error}` });
     } finally {
-      setSaving(false);
+      setRefreshing(false);
     }
   };
 
@@ -2416,12 +2437,13 @@ function RestaurantDetailModal({
 
   const DAYS = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
   const SECTIONS = [
-    { id: 'info', label: '📋 Основное', icon: '📋' },
-    { id: 'hours', label: '🕐 Время работы', icon: '🕐' },
-    { id: 'menu', label: '🍽️ Меню', icon: '🍽️' },
-    { id: 'photos', label: '📷 Фото', icon: '📷' },
-    { id: 'reviews', label: '⭐ Отзывы', icon: '⭐' },
-    { id: 'meta', label: '⚙️ Метаданные', icon: '⚙️' },
+    { id: 'info', label: '📋 Основное' },
+    { id: 'hours', label: '🕐 Время' },
+    { id: 'menu', label: '🍽️ Меню' },
+    { id: 'photos', label: '📷 Фото' },
+    { id: 'reviews', label: '⭐ Отзывы' },
+    { id: 'update', label: '🔄 Обновить' },
+    { id: 'meta', label: '⚙️ Мета' },
   ];
 
   if (!isOpen) return null;
@@ -2446,18 +2468,11 @@ function RestaurantDetailModal({
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={handleRefresh}
-              disabled={saving || loading}
-              className="px-4 py-2 bg-blue-500/20 text-blue-300 rounded-lg hover:bg-blue-500/30 text-sm disabled:opacity-50"
-            >
-              🔄 Обновить из Google
-            </button>
-            <button
               onClick={handleSave}
               disabled={saving || loading}
-              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm font-medium disabled:opacity-50"
+              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm font-medium disabled:opacity-50 flex items-center gap-1"
             >
-              {saving ? '⏳ Сохранение...' : '💾 Сохранить'}
+              {saving ? '⏳' : '💾'} {saving ? 'Сохранение...' : 'Сохранить'}
             </button>
             <button
               onClick={onClose}
@@ -2847,6 +2862,95 @@ function RestaurantDetailModal({
                 </div>
               )}
 
+              {/* Обновление из Google */}
+              {activeSection === 'update' && (
+                <div className="space-y-6">
+                  <div className="bg-gradient-to-r from-blue-500/10 to-green-500/10 rounded-xl p-4 border border-blue-500/20">
+                    <h3 className="text-white font-medium mb-2">🔄 Обновить данные из Google Maps</h3>
+                    <p className="text-white/50 text-sm mb-4">
+                      Выберите какие данные обновить. Стоимость зависит от выбранных полей.
+                    </p>
+                    
+                    {/* Опции обновления */}
+                    <div className="space-y-2 mb-4">
+                      {REFRESH_OPTIONS.map(opt => (
+                        <label
+                          key={opt.id}
+                          className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all ${
+                            selectedRefreshFields.includes(opt.id)
+                              ? 'bg-blue-500/20 border border-blue-500/40'
+                              : 'bg-white/5 border border-transparent hover:bg-white/10'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="refreshField"
+                              checked={selectedRefreshFields.includes(opt.id)}
+                              onChange={() => setSelectedRefreshFields([opt.id])}
+                              className="w-4 h-4 accent-blue-500"
+                            />
+                            <div>
+                              <div className="text-white font-medium">{opt.label}</div>
+                              <div className="text-white/40 text-xs">{opt.desc}</div>
+                            </div>
+                          </div>
+                          <span className="text-green-400 text-sm font-mono">{opt.cost}</span>
+                        </label>
+                      ))}
+                    </div>
+                    
+                    {/* Результат */}
+                    {refreshResult && (
+                      <div className={`p-3 rounded-lg mb-4 ${
+                        refreshResult.success ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
+                      }`}>
+                        {refreshResult.message}
+                      </div>
+                    )}
+                    
+                    {/* Кнопка обновления */}
+                    <button
+                      onClick={() => handleRefresh(selectedRefreshFields[0])}
+                      disabled={refreshing || selectedRefreshFields.length === 0}
+                      className="w-full py-3 bg-gradient-to-r from-blue-500 to-green-500 text-white rounded-xl font-medium hover:from-blue-600 hover:to-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {refreshing ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <span className="animate-spin">⏳</span> Обновление...
+                        </span>
+                      ) : (
+                        <span className="flex items-center justify-center gap-2">
+                          🔄 Обновить выбранные поля
+                          <span className="text-white/70">
+                            ({REFRESH_OPTIONS.find(o => o.id === selectedRefreshFields[0])?.cost})
+                          </span>
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                  
+                  {/* Инфо о последнем обновлении */}
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <h4 className="text-white/70 text-sm mb-2">📊 История синхронизации</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <div className="text-white/40 text-xs">Последняя синхронизация</div>
+                        <div className="text-white">
+                          {restaurant.lastSynced 
+                            ? new Date(restaurant.lastSynced).toLocaleString() 
+                            : 'Никогда'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-white/40 text-xs">Источник данных</div>
+                        <div className="text-white capitalize">{restaurant.source}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Метаданные */}
               {activeSection === 'meta' && (
                 <div className="space-y-6">
@@ -3018,65 +3122,57 @@ function RestaurantManagementPanel() {
     }
   };
 
-  const FILTERS = [
-    { id: 'all', label: '📋 Все', color: 'blue' },
-    { id: 'active', label: '✅ Активные', color: 'green' },
-    { id: 'archived', label: '📦 Архив', color: 'orange' },
-    { id: 'noPhotos', label: '📷 Без фото', color: 'red' },
-    { id: 'noRating', label: '⭐ Без рейтинга', color: 'yellow' },
-    { id: 'unverified', label: '❓ Не проверены', color: 'purple' },
-  ];
-
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
     <div className="space-y-6">
-      {/* Статистика */}
+      {/* Статистика - кликабельные карточки */}
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-          <div className="bg-white/5 rounded-xl p-3 text-center">
+          <button 
+            onClick={() => { setFilter('all'); setPage(0); }}
+            className={`rounded-xl p-3 text-center transition-all ${filter === 'all' ? 'bg-white/20 ring-2 ring-white/30' : 'bg-white/5 hover:bg-white/10'}`}
+          >
             <div className="text-2xl font-bold text-white">{stats.total}</div>
             <div className="text-xs text-white/40">Всего</div>
-          </div>
-          <div className="bg-green-500/10 rounded-xl p-3 text-center">
+          </button>
+          <button 
+            onClick={() => { setFilter('active'); setPage(0); }}
+            className={`rounded-xl p-3 text-center transition-all ${filter === 'active' ? 'bg-green-500/30 ring-2 ring-green-500/50' : 'bg-green-500/10 hover:bg-green-500/20'}`}
+          >
             <div className="text-2xl font-bold text-green-400">{stats.active}</div>
             <div className="text-xs text-white/40">Активные</div>
-          </div>
-          <div className="bg-blue-500/10 rounded-xl p-3 text-center">
-            <div className="text-2xl font-bold text-blue-400">{stats.verified}</div>
-            <div className="text-xs text-white/40">Проверены</div>
-          </div>
-          <div className="bg-orange-500/10 rounded-xl p-3 text-center">
+          </button>
+          <button 
+            onClick={() => { setFilter('unverified'); setPage(0); }}
+            className={`rounded-xl p-3 text-center transition-all ${filter === 'unverified' ? 'bg-blue-500/30 ring-2 ring-blue-500/50' : 'bg-blue-500/10 hover:bg-blue-500/20'}`}
+          >
+            <div className="text-2xl font-bold text-blue-400">{stats.total - stats.verified}</div>
+            <div className="text-xs text-white/40">Не проверены</div>
+          </button>
+          <button 
+            onClick={() => { setFilter('archived'); setPage(0); }}
+            className={`rounded-xl p-3 text-center transition-all ${filter === 'archived' ? 'bg-orange-500/30 ring-2 ring-orange-500/50' : 'bg-orange-500/10 hover:bg-orange-500/20'}`}
+          >
             <div className="text-2xl font-bold text-orange-400">{stats.archived}</div>
             <div className="text-xs text-white/40">В архиве</div>
-          </div>
-          <div className="bg-red-500/10 rounded-xl p-3 text-center">
+          </button>
+          <button 
+            onClick={() => { setFilter('noPhotos'); setPage(0); }}
+            className={`rounded-xl p-3 text-center transition-all ${filter === 'noPhotos' ? 'bg-red-500/30 ring-2 ring-red-500/50' : 'bg-red-500/10 hover:bg-red-500/20'}`}
+          >
             <div className="text-2xl font-bold text-red-400">{stats.noPhotos}</div>
             <div className="text-xs text-white/40">Без фото</div>
-          </div>
-          <div className="bg-yellow-500/10 rounded-xl p-3 text-center">
+          </button>
+          <button 
+            onClick={() => { setFilter('noRating'); setPage(0); }}
+            className={`rounded-xl p-3 text-center transition-all ${filter === 'noRating' ? 'bg-yellow-500/30 ring-2 ring-yellow-500/50' : 'bg-yellow-500/10 hover:bg-yellow-500/20'}`}
+          >
             <div className="text-2xl font-bold text-yellow-400">{stats.noRating}</div>
             <div className="text-xs text-white/40">Без рейтинга</div>
-          </div>
+          </button>
         </div>
       )}
-
-      {/* Фильтры */}
-      <div className="flex flex-wrap gap-2">
-        {FILTERS.map(f => (
-          <button
-            key={f.id}
-            onClick={() => { setFilter(f.id as any); setPage(0); }}
-            className={`px-4 py-2 text-sm rounded-lg transition-all ${
-              filter === f.id
-                ? `bg-${f.color}-500/30 text-${f.color}-300 border border-${f.color}-500/50`
-                : 'bg-white/5 text-white/60 hover:bg-white/10'
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
 
       {/* Поиск */}
       <div className="flex gap-3">

@@ -342,16 +342,46 @@ export async function GET(request: NextRequest) {
     const sortBy = searchParams.get('sortBy');
     const maxDistance = parseFloat(searchParams.get('maxDistance') || '50'); // км
     
-    // Параметр для включения архивированных
+    // Параметры для админки
     const includeArchived = searchParams.get('includeArchived') === 'true';
+    const includeAll = searchParams.get('includeAll') === 'true';
+    const filterArchived = searchParams.get('archived') === 'true';
+    const filterActive = searchParams.get('active') === 'true';
+    const filterNoPhotos = searchParams.get('noPhotos') === 'true';
+    const filterNoRating = searchParams.get('noRating') === 'true';
+    const filterUnverified = searchParams.get('unverified') === 'true';
     
-    const where: any = {
-      isActive: true,
-    };
+    const where: any = {};
     
-    // По умолчанию не показываем архивированные
-    if (!includeArchived) {
-      where.isArchived = false;
+    // Для админки - разные фильтры
+    if (includeAll) {
+      // Не применяем isActive фильтр для админки
+      if (filterArchived) {
+        where.isArchived = true;
+      } else if (filterActive) {
+        where.isActive = true;
+        where.isArchived = false;
+      }
+      
+      if (filterNoPhotos) {
+        where.images = { equals: [] };
+      }
+      
+      if (filterNoRating) {
+        where.rating = null;
+      }
+      
+      if (filterUnverified) {
+        where.isVerified = false;
+      }
+    } else {
+      // Для публичного API - только активные
+      where.isActive = true;
+      
+      // По умолчанию не показываем архивированные
+      if (!includeArchived) {
+        where.isArchived = false;
+      }
     }
     
     // Условия AND
@@ -453,10 +483,10 @@ export async function GET(request: NextRequest) {
         priceRange: true,
         isActive: true,
         isArchived: true,
-        // Не загружаем тяжёлые данные для списка:
-        // reviews - не нужны для карточек
-        // workingHours - не нужны для карточек
-        // phone, website, email, menuUrl и т.д.
+        isVerified: true,
+        source: true,
+        lastSynced: true,
+        phone: true,
       },
     });
     
