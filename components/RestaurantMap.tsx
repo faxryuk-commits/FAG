@@ -70,14 +70,26 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
     });
   }, []);
 
-  // Загрузка деталей ресторана
+  // Кэш деталей ресторанов
+  const detailsCache = useRef<Record<string, any>>({});
+
+  // Загрузка деталей ресторана (в фоне)
   const fetchRestaurantDetails = async (slug: string) => {
+    // Если уже в кэше - используем кэш
+    if (detailsCache.current[slug]) {
+      setRestaurantDetails(detailsCache.current[slug]);
+      setLoadingDetails(false);
+      return;
+    }
+    
     setLoadingDetails(true);
     try {
       const res = await fetch(`/api/restaurants/${slug}`);
       const data = await res.json();
-      // API возвращает { restaurant: ... }
-      setRestaurantDetails(data.restaurant || data);
+      const details = data.restaurant || data;
+      // Сохраняем в кэш
+      detailsCache.current[slug] = details;
+      setRestaurantDetails(details);
     } catch (error) {
       console.error('Error fetching restaurant details:', error);
     } finally {
@@ -85,9 +97,12 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
     }
   };
 
-  // Открытие попапа с деталями
+  // Открытие попапа с деталями - МГНОВЕННО
   const handleMarkerClick = (restaurant: Restaurant) => {
+    // Сразу показываем модал с имеющимися данными
     setSelectedRestaurant(restaurant);
+    setRestaurantDetails(null);
+    // Загружаем дополнительные данные в фоне
     fetchRestaurantDetails(restaurant.slug);
   };
 
@@ -361,10 +376,12 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
       {selectedRestaurant && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[2000] flex items-center justify-center p-4"
+          style={{ animation: 'modalBgOpen 0.1s ease-out' }}
           onClick={closeModal}
         >
           <div 
-            className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200"
+            className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden shadow-2xl"
+            style={{ animation: 'modalOpen 0.1s ease-out' }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Шапка с изображением */}
