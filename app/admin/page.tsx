@@ -2168,6 +2168,345 @@ function EnrichSection() {
   );
 }
 
+// Секция точечного обновления через Google Places API
+function SmartRefreshSection() {
+  const [restaurants, setRestaurants] = useState<Array<{
+    id: string;
+    name: string;
+    address: string;
+    rating: number | null;
+    ratingCount: number;
+    lastSynced: string | null;
+    source: string;
+    canRefresh: boolean;
+  }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
+  const [results, setResults] = useState<Record<string, { success: boolean; message: string }>>({});
+  const [filter, setFilter] = useState<'all' | 'outdated' | 'popular'>('outdated');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchRefreshing, setBatchRefreshing] = useState(false);
+  const [apiStatus, setApiStatus] = useState<{ available: boolean; message?: string } | null>(null);
+
+  useEffect(() => {
+    fetchRestaurants();
+    checkApiStatus();
+  }, [filter]);
+
+  const checkApiStatus = async () => {
+    try {
+      // Проверяем доступность API на примере первого ресторана
+      const res = await fetch('/api/restaurants/test/refresh');
+      if (res.status === 501) {
+        const data = await res.json();
+        setApiStatus({ available: false, message: data.hint });
+      } else {
+        setApiStatus({ available: true });
+      }
+    } catch {
+      setApiStatus({ available: true }); // Предполагаем что API доступен
+    }
+  };
+
+  const fetchRestaurants = async () => {
+    setLoading(true);
+    try {
+      // Берём рестораны для обновления
+      const sortBy = filter === 'popular' ? 'ratingCount' : 'lastSynced';
+      const res = await fetch(`/api/restaurants?limit=100&sortBy=${sortBy}&includeArchived=false`);
+      const data = await res.json();
+      
+      const now = new Date();
+      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      
+      let items = (data.restaurants || []).map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        address: r.address,
+        rating: r.rating,
+        ratingCount: r.ratingCount,
+        lastSynced: r.lastSynced,
+        source: r.source,
+        canRefresh: !r.lastSynced || new Date(r.lastSynced) < oneDayAgo,
+      }));
+
+      // Фильтруем
+      if (filter === 'outdated') {
+        items = items.filter((r: any) => !r.lastSynced || new Date(r.lastSynced) < oneWeekAgo);
+      } else if (filter === 'popular') {
+        items = items.sort((a: any, b: any) => (b.ratingCount || 0) - (a.ratingCount || 0)).slice(0, 50);
+      }
+
+      setRestaurants(items);
+    } catch (error) {
+      console.error('Error fetching restaurants:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshSingle = async (id: string, force = false) => {
+    setRefreshing(prev => new Set(prev).add(id));
+    
+    try {
+      const res = await fetch(`/api/restaurants/${id}/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: 'basic', force }),
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setResults(prev => ({ ...prev, [id]: { success: true, message: '✅ Обновлено' } }));
+        // Обновляем список
+        setRestaurants(prev => prev.map(r => 
+          r.id === id ? { ...r, lastSynced: new Date().toISOString(), canRefresh: false } : r
+        ));
+      } else if (res.status === 429) {
+        setResults(prev => ({ ...prev, [id]: { success: false, message: '⏳ Кулдаун' } }));
+      } else if (res.status === 501) {
+        setResults(prev => ({ ...prev, [id]: { success: false, message: '🔧 API не настроен' } }));
+      } else {
+        setResults(prev => ({ ...prev, [id]: { success: false, message: `❌ ${data.error}` } }));
+      }
+    } catch (error) {
+      setResults(prev => ({ ...prev, [id]: { success: false, message: '❌ Ошибка сети' } }));
+    } finally {
+      setRefreshing(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  const refreshBatch = async () => {
+    if (selectedIds.size === 0) {
+      alert('Выберите рестораны для обновления');
+      return;
+    }
+    
+    const cost = (selectedIds.size * 0.017).toFixed(2);
+    if (!confirm(`Обновить ${selectedIds.size} ресторанов?\n\nПримерная стоимость: ~$${cost}`)) return;
+    
+    setBatchRefreshing(true);
+    
+    for (const id of selectedIds) {
+      await refreshSingle(id, true);
+      // Небольшая задержка между запросами
+      await new Promise(r => setTimeout(r, 500));
+    }
+    
+    setBatchRefreshing(false);
+    setSelectedIds(new Set());
+    fetchRestaurants();
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedIds.size === filteredRestaurants.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredRestaurants.map(r => r.id)));
+    }
+  };
+
+  const filteredRestaurants = restaurants.filter(r => 
+    searchQuery === '' || 
+    r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    r.address.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="mt-6 pt-6 border-t border-white/10">
+      <h3 className="text-sm font-medium text-white/60 mb-3">🎯 Точечное обновление (Google Places API)</h3>
+      <p className="text-xs text-white/40 mb-3">
+        Обновить данные конкретных ресторанов напрямую из Google. <br/>
+        <span className="text-green-400">~$0.017 за запрос</span> (в 60 раз дешевле Apify!)
+      </p>
+      
+      {/* API Status */}
+      {apiStatus && !apiStatus.available && (
+        <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+          <div className="text-yellow-300 text-sm font-medium mb-1">⚠️ Google Places API не настроен</div>
+          <p className="text-xs text-white/50">{apiStatus.message}</p>
+        </div>
+      )}
+      
+      {/* Фильтры и поиск */}
+      <div className="space-y-3 mb-4">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setFilter('outdated')}
+            className={`flex-1 py-2 text-xs rounded-lg transition-colors ${
+              filter === 'outdated' 
+                ? 'bg-orange-500/30 text-orange-300 border border-orange-500/50' 
+                : 'bg-white/5 text-white/60 hover:bg-white/10'
+            }`}
+          >
+            📅 Устаревшие (&gt;7 дней)
+          </button>
+          <button
+            onClick={() => setFilter('popular')}
+            className={`flex-1 py-2 text-xs rounded-lg transition-colors ${
+              filter === 'popular' 
+                ? 'bg-purple-500/30 text-purple-300 border border-purple-500/50' 
+                : 'bg-white/5 text-white/60 hover:bg-white/10'
+            }`}
+          >
+            ⭐ Популярные (топ-50)
+          </button>
+          <button
+            onClick={() => setFilter('all')}
+            className={`flex-1 py-2 text-xs rounded-lg transition-colors ${
+              filter === 'all' 
+                ? 'bg-blue-500/30 text-blue-300 border border-blue-500/50' 
+                : 'bg-white/5 text-white/60 hover:bg-white/10'
+            }`}
+          >
+            📋 Все
+          </button>
+        </div>
+        
+        <input
+          type="text"
+          placeholder="🔍 Поиск по названию или адресу..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-white/30 focus:outline-none focus:border-white/30"
+        />
+      </div>
+
+      {/* Массовые действия */}
+      {selectedIds.size > 0 && (
+        <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg flex items-center justify-between">
+          <div>
+            <span className="text-blue-300 font-medium">{selectedIds.size} выбрано</span>
+            <span className="text-xs text-white/40 ml-2">~${(selectedIds.size * 0.017).toFixed(2)}</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 bg-white/10 text-white/60 text-xs rounded-lg hover:bg-white/20"
+            >
+              Отменить
+            </button>
+            <button
+              onClick={refreshBatch}
+              disabled={batchRefreshing}
+              className="px-3 py-1.5 bg-green-500/30 text-green-300 text-xs rounded-lg hover:bg-green-500/40 disabled:opacity-50"
+            >
+              {batchRefreshing ? '⏳ Обновление...' : '🔄 Обновить выбранные'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Список ресторанов */}
+      {loading ? (
+        <div className="text-center py-8 text-white/40">Загрузка...</div>
+      ) : filteredRestaurants.length === 0 ? (
+        <div className="text-center py-8 text-white/40">Нет ресторанов для обновления</div>
+      ) : (
+        <div className="space-y-2">
+          {/* Заголовок с выбором всех */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg">
+            <input
+              type="checkbox"
+              checked={selectedIds.size === filteredRestaurants.length && filteredRestaurants.length > 0}
+              onChange={selectAll}
+              className="w-4 h-4 rounded accent-blue-500"
+            />
+            <span className="text-xs text-white/40">
+              Выбрать все ({filteredRestaurants.length})
+            </span>
+          </div>
+          
+          <div className="max-h-[400px] overflow-y-auto space-y-1">
+            {filteredRestaurants.map(r => (
+              <div
+                key={r.id}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                  selectedIds.has(r.id) ? 'bg-blue-500/20' : 'bg-white/5 hover:bg-white/10'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(r.id)}
+                  onChange={() => toggleSelect(r.id)}
+                  className="w-4 h-4 rounded accent-blue-500"
+                />
+                
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-white font-medium truncate">{r.name}</div>
+                  <div className="text-xs text-white/40 truncate">{r.address}</div>
+                  <div className="flex items-center gap-2 text-xs mt-0.5">
+                    {r.rating && (
+                      <span className="text-yellow-400">⭐ {r.rating.toFixed(1)}</span>
+                    )}
+                    <span className="text-white/30">({r.ratingCount} отзывов)</span>
+                    {r.lastSynced && (
+                      <span className="text-white/20">
+                        • {new Date(r.lastSynced).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                {results[r.id] && (
+                  <span className={`text-xs ${results[r.id].success ? 'text-green-400' : 'text-red-400'}`}>
+                    {results[r.id].message}
+                  </span>
+                )}
+                
+                <button
+                  onClick={() => refreshSingle(r.id, !r.canRefresh)}
+                  disabled={refreshing.has(r.id) || batchRefreshing}
+                  className={`px-3 py-1.5 text-xs rounded-lg transition-colors disabled:opacity-50 ${
+                    r.canRefresh
+                      ? 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
+                      : 'bg-orange-500/20 text-orange-300 hover:bg-orange-500/30'
+                  }`}
+                  title={r.canRefresh ? 'Обновить' : 'Принудительно обновить (кулдаун)'}
+                >
+                  {refreshing.has(r.id) ? '⏳' : r.canRefresh ? '🔄' : '⚡'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Статистика стоимости */}
+      <div className="mt-4 p-3 bg-white/5 rounded-lg">
+        <div className="flex justify-between text-xs">
+          <span className="text-white/40">Стоимость обновления</span>
+          <span className="text-white/60">
+            1 = $0.017 | 10 = $0.17 | 100 = $1.70 | 1000 = $17
+          </span>
+        </div>
+        <div className="text-xs text-white/30 mt-1">
+          💡 Бесплатный лимит Google: $200/мес = ~11,700 обновлений
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Модальное окно мониторинга парсинга
 function ParsingMonitorModal({ 
   isOpen, 
@@ -3609,6 +3948,9 @@ export default function AdminPage() {
 
               {/* Enrich Data Section */}
               <EnrichSection />
+
+              {/* Smart Refresh Section - Google Places API */}
+              <SmartRefreshSection />
 
               {/* Delete Data Section */}
               <div className="mt-6 pt-6 border-t border-white/10">

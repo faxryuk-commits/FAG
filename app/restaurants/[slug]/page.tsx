@@ -69,8 +69,6 @@ export default function RestaurantPage() {
   const [showGallery, setShowGallery] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshStatus, setRefreshStatus] = useState<string | null>(null);
 
   // Загрузка темы
   useEffect(() => {
@@ -104,41 +102,6 @@ export default function RestaurantPage() {
       console.error('Error fetching restaurant:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Точечное обновление данных через Google Places API
-  const handleRefresh = async (force = false) => {
-    if (!restaurant) return;
-    
-    setRefreshing(true);
-    setRefreshStatus(null);
-    
-    try {
-      const res = await fetch(`/api/restaurants/${slug}/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: 'basic', force }),
-      });
-      
-      const data = await res.json();
-      
-      if (res.ok) {
-        setRefreshStatus('✅ Данные обновлены');
-        // Перезагрузим ресторан
-        fetchRestaurant();
-      } else if (res.status === 429) {
-        setRefreshStatus(`⏳ Кулдаун до ${new Date(data.nextAvailable).toLocaleTimeString()}`);
-      } else if (res.status === 501) {
-        setRefreshStatus('🔧 API не настроен');
-      } else {
-        setRefreshStatus(`❌ ${data.error || 'Ошибка'}`);
-      }
-    } catch (error) {
-      setRefreshStatus('❌ Ошибка сети');
-    } finally {
-      setRefreshing(false);
-      setTimeout(() => setRefreshStatus(null), 5000);
     }
   };
 
@@ -343,30 +306,7 @@ export default function RestaurantPage() {
               >
                 📤 Поделиться
               </button>
-              {/* Кнопка обновления данных */}
-              <button 
-                onClick={() => handleRefresh()}
-                disabled={refreshing}
-                className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl transition-colors ${
-                  refreshing ? 'opacity-50 cursor-not-allowed' : ''
-                } ${
-                  theme === 'dark' ? 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                }`}
-                title="Обновить данные из Google Maps (~$0.017)"
-              >
-                {refreshing ? '⏳' : '🔄'} Обновить
-              </button>
             </div>
-            {/* Статус обновления */}
-            {refreshStatus && (
-              <div className={`text-sm px-3 py-1.5 rounded-lg inline-block ${
-                refreshStatus.startsWith('✅') ? 'bg-green-500/20 text-green-400' :
-                refreshStatus.startsWith('❌') ? 'bg-red-500/20 text-red-400' :
-                'bg-yellow-500/20 text-yellow-400'
-              }`}>
-                {refreshStatus}
-              </div>
-            )}
           </div>
         </div>
 
