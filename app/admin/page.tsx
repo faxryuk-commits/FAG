@@ -3045,6 +3045,7 @@ function RestaurantManagementPanel() {
   const [selectedRestaurant, setSelectedRestaurant] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
+  const [limit, setLimit] = useState(50);
   const [stats, setStats] = useState<{
     total: number;
     active: number;
@@ -3053,12 +3054,11 @@ function RestaurantManagementPanel() {
     noPhotos: number;
     noRating: number;
   } | null>(null);
-  const LIMIT = 30;
 
   useEffect(() => {
     fetchRestaurants();
     fetchStats();
-  }, [filter, page]);
+  }, [filter, page, limit]);
 
   const fetchStats = async () => {
     try {
@@ -3083,8 +3083,8 @@ function RestaurantManagementPanel() {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        limit: LIMIT.toString(),
-        offset: (page * LIMIT).toString(),
+        limit: limit.toString(),
+        offset: (page * limit).toString(),
         includeAll: 'true',
       });
       
@@ -3123,7 +3123,7 @@ function RestaurantManagementPanel() {
     }
   };
 
-  const totalPages = Math.ceil(total / LIMIT);
+  const totalPages = Math.ceil(total / limit);
 
   return (
     <div className="space-y-6">
@@ -3195,16 +3195,38 @@ function RestaurantManagementPanel() {
         </button>
       </div>
 
+      {/* Настройки отображения */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-white/40 text-sm">На странице:</span>
+          {[30, 50, 100, 200].map(n => (
+            <button
+              key={n}
+              onClick={() => { setLimit(n); setPage(0); }}
+              className={`px-3 py-1 text-sm rounded-lg ${
+                limit === n ? 'bg-white/20 text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'
+              }`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+        <div className="text-white/40 text-sm">
+          Всего: <span className="text-white font-medium">{total}</span> записей
+        </div>
+      </div>
+
       {/* Список ресторанов */}
       <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
         {/* Заголовок таблицы */}
-        <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-white/5 text-xs text-white/40 font-medium">
-          <div className="col-span-1">Фото</div>
-          <div className="col-span-4">Название / Адрес</div>
-          <div className="col-span-2">Рейтинг</div>
-          <div className="col-span-2">Статус</div>
-          <div className="col-span-2">Обновлено</div>
-          <div className="col-span-1"></div>
+        <div className="grid grid-cols-[50px_60px_1fr_120px_120px_120px_50px] gap-2 px-4 py-3 bg-white/5 text-xs text-white/40 font-medium">
+          <div className="text-center">#</div>
+          <div>Фото</div>
+          <div>Название / Адрес</div>
+          <div>Рейтинг</div>
+          <div>Статус</div>
+          <div>Обновлено</div>
+          <div></div>
         </div>
 
         {/* Содержимое */}
@@ -3220,36 +3242,41 @@ function RestaurantManagementPanel() {
           </div>
         ) : (
           <div className="divide-y divide-white/5">
-            {restaurants.map(r => (
+            {restaurants.map((r, idx) => (
               <div
                 key={r.id}
                 onClick={() => setSelectedRestaurant(r.id)}
-                className="grid grid-cols-12 gap-4 px-4 py-3 hover:bg-white/5 cursor-pointer transition-colors items-center"
+                className="grid grid-cols-[50px_60px_1fr_120px_120px_120px_50px] gap-2 px-4 py-2.5 hover:bg-white/5 cursor-pointer transition-colors items-center"
               >
+                {/* Номер */}
+                <div className="text-center text-white/30 text-sm font-mono">
+                  {page * limit + idx + 1}
+                </div>
+
                 {/* Фото */}
-                <div className="col-span-1">
+                <div>
                   {r.images[0] ? (
-                    <img src={r.images[0]} alt="" className="w-12 h-12 rounded-lg object-cover" />
+                    <img src={r.images[0]} alt="" className="w-10 h-10 rounded-lg object-cover" />
                   ) : (
-                    <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center text-white/30">
+                    <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-white/30 text-sm">
                       📷
                     </div>
                   )}
                 </div>
 
                 {/* Название */}
-                <div className="col-span-4 min-w-0">
+                <div className="min-w-0">
                   <div className="text-white font-medium truncate">{r.name}</div>
                   <div className="text-sm text-white/40 truncate">{r.address}</div>
                   {r.phone && <div className="text-xs text-white/30">{r.phone}</div>}
                 </div>
 
                 {/* Рейтинг */}
-                <div className="col-span-2">
+                <div>
                   {r.rating ? (
                     <div className="flex items-center gap-1">
                       <span className="text-yellow-400 font-medium">{r.rating.toFixed(1)}</span>
-                      <span className="text-white/30 text-sm">({r.ratingCount})</span>
+                      <span className="text-white/30 text-xs">({r.ratingCount})</span>
                     </div>
                   ) : (
                     <span className="text-white/20">—</span>
@@ -3257,41 +3284,36 @@ function RestaurantManagementPanel() {
                 </div>
 
                 {/* Статус */}
-                <div className="col-span-2 flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1">
                   {r.isActive && (
-                    <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded">
+                    <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-xs rounded">
                       Активен
                     </span>
                   )}
                   {r.isVerified && (
-                    <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded">
+                    <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded">
                       ✓
                     </span>
                   )}
                   {r.isArchived && (
-                    <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded">
-                      Архив
-                    </span>
-                  )}
-                  {!r.isActive && !r.isArchived && (
-                    <span className="px-2 py-0.5 bg-gray-500/20 text-gray-400 text-xs rounded">
-                      Скрыт
+                    <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded">
+                      📦
                     </span>
                   )}
                 </div>
 
                 {/* Дата */}
-                <div className="col-span-2 text-sm text-white/40">
+                <div className="text-sm text-white/40">
                   {r.lastSynced ? (
                     new Date(r.lastSynced).toLocaleDateString()
                   ) : (
-                    <span className="text-white/20">Не обновлялся</span>
+                    <span className="text-white/20">—</span>
                   )}
                 </div>
 
                 {/* Действия */}
-                <div className="col-span-1 text-right">
-                  <button className="p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-lg">
+                <div className="text-center">
+                  <button className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded-lg">
                     ✏️
                   </button>
                 </div>
@@ -3301,32 +3323,100 @@ function RestaurantManagementPanel() {
         )}
 
         {/* Пагинация */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-white/10">
-            <div className="text-sm text-white/40">
-              Показано {page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} из {total}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-white/10 bg-white/5">
+          <div className="text-sm text-white/40">
+            Показано <span className="text-white">{page * limit + 1}</span>–<span className="text-white">{Math.min((page + 1) * limit, total)}</span> из <span className="text-white">{total}</span>
+          </div>
+          
+          <div className="flex items-center gap-1">
+            {/* Первая страница */}
+            <button
+              onClick={() => setPage(0)}
+              disabled={page === 0}
+              className="px-2 py-1.5 bg-white/5 text-white/60 rounded-lg hover:bg-white/10 disabled:opacity-30 text-sm"
+              title="Первая"
+            >
+              ««
+            </button>
+            
+            {/* Назад */}
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-3 py-1.5 bg-white/5 text-white/60 rounded-lg hover:bg-white/10 disabled:opacity-30 text-sm"
+            >
+              ‹
+            </button>
+            
+            {/* Номера страниц */}
+            <div className="flex items-center gap-1 mx-2">
+              {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+                let pageNum: number;
+                if (totalPages <= 7) {
+                  pageNum = i;
+                } else if (page < 4) {
+                  pageNum = i;
+                } else if (page > totalPages - 5) {
+                  pageNum = totalPages - 7 + i;
+                } else {
+                  pageNum = page - 3 + i;
+                }
+                
+                if (pageNum < 0 || pageNum >= totalPages) return null;
+                
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPage(pageNum)}
+                    className={`w-8 h-8 text-sm rounded-lg transition-colors ${
+                      page === pageNum
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-white/5 text-white/60 hover:bg-white/10'
+                    }`}
+                  >
+                    {pageNum + 1}
+                  </button>
+                );
+              })}
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="px-3 py-1.5 bg-white/5 text-white/60 rounded-lg hover:bg-white/10 disabled:opacity-30"
-              >
-                ← Назад
-              </button>
-              <span className="px-3 py-1.5 text-white/40">
-                {page + 1} / {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="px-3 py-1.5 bg-white/5 text-white/60 rounded-lg hover:bg-white/10 disabled:opacity-30"
-              >
-                Вперёд →
-              </button>
+            
+            {/* Вперёд */}
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="px-3 py-1.5 bg-white/5 text-white/60 rounded-lg hover:bg-white/10 disabled:opacity-30 text-sm"
+            >
+              ›
+            </button>
+            
+            {/* Последняя страница */}
+            <button
+              onClick={() => setPage(totalPages - 1)}
+              disabled={page >= totalPages - 1}
+              className="px-2 py-1.5 bg-white/5 text-white/60 rounded-lg hover:bg-white/10 disabled:opacity-30 text-sm"
+              title="Последняя"
+            >
+              »»
+            </button>
+            
+            {/* Перейти к странице */}
+            <div className="flex items-center gap-1 ml-4">
+              <span className="text-white/40 text-sm">Стр:</span>
+              <input
+                type="number"
+                min={1}
+                max={totalPages}
+                value={page + 1}
+                onChange={e => {
+                  const p = parseInt(e.target.value) - 1;
+                  if (p >= 0 && p < totalPages) setPage(p);
+                }}
+                className="w-16 px-2 py-1.5 bg-white/10 border border-white/10 rounded-lg text-white text-sm text-center focus:outline-none focus:border-white/30"
+              />
+              <span className="text-white/40 text-sm">/ {totalPages}</span>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Модальное окно редактирования */}
