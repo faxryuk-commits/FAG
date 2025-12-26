@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-// Принудительно динамический рендер (API использует query params)
+// Кэширование на edge (5 минут)
 export const dynamic = 'force-dynamic';
+export const revalidate = 300; // 5 минут
 
 /**
  * Справочник блюд → ключевые слова для поиска заведений
@@ -435,12 +436,26 @@ export async function GET(request: NextRequest) {
       where,
       // Получаем больше записей для сортировки на уровне JS
       take: 1000,
-      include: {
-        reviews: {
-          take: 3,
-          orderBy: { date: 'desc' },
-        },
-        workingHours: true,
+      // Выбираем только нужные поля для списка (оптимизация)
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        address: true,
+        city: true,
+        latitude: true,
+        longitude: true,
+        rating: true,
+        ratingCount: true,
+        images: true,
+        cuisine: true,
+        priceRange: true,
+        isActive: true,
+        isArchived: true,
+        // Не загружаем тяжёлые данные для списка:
+        // reviews - не нужны для карточек
+        // workingHours - не нужны для карточек
+        // description, phone, website, email, menuUrl и т.д.
       },
     });
     
