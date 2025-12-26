@@ -2416,6 +2416,8 @@ function RestaurantAccordionCard({
   const [editedData, setEditedData] = useState<Partial<RestaurantDetail>>({});
   const [editedHours, setEditedHours] = useState<RestaurantDetail['workingHours']>([]);
   const [refreshResult, setRefreshResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<'edit' | 'photos' | 'menu' | 'reviews' | 'history'>('edit');
+  const [newMenuItem, setNewMenuItem] = useState({ name: '', price: '', category: '' });
 
   const DAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
@@ -2534,6 +2536,37 @@ function RestaurantAccordionCard({
     });
   };
 
+  const addMenuItem = async () => {
+    if (!detail || !newMenuItem.name) return;
+    try {
+      const res = await fetch(`/api/restaurants/${detail.id}/menu`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newMenuItem.name,
+          price: newMenuItem.price ? parseFloat(newMenuItem.price) : null,
+          category: newMenuItem.category || null,
+        }),
+      });
+      if (res.ok) {
+        setNewMenuItem({ name: '', price: '', category: '' });
+        fetchDetail();
+      }
+    } catch (error) {
+      console.error('Error adding menu item:', error);
+    }
+  };
+
+  const deleteMenuItem = async (itemId: string) => {
+    if (!detail || !confirm('Удалить позицию?')) return;
+    try {
+      await fetch(`/api/restaurants/${detail.id}/menu?itemId=${itemId}`, { method: 'DELETE' });
+      fetchDetail();
+    } catch (error) {
+      console.error('Error deleting menu item:', error);
+    }
+  };
+
   return (
     <div className={`bg-white/5 rounded-xl border transition-all ${isExpanded ? 'border-blue-500/50 bg-white/10' : 'border-white/10 hover:border-white/20'}`}>
       {/* Заголовок карточки - кликабельный */}
@@ -2582,238 +2615,254 @@ function RestaurantAccordionCard({
       
       {/* Развёрнутое содержимое */}
       {isExpanded && (
-        <div className="border-t border-white/10 px-4 py-4">
+        <div className="border-t border-white/10">
           {loading ? (
             <div className="text-center py-8 text-white/40">
               <div className="text-2xl mb-2">⏳</div>
               Загрузка данных...
             </div>
           ) : detail ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Левая колонка - основные данные */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium text-white/60 border-b border-white/10 pb-2">📝 Основные данные</h4>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1">Название</label>
-                    <input
-                      type="text"
-                      value={editedData.name ?? ''}
-                      onChange={e => setEditedData(p => ({ ...p, name: e.target.value }))}
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1">Телефон</label>
-                    <input
-                      type="text"
-                      value={editedData.phone ?? ''}
-                      onChange={e => setEditedData(p => ({ ...p, phone: e.target.value }))}
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-xs text-white/40 mb-1">Адрес</label>
-                  <input
-                    type="text"
-                    value={editedData.address ?? ''}
-                    onChange={e => setEditedData(p => ({ ...p, address: e.target.value }))}
-                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
-                  />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1">Город</label>
-                    <input
-                      type="text"
-                      value={editedData.city ?? ''}
-                      onChange={e => setEditedData(p => ({ ...p, city: e.target.value }))}
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1">Бренд/Сеть</label>
-                    <input
-                      type="text"
-                      value={editedData.brand ?? ''}
-                      onChange={e => setEditedData(p => ({ ...p, brand: e.target.value }))}
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1">Сайт</label>
-                    <input
-                      type="url"
-                      value={editedData.website ?? ''}
-                      onChange={e => setEditedData(p => ({ ...p, website: e.target.value }))}
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1">Меню URL</label>
-                    <input
-                      type="url"
-                      value={editedData.menuUrl ?? ''}
-                      onChange={e => setEditedData(p => ({ ...p, menuUrl: e.target.value }))}
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
-                    />
-                  </div>
-                </div>
-                
-                {/* Статусы */}
-                <div className="flex items-center gap-4 pt-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={editedData.isActive ?? true}
-                      onChange={e => setEditedData(p => ({ ...p, isActive: e.target.checked }))}
-                      className="w-4 h-4 rounded border-white/20 bg-white/5 text-green-500 focus:ring-green-500/50"
-                    />
-                    <span className="text-sm text-green-400">Активен</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={editedData.isVerified ?? false}
-                      onChange={e => setEditedData(p => ({ ...p, isVerified: e.target.checked }))}
-                      className="w-4 h-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500/50"
-                    />
-                    <span className="text-sm text-blue-400">Проверен</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={editedData.isArchived ?? false}
-                      onChange={e => setEditedData(p => ({ ...p, isArchived: e.target.checked }))}
-                      className="w-4 h-4 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/50"
-                    />
-                    <span className="text-sm text-orange-400">В архиве</span>
-                  </label>
-                </div>
+            <>
+              {/* Вкладки */}
+              <div className="flex border-b border-white/10 px-4">
+                {[
+                  { id: 'edit', label: '✏️ Редактирование', count: null },
+                  { id: 'photos', label: '📷 Фото', count: detail.images?.length || 0 },
+                  { id: 'menu', label: '🍽️ Меню', count: detail.menuItems?.length || 0 },
+                  { id: 'reviews', label: '💬 Отзывы', count: detail.reviews?.length || 0 },
+                  { id: 'history', label: '📜 История', count: null },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === tab.id
+                        ? 'text-blue-400 border-blue-400'
+                        : 'text-white/40 border-transparent hover:text-white/60'
+                    }`}
+                  >
+                    {tab.label} {tab.count !== null && <span className="text-white/30">({tab.count})</span>}
+                  </button>
+                ))}
               </div>
-              
-              {/* Правая колонка - время работы и действия */}
-              <div className="space-y-4">
-                <h4 className="text-sm font-medium text-white/60 border-b border-white/10 pb-2">🕐 Время работы</h4>
-                
-                <div className="grid grid-cols-7 gap-1">
-                  {editedHours.sort((a, b) => a.dayOfWeek - b.dayOfWeek).map(h => (
-                    <div key={h.dayOfWeek} className="text-center">
-                      <div className="text-xs text-white/40 mb-1">{DAYS[h.dayOfWeek]}</div>
-                      {h.isClosed ? (
-                        <div className="text-xs text-red-400 py-1">Закр</div>
-                      ) : (
-                        <div className="space-y-0.5">
-                          <input
-                            type="time"
-                            value={h.openTime}
-                            onChange={e => updateHour(h.dayOfWeek, 'openTime', e.target.value)}
-                            className="w-full px-1 py-0.5 bg-white/5 border border-white/10 rounded text-white text-[10px] focus:outline-none"
-                          />
-                          <input
-                            type="time"
-                            value={h.closeTime}
-                            onChange={e => updateHour(h.dayOfWeek, 'closeTime', e.target.value)}
-                            className="w-full px-1 py-0.5 bg-white/5 border border-white/10 rounded text-white text-[10px] focus:outline-none"
-                          />
+
+              <div className="p-4">
+                {/* TAB: Редактирование */}
+                {activeTab === 'edit' && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Левая колонка - основные данные */}
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium text-white/60 border-b border-white/10 pb-2">📝 Основные данные</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-white/40 mb-1">Название</label>
+                          <input type="text" value={editedData.name ?? ''} onChange={e => setEditedData(p => ({ ...p, name: e.target.value }))} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50" />
                         </div>
-                      )}
-                      <label className="flex items-center justify-center gap-1 mt-1 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={h.isClosed}
-                          onChange={e => updateHour(h.dayOfWeek, 'isClosed', e.target.checked)}
-                          className="w-3 h-3 rounded border-white/20 bg-white/5"
-                        />
-                        <span className="text-[9px] text-white/30">Вых</span>
-                      </label>
+                        <div>
+                          <label className="block text-xs text-white/40 mb-1">Телефон</label>
+                          <input type="text" value={editedData.phone ?? ''} onChange={e => setEditedData(p => ({ ...p, phone: e.target.value }))} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-white/40 mb-1">Адрес</label>
+                        <input type="text" value={editedData.address ?? ''} onChange={e => setEditedData(p => ({ ...p, address: e.target.value }))} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-white/40 mb-1">Город</label>
+                          <input type="text" value={editedData.city ?? ''} onChange={e => setEditedData(p => ({ ...p, city: e.target.value }))} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-white/40 mb-1">Бренд/Сеть</label>
+                          <input type="text" value={editedData.brand ?? ''} onChange={e => setEditedData(p => ({ ...p, brand: e.target.value }))} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-white/40 mb-1">Сайт</label>
+                          <input type="url" value={editedData.website ?? ''} onChange={e => setEditedData(p => ({ ...p, website: e.target.value }))} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-white/40 mb-1">Меню URL</label>
+                          <input type="url" value={editedData.menuUrl ?? ''} onChange={e => setEditedData(p => ({ ...p, menuUrl: e.target.value }))} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50" />
+                        </div>
+                      </div>
+                      {/* Статусы */}
+                      <div className="flex items-center gap-4 pt-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={editedData.isActive ?? true} onChange={e => setEditedData(p => ({ ...p, isActive: e.target.checked }))} className="w-4 h-4 rounded" />
+                          <span className="text-sm text-green-400">Активен</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={editedData.isVerified ?? false} onChange={e => setEditedData(p => ({ ...p, isVerified: e.target.checked }))} className="w-4 h-4 rounded" />
+                          <span className="text-sm text-blue-400">Проверен</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={editedData.isArchived ?? false} onChange={e => setEditedData(p => ({ ...p, isArchived: e.target.checked }))} className="w-4 h-4 rounded" />
+                          <span className="text-sm text-orange-400">В архиве</span>
+                        </label>
+                      </div>
                     </div>
-                  ))}
-                </div>
-                
-                {/* Google API обновление */}
-                <div className="pt-2 border-t border-white/10">
-                  <h4 className="text-sm font-medium text-white/60 mb-2">🔄 Обновить из Google</h4>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => handleRefresh('basic')}
-                      disabled={refreshing}
-                      className="px-3 py-1.5 bg-blue-500/20 text-blue-400 text-xs rounded-lg hover:bg-blue-500/30 disabled:opacity-50"
-                    >
-                      Базовые
-                    </button>
-                    <button
-                      onClick={() => handleRefresh('hours')}
-                      disabled={refreshing}
-                      className="px-3 py-1.5 bg-purple-500/20 text-purple-400 text-xs rounded-lg hover:bg-purple-500/30 disabled:opacity-50"
-                    >
-                      Часы работы
-                    </button>
-                    <button
-                      onClick={() => handleRefresh('photos')}
-                      disabled={refreshing}
-                      className="px-3 py-1.5 bg-green-500/20 text-green-400 text-xs rounded-lg hover:bg-green-500/30 disabled:opacity-50"
-                    >
-                      Фото
-                    </button>
-                    <button
-                      onClick={() => handleRefresh('full')}
-                      disabled={refreshing}
-                      className="px-3 py-1.5 bg-orange-500/20 text-orange-400 text-xs rounded-lg hover:bg-orange-500/30 disabled:opacity-50"
-                    >
-                      Всё
-                    </button>
+                    
+                    {/* Правая колонка - время работы и Google */}
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium text-white/60 border-b border-white/10 pb-2">🕐 Время работы</h4>
+                      <div className="grid grid-cols-7 gap-1">
+                        {editedHours.sort((a, b) => a.dayOfWeek - b.dayOfWeek).map(h => (
+                          <div key={h.dayOfWeek} className="text-center">
+                            <div className="text-xs text-white/40 mb-1">{DAYS[h.dayOfWeek]}</div>
+                            {h.isClosed ? <div className="text-xs text-red-400 py-1">Закр</div> : (
+                              <div className="space-y-0.5">
+                                <input type="time" value={h.openTime} onChange={e => updateHour(h.dayOfWeek, 'openTime', e.target.value)} className="w-full px-1 py-0.5 bg-white/5 border border-white/10 rounded text-white text-[10px]" />
+                                <input type="time" value={h.closeTime} onChange={e => updateHour(h.dayOfWeek, 'closeTime', e.target.value)} className="w-full px-1 py-0.5 bg-white/5 border border-white/10 rounded text-white text-[10px]" />
+                              </div>
+                            )}
+                            <label className="flex items-center justify-center gap-1 mt-1 cursor-pointer">
+                              <input type="checkbox" checked={h.isClosed} onChange={e => updateHour(h.dayOfWeek, 'isClosed', e.target.checked)} className="w-3 h-3 rounded" />
+                              <span className="text-[9px] text-white/30">Вых</span>
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Google обновление */}
+                      <div className="pt-2 border-t border-white/10">
+                        <h4 className="text-sm font-medium text-white/60 mb-2">🔄 Обновить из Google</h4>
+                        <div className="flex flex-wrap gap-2">
+                          <button onClick={() => handleRefresh('basic')} disabled={refreshing} className="px-3 py-1.5 bg-blue-500/20 text-blue-400 text-xs rounded-lg hover:bg-blue-500/30 disabled:opacity-50">Базовые</button>
+                          <button onClick={() => handleRefresh('hours')} disabled={refreshing} className="px-3 py-1.5 bg-purple-500/20 text-purple-400 text-xs rounded-lg hover:bg-purple-500/30 disabled:opacity-50">Часы работы</button>
+                          <button onClick={() => handleRefresh('photos')} disabled={refreshing} className="px-3 py-1.5 bg-green-500/20 text-green-400 text-xs rounded-lg hover:bg-green-500/30 disabled:opacity-50">Фото</button>
+                          <button onClick={() => handleRefresh('full')} disabled={refreshing} className="px-3 py-1.5 bg-orange-500/20 text-orange-400 text-xs rounded-lg hover:bg-orange-500/30 disabled:opacity-50">Всё</button>
+                        </div>
+                        {refreshing && <div className="text-xs text-white/40 mt-2">⏳ Обновление...</div>}
+                        {refreshResult && <div className={`text-xs mt-2 ${refreshResult.success ? 'text-green-400' : 'text-red-400'}`}>{refreshResult.message}</div>}
+                      </div>
+                      
+                      {/* Мета */}
+                      <div className="pt-2 border-t border-white/10 text-xs text-white/30 space-y-1">
+                        <div>ID: <span className="text-white/50 font-mono">{detail.id}</span></div>
+                        <div>Источник: <span className="text-white/50">{detail.source}</span></div>
+                        {detail.sourceId && <div>Source ID: <span className="text-white/50 font-mono text-[10px]">{detail.sourceId}</span></div>}
+                        {detail.lastSynced && <div>Синхр: <span className="text-white/50">{new Date(detail.lastSynced).toLocaleString()}</span></div>}
+                      </div>
+                    </div>
                   </div>
-                  {refreshing && <div className="text-xs text-white/40 mt-2">⏳ Обновление...</div>}
-                  {refreshResult && (
-                    <div className={`text-xs mt-2 ${refreshResult.success ? 'text-green-400' : 'text-red-400'}`}>
-                      {refreshResult.message}
+                )}
+
+                {/* TAB: Фото */}
+                {activeTab === 'photos' && (
+                  <div>
+                    {detail.images && detail.images.length > 0 ? (
+                      <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
+                        {detail.images.map((img, i) => (
+                          <div key={i} className="aspect-square rounded-lg overflow-hidden bg-white/5">
+                            <img src={img} alt={`Фото ${i + 1}`} className="w-full h-full object-cover" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-white/40">
+                        <div className="text-3xl mb-2">📷</div>
+                        Нет фотографий
+                        <button onClick={() => handleRefresh('photos')} className="block mx-auto mt-3 px-4 py-2 bg-blue-500/20 text-blue-400 text-sm rounded-lg hover:bg-blue-500/30">
+                          Загрузить из Google
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB: Меню */}
+                {activeTab === 'menu' && (
+                  <div className="space-y-4">
+                    {/* Форма добавления */}
+                    <div className="flex gap-2 items-end">
+                      <div className="flex-1">
+                        <label className="block text-xs text-white/40 mb-1">Название блюда</label>
+                        <input type="text" value={newMenuItem.name} onChange={e => setNewMenuItem(p => ({ ...p, name: e.target.value }))} placeholder="Плов, Лагман..." className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm" />
+                      </div>
+                      <div className="w-24">
+                        <label className="block text-xs text-white/40 mb-1">Цена</label>
+                        <input type="text" value={newMenuItem.price} onChange={e => setNewMenuItem(p => ({ ...p, price: e.target.value }))} placeholder="50000" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm" />
+                      </div>
+                      <div className="w-32">
+                        <label className="block text-xs text-white/40 mb-1">Категория</label>
+                        <input type="text" value={newMenuItem.category} onChange={e => setNewMenuItem(p => ({ ...p, category: e.target.value }))} placeholder="Горячее" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm" />
+                      </div>
+                      <button onClick={addMenuItem} className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm">+ Добавить</button>
                     </div>
-                  )}
+                    
+                    {/* Список меню */}
+                    {detail.menuItems && detail.menuItems.length > 0 ? (
+                      <div className="space-y-2">
+                        {detail.menuItems.map(item => (
+                          <div key={item.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
+                            <div className="flex-1">
+                              <div className="font-medium text-white">{item.name}</div>
+                              {item.category && <div className="text-xs text-white/40">{item.category}</div>}
+                            </div>
+                            {item.price && <div className="text-green-400 font-medium">{item.price.toLocaleString()} сум</div>}
+                            <button onClick={() => deleteMenuItem(item.id)} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded">🗑️</button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-white/40">Меню пусто</div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB: Отзывы */}
+                {activeTab === 'reviews' && (
+                  <div>
+                    {detail.reviews && detail.reviews.length > 0 ? (
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {detail.reviews.map(review => (
+                          <div key={review.id} className="p-3 bg-white/5 rounded-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="font-medium text-white">{review.author || 'Аноним'}</span>
+                              <span className="text-yellow-400">{'⭐'.repeat(review.rating || 0)}</span>
+                              {review.date && <span className="text-xs text-white/30">{new Date(review.date).toLocaleDateString()}</span>}
+                            </div>
+                            {review.text && <p className="text-sm text-white/70">{review.text}</p>}
+                            {review.photos && review.photos.length > 0 && (
+                              <div className="flex gap-2 mt-2">
+                                {review.photos.slice(0, 3).map((photo, i) => (
+                                  <img key={i} src={photo} alt="" className="w-16 h-16 object-cover rounded" />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-white/40">
+                        <div className="text-3xl mb-2">💬</div>
+                        Нет отзывов
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB: История */}
+                {activeTab === 'history' && (
+                  <ChangeHistory restaurantId={detail.id} />
+                )}
+              </div>
+
+              {/* Кнопки действий */}
+              <div className="flex items-center justify-between px-4 py-3 border-t border-white/10 bg-white/5">
+                <div className="text-xs text-white/30">
+                  {saving ? '⏳ Сохранение...' : 'Нажмите Сохранить для применения изменений'}
                 </div>
-                
-                {/* Мета-информация */}
-                <div className="pt-2 border-t border-white/10 text-xs text-white/30 space-y-1">
-                  <div>ID: <span className="text-white/50 font-mono">{detail.id}</span></div>
-                  <div>Источник: <span className="text-white/50">{detail.source}</span></div>
-                  {detail.sourceId && <div>Source ID: <span className="text-white/50 font-mono text-[10px]">{detail.sourceId}</span></div>}
-                  {detail.lastSynced && <div>Синхр: <span className="text-white/50">{new Date(detail.lastSynced).toLocaleString()}</span></div>}
+                <div className="flex gap-2">
+                  <button onClick={onToggle} className="px-4 py-2 bg-white/5 text-white/60 rounded-lg hover:bg-white/10 text-sm">Закрыть</button>
+                  <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm font-medium disabled:opacity-50">💾 Сохранить</button>
                 </div>
               </div>
-            </div>
+            </>
           ) : (
             <div className="text-center py-8 text-white/40">Ошибка загрузки</div>
-          )}
-          
-          {/* Кнопки действий */}
-          {detail && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
-              <div className="text-xs text-white/30">
-                {saving ? '⏳ Сохранение...' : 'Нажмите Сохранить для применения изменений'}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={onToggle}
-                  className="px-4 py-2 bg-white/5 text-white/60 rounded-lg hover:bg-white/10 text-sm"
-                >
-                  Закрыть
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm font-medium disabled:opacity-50"
-                >
-                  💾 Сохранить
-                </button>
-              </div>
-            </div>
           )}
         </div>
       )}
