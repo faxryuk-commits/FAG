@@ -2635,29 +2635,21 @@ function RestaurantDetailModal({
     <>
       {/* Затемнение фона */}
       <div 
-        className="fixed inset-0 z-40 bg-black/50 transition-opacity"
+        className="fixed inset-0 z-40 bg-black/30 transition-opacity"
         onClick={onClose}
       />
       
-      {/* Боковая панель справа */}
-      <div className="fixed top-0 right-0 z-50 h-full w-[500px] max-w-[90vw] bg-[#1a1a2e] border-l border-white/10 shadow-2xl flex flex-col animate-[slideIn_0.2s_ease-out]">
-        {/* Компактный Header */}
-        <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-black/30">
-          <div className="flex items-center gap-3 min-w-0">
-            {restaurant?.images?.[0] ? (
-              <img src={restaurant.images[0]} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-            ) : (
-              <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">📍</div>
-            )}
-            <div className="min-w-0">
-              <h2 className="text-base font-bold text-white truncate">
-                {loading ? '...' : restaurant?.name || 'Ресторан'}
-              </h2>
-              <p className="text-xs text-white/40 truncate">
-                {restaurant?.address || 'Загрузка...'}
-              </p>
-            </div>
-          </div>
+      {/* Боковая панель справа - как в Яндекс Доставке */}
+      <div className="fixed top-0 right-0 z-50 h-screen w-[420px] max-w-[95vw] bg-white shadow-2xl flex flex-col animate-[slideIn_0.2s_ease-out]">
+        {/* Header - компактный */}
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {loading ? 'Загрузка...' : 'Ресторан'}
+          </h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full">
+            ✕
+          </button>
+        </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={handleSave}
@@ -2675,119 +2667,128 @@ function RestaurantDetailModal({
           </div>
         </div>
 
-        {/* Вертикальные табы слева и контент справа */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Вертикальные табы */}
-          <div className="w-12 bg-black/20 border-r border-white/10 flex flex-col py-2">
-            {[
-              { id: 'info', icon: '📋', label: 'Инфо' },
-              { id: 'hours', icon: '🕐', label: 'Часы' },
-              { id: 'photos', icon: '📷', label: 'Фото' },
-              { id: 'reviews', icon: '⭐', label: 'Отзывы' },
-              { id: 'update', icon: '🔄', label: 'Google' },
-              { id: 'history', icon: '📜', label: 'История' },
-              { id: 'meta', icon: '⚙️', label: 'Мета' },
-            ].map(s => (
-              <button
-                key={s.id}
-                onClick={() => setActiveSection(s.id as any)}
-                title={s.label}
-                className={`w-full py-2.5 text-center transition-all ${
-                  activeSection === s.id
-                    ? 'bg-blue-500/30 text-blue-300 border-r-2 border-blue-400'
-                    : 'text-white/50 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                {s.icon}
-              </button>
-            ))}
-          </div>
-
-          {/* Контент */}
-          <div className="flex-1 overflow-y-auto p-4">
+        {/* Скроллируемый контент */}
+        <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <LoadingSkeleton />
+            <div className="p-5 space-y-4">
+              <div className="h-10 bg-gray-100 rounded animate-pulse" />
+              <div className="h-10 bg-gray-100 rounded animate-pulse" />
+              <div className="h-10 bg-gray-100 rounded animate-pulse" />
+            </div>
           ) : restaurant ? (
-            <>
-              {/* Основная информация */}
-              {activeSection === 'info' && (
-                <div className="space-y-4">
-                  {/* Статусы - компактные */}
-                  <div className="flex gap-3 flex-wrap text-sm">
-                    <label className="flex items-center gap-1.5 cursor-pointer bg-white/5 px-3 py-1.5 rounded-lg">
+            <div className="p-5 space-y-6">
+              {/* Секция: Роль/Статус */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium text-gray-500">Статус</span>
+                  <a href="#" className="text-sm text-blue-500 hover:underline">Подробнее</a>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    { key: 'isActive', label: 'Активен', desc: 'отображается на сайте', color: 'green' },
+                    { key: 'isVerified', label: 'Верифицирован', desc: 'данные проверены', color: 'blue' },
+                    { key: 'isArchived', label: 'В архиве', desc: 'скрыт из выдачи', color: 'orange' },
+                  ].map(status => (
+                    <label 
+                      key={status.key}
+                      className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
+                        (editedData as any)[status.key] ?? (restaurant as any)[status.key]
+                          ? `border-${status.color}-200 bg-${status.color}-50`
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div>
+                        <div className="font-medium text-gray-900">{status.label}</div>
+                        <div className="text-xs text-gray-500">{status.desc}</div>
+                      </div>
                       <input
                         type="checkbox"
-                        checked={editedData.isActive ?? restaurant.isActive}
-                        onChange={e => setEditedData(p => ({ ...p, isActive: e.target.checked }))}
-                        className="w-4 h-4 rounded accent-green-500"
+                        checked={(editedData as any)[status.key] ?? (restaurant as any)[status.key]}
+                        onChange={e => setEditedData(p => ({ ...p, [status.key]: e.target.checked }))}
+                        className={`w-5 h-5 rounded accent-${status.color}-500`}
                       />
-                      <span className="text-white/70">Активен</span>
                     </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer bg-white/5 px-3 py-1.5 rounded-lg">
-                      <input
-                        type="checkbox"
-                        checked={editedData.isVerified ?? restaurant.isVerified}
-                        onChange={e => setEditedData(p => ({ ...p, isVerified: e.target.checked }))}
-                        className="w-4 h-4 rounded accent-blue-500"
-                      />
-                      <span className="text-white/70">Верифицирован</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer bg-white/5 px-3 py-1.5 rounded-lg">
-                      <input
-                        type="checkbox"
-                        checked={editedData.isArchived ?? restaurant.isArchived}
-                        onChange={e => setEditedData(p => ({ ...p, isArchived: e.target.checked }))}
-                        className="w-4 h-4 rounded accent-orange-500"
-                      />
-                      <span className="text-white/70">В архиве</span>
-                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Секция: Данные */}
+              <div>
+                <div className="text-sm font-medium text-gray-500 mb-3">Данные</div>
+                <div className="space-y-3">
+                  {/* Название */}
+                  <div>
+                    <label className="block text-sm text-gray-500 mb-1.5">Название</label>
+                    <input
+                      type="text"
+                      value={editedData.name ?? restaurant.name ?? ''}
+                      onChange={e => setEditedData(p => ({ ...p, name: e.target.value }))}
+                      placeholder="Обязательно"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  
+                  {/* Телефон */}
+                  <div>
+                    <label className="block text-sm text-gray-500 mb-1.5">Телефон</label>
+                    <input
+                      type="text"
+                      value={editedData.phone ?? restaurant.phone ?? ''}
+                      onChange={e => setEditedData(p => ({ ...p, phone: e.target.value }))}
+                      placeholder="+998 XX XXX XX XX"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  
+                  {/* Адрес */}
+                  <div>
+                    <label className="block text-sm text-gray-500 mb-1.5">Адрес</label>
+                    <input
+                      type="text"
+                      value={editedData.address ?? restaurant.address ?? ''}
+                      onChange={e => setEditedData(p => ({ ...p, address: e.target.value }))}
+                      placeholder="Улица, дом"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                    />
                   </div>
 
-                  {/* Основные поля - компактная сетка */}
+                  {/* Сайт */}
+                  <div>
+                    <label className="block text-sm text-gray-500 mb-1.5">Сайт</label>
+                    <input
+                      type="url"
+                      value={editedData.website ?? restaurant.website ?? ''}
+                      onChange={e => setEditedData(p => ({ ...p, website: e.target.value }))}
+                      placeholder="https://..."
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Секция: Дополнительно (сворачиваемая) */}
+              <details className="group">
+                <summary className="flex items-center justify-between cursor-pointer text-sm font-medium text-gray-500 mb-3 list-none">
+                  <span>Дополнительно</span>
+                  <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="space-y-3 pt-2">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs text-white/40 mb-1">Название</label>
+                      <label className="block text-sm text-gray-500 mb-1.5">Город</label>
                       <input
                         type="text"
-                        value={editedData.name ?? ''}
-                        onChange={e => setEditedData(p => ({ ...p, name: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-white/40 mb-1">Бренд/Сеть</label>
-                      <input
-                        type="text"
-                        value={editedData.brand ?? ''}
-                        onChange={e => setEditedData(p => ({ ...p, brand: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
-                        placeholder="Evos..."
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-xs text-white/40 mb-1">Адрес</label>
-                      <input
-                        type="text"
-                        value={editedData.address ?? ''}
-                        onChange={e => setEditedData(p => ({ ...p, address: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-white/40 mb-1">Город</label>
-                      <input
-                        type="text"
-                        value={editedData.city ?? ''}
+                        value={editedData.city ?? restaurant.city ?? ''}
                         onChange={e => setEditedData(p => ({ ...p, city: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:border-blue-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-white/40 mb-1">Цена</label>
+                      <label className="block text-sm text-gray-500 mb-1.5">Ценовой уровень</label>
                       <select
-                        value={editedData.priceRange ?? ''}
+                        value={editedData.priceRange ?? restaurant.priceRange ?? ''}
                         onChange={e => setEditedData(p => ({ ...p, priceRange: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:border-blue-500"
                       >
                         <option value="">—</option>
                         <option value="$">$</option>
@@ -2797,272 +2798,175 @@ function RestaurantDetailModal({
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-white/40 mb-1">Телефон</label>
+                      <label className="block text-sm text-gray-500 mb-1.5">Бренд/Сеть</label>
                       <input
                         type="text"
-                        value={editedData.phone ?? ''}
-                        onChange={e => setEditedData(p => ({ ...p, phone: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+                        value={editedData.brand ?? restaurant.brand ?? ''}
+                        onChange={e => setEditedData(p => ({ ...p, brand: e.target.value }))}
+                        placeholder="Evos, KFC..."
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-white/40 mb-1">Email</label>
+                      <label className="block text-sm text-gray-500 mb-1.5">Email</label>
                       <input
                         type="email"
-                        value={editedData.email ?? ''}
+                        value={editedData.email ?? restaurant.email ?? ''}
                         onChange={e => setEditedData(p => ({ ...p, email: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:border-blue-500"
                       />
                     </div>
-                    <div>
-                      <label className="block text-xs text-white/40 mb-1">Сайт</label>
+                  </div>
                       <input
                         type="url"
-                        value={editedData.website ?? ''}
-                        onChange={e => setEditedData(p => ({ ...p, website: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-white/40 mb-1">Меню URL</label>
-                      <input
-                        type="url"
-                        value={editedData.menuUrl ?? ''}
+                        value={editedData.menuUrl ?? restaurant.menuUrl ?? ''}
                         onChange={e => setEditedData(p => ({ ...p, menuUrl: e.target.value }))}
-                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+                        placeholder="https://..."
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500"
                       />
                     </div>
-                    <div className="col-span-2">
-                      <label className="block text-xs text-white/40 mb-1">Описание</label>
-                      <textarea
-                        value={editedData.description ?? ''}
-                        onChange={e => setEditedData(p => ({ ...p, description: e.target.value }))}
-                        rows={2}
-                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white resize-none text-sm"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-xs text-white/40 mb-1">Кухня (через запятую)</label>
+                    <div>
+                      <label className="block text-sm text-gray-500 mb-1.5">Кухня</label>
                       <input
                         type="text"
                         value={(editedData.cuisine ?? restaurant.cuisine)?.join(', ') ?? ''}
                         onChange={e => setEditedData(p => ({ ...p, cuisine: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
-                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
                         placeholder="Узбекская, Европейская..."
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500"
                       />
                     </div>
-                  </div>
-
-                  {/* Рейтинг - компактно */}
-                  <div className="flex items-center gap-4 bg-white/5 rounded-lg px-4 py-2">
-                    <span className="text-white/50 text-xs">Рейтинг:</span>
-                    <span className="text-yellow-400 font-bold">{restaurant.rating?.toFixed(1) || '—'}</span>
-                    <span className="text-white/30">•</span>
-                    <span className="text-white/70">{restaurant.ratingCount} отзывов</span>
-                  </div>
                 </div>
-              )}
+              </details>
 
-              {/* Время работы - компактная таблица */}
-              {activeSection === 'hours' && (
-                <div className="space-y-2">
-                  <div className="grid grid-cols-7 gap-1 text-center text-xs text-white/40 mb-2">
-                    {DAYS.map(d => <div key={d}>{d}</div>)}
-                  </div>
-                  <div className="grid grid-cols-7 gap-1">
-                    {DAYS.map((_, idx) => {
-                      const hour = editedHours.find(h => h.dayOfWeek === idx);
-                      return (
-                        <div key={idx} className={`p-2 rounded-lg text-center text-xs ${hour?.isClosed ? 'bg-red-500/20' : 'bg-white/5'}`}>
-                          <label className="flex items-center justify-center gap-1 mb-1 cursor-pointer">
+              {/* Секция: Время работы (сворачиваемая) */}
+              <details className="group">
+                <summary className="flex items-center justify-between cursor-pointer text-sm font-medium text-gray-500 mb-3 list-none">
+                  <span>🕐 Время работы</span>
+                  <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="space-y-2 pt-2">
+                  {DAYS.map((dayName, idx) => {
+                    const hour = editedHours.find(h => h.dayOfWeek === idx);
+                    return (
+                      <div key={idx} className="flex items-center gap-3 py-2 border-b border-gray-100">
+                        <span className="w-10 text-sm font-medium text-gray-600">{dayName}</span>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={hour?.isClosed ?? false}
+                            onChange={e => updateHour(idx, 'isClosed', e.target.checked)}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-xs text-gray-400">Выходной</span>
+                        </label>
+                        {!hour?.isClosed && (
+                          <>
                             <input
-                              type="checkbox"
-                              checked={hour?.isClosed ?? false}
-                              onChange={e => updateHour(idx, 'isClosed', e.target.checked)}
-                              className="w-3 h-3 accent-red-500"
+                              type="time"
+                              value={hour?.openTime || '09:00'}
+                              onChange={e => updateHour(idx, 'openTime', e.target.value)}
+                              className="px-2 py-1 border border-gray-300 rounded text-sm"
                             />
-                            <span className="text-white/50 text-[10px]">Вых</span>
-                          </label>
-                          {!hour?.isClosed && (
-                            <div className="space-y-1">
-                              <input
-                                type="time"
-                                value={hour?.openTime || '09:00'}
-                                onChange={e => updateHour(idx, 'openTime', e.target.value)}
-                                className="w-full px-1 py-1 bg-white/10 border border-white/10 rounded text-white text-[10px]"
-                              />
-                              <input
-                                type="time"
-                                value={hour?.closeTime || '22:00'}
-                                onChange={e => updateHour(idx, 'closeTime', e.target.value)}
-                                className="w-full px-1 py-1 bg-white/10 border border-white/10 rounded text-white text-[10px]"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <p className="text-white/30 text-[10px] text-center mt-2">Изменения сохранятся при нажатии «Сохранить»</p>
-                </div>
-              )}
-
-              {/* Фото - компактная галерея */}
-              {activeSection === 'photos' && (
-                <div>
-                  {restaurant.images.length === 0 ? (
-                    <div className="text-center py-6 text-white/40 text-sm">📷 Фотографий нет</div>
-                  ) : (
-                    <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
-                      {restaurant.images.map((img, idx) => (
-                        <a
-                          key={idx}
-                          href={img}
-                          target="_blank"
-                          className="aspect-square rounded-lg overflow-hidden bg-white/5 hover:ring-2 ring-white/30 transition-all"
-                        >
-                          <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Отзывы - компактный список */}
-              {activeSection === 'reviews' && (
-                <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-                  {restaurant.reviews.length === 0 ? (
-                    <div className="text-center py-6 text-white/40 text-sm">⭐ Отзывов нет</div>
-                  ) : (
-                    restaurant.reviews.slice(0, 30).map(review => (
-                      <div key={review.id} className="p-3 bg-white/5 rounded-lg text-sm">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-white font-medium text-xs">{review.author}</span>
-                            <span className="text-yellow-400 text-xs">{'★'.repeat(review.rating)}</span>
-                          </div>
-                          <span className="text-white/30 text-[10px]">
-                            {new Date(review.date).toLocaleDateString()}
-                          </span>
-                        </div>
-                        {review.text && (
-                          <p className="text-white/60 text-xs line-clamp-2">{review.text}</p>
+                            <span className="text-gray-400">—</span>
+                            <input
+                              type="time"
+                              value={hour?.closeTime || '22:00'}
+                              onChange={e => updateHour(idx, 'closeTime', e.target.value)}
+                              className="px-2 py-1 border border-gray-300 rounded text-sm"
+                            />
+                          </>
                         )}
                       </div>
-                    ))
-                  )}
+                    );
+                  })}
                 </div>
-              )}
+              </details>
 
-              {/* Обновление из Google - компактно */}
-              {activeSection === 'update' && (
-                <div className="space-y-3">
-                  {/* Опции обновления - горизонтально */}
-                  <div className="grid grid-cols-5 gap-2">
+              {/* Секция: Google обновление */}
+              <details className="group">
+                <summary className="flex items-center justify-between cursor-pointer text-sm font-medium text-gray-500 mb-3 list-none">
+                  <span>🔄 Обновить из Google</span>
+                  <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="space-y-3 pt-2">
+                  {refreshResult && (
+                    <div className={`p-3 rounded-lg text-sm ${refreshResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                      {refreshResult.success ? '✅' : '❌'} {refreshResult.message}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
                     {REFRESH_OPTIONS.map(opt => (
                       <button
                         key={opt.id}
                         onClick={() => setSelectedRefreshFields([opt.id])}
-                        className={`p-2 rounded-lg text-center transition-all ${
+                        className={`p-3 rounded-xl border text-left transition-all ${
                           selectedRefreshFields.includes(opt.id)
-                            ? 'bg-blue-500/30 border border-blue-500/50'
-                            : 'bg-white/5 hover:bg-white/10'
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        <div className="text-white text-xs font-medium">{opt.label}</div>
-                        <div className="text-green-400 text-[10px] font-mono">{opt.cost}</div>
+                        <div className="font-medium text-gray-900 text-sm">{opt.label}</div>
+                        <div className="text-xs text-blue-600">{opt.cost}</div>
                       </button>
                     ))}
                   </div>
-                  
-                  {/* Результат */}
-                  {refreshResult && (
-                    <div className={`p-2 rounded-lg text-sm ${
-                      refreshResult.success ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
-                    }`}>
-                      {refreshResult.message}
-                    </div>
-                  )}
-                  
-                  {/* Кнопка обновления */}
                   <button
-                    onClick={() => handleRefresh(selectedRefreshFields[0])}
-                    disabled={refreshing || selectedRefreshFields.length === 0}
-                    className="w-full py-2.5 bg-gradient-to-r from-blue-500 to-green-500 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                    onClick={() => handleRefresh(selectedRefreshFields[0] as any)}
+                    disabled={refreshing}
+                    className="w-full py-3 bg-blue-500 text-white rounded-xl font-medium hover:bg-blue-600 disabled:opacity-50"
                   >
-                    {refreshing ? '⏳ Обновление...' : `🔄 Обновить (${REFRESH_OPTIONS.find(o => o.id === selectedRefreshFields[0])?.cost || '—'})`}
+                    {refreshing ? '⏳ Обновление...' : '🔄 Обновить'}
                   </button>
-                  
-                  {/* Инфо - компактно */}
-                  <div className="flex items-center justify-between text-xs text-white/40 bg-white/5 p-2 rounded-lg">
-                    <span>Синхр: {restaurant.lastSynced ? new Date(restaurant.lastSynced).toLocaleString() : 'Никогда'}</span>
-                    <span className="capitalize">{restaurant.source}</span>
+                  <div className="text-xs text-gray-400 text-center">
+                    Синхр: {restaurant.lastSynced ? new Date(restaurant.lastSynced).toLocaleString() : 'Никогда'}
                   </div>
                 </div>
-              )}
+              </details>
 
-              {/* История изменений */}
-              {activeSection === 'history' && (
-                <ChangeHistory restaurantId={restaurant.id} />
-              )}
-
-              {/* Метаданные - компактная таблица */}
-              {activeSection === 'meta' && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-white/5 rounded-lg p-2">
-                      <div className="text-white/30">ID</div>
-                      <div className="text-white font-mono truncate text-[10px]" title={restaurant.id}>{restaurant.id}</div>
-                    </div>
-                    <div className="bg-white/5 rounded-lg p-2">
-                      <div className="text-white/30">Slug</div>
-                      <div className="text-white font-mono truncate text-[10px]">{restaurant.slug}</div>
-                    </div>
-                    <div className="bg-white/5 rounded-lg p-2">
-                      <div className="text-white/30">Источник</div>
-                      <div className="text-white capitalize">{restaurant.source}</div>
-                    </div>
-                    <div className="bg-white/5 rounded-lg p-2">
-                      <div className="text-white/30">Координаты</div>
-                      <div className="text-white text-[10px]">{restaurant.latitude?.toFixed(4)}, {restaurant.longitude?.toFixed(4)}</div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white/5 rounded-lg p-2">
-                    <div className="text-white/30 text-xs mb-1">Source ID</div>
-                    <div className="text-white font-mono text-[10px] break-all">{restaurant.sourceId}</div>
-                  </div>
-
-                  <div className="bg-white/5 rounded-lg p-2">
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <div className="text-white/30">Создан</div>
-                        <div className="text-white">{new Date(restaurant.createdAt).toLocaleDateString()}</div>
-                      </div>
-                      <div>
-                        <div className="text-white/30">Обновлён</div>
-                        <div className="text-white">{new Date(restaurant.updatedAt).toLocaleDateString()}</div>
-                      </div>
-                      <div>
-                        <div className="text-white/30">Синхр</div>
-                        <div className="text-white text-[10px]">
-                          {restaurant.lastSynced 
-                            ? new Date(restaurant.lastSynced).toLocaleString() 
-                            : '—'}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+              {/* Секция: История */}
+              <details className="group">
+                <summary className="flex items-center justify-between cursor-pointer text-sm font-medium text-gray-500 mb-3 list-none">
+                  <span>📜 История изменений</span>
+                  <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="pt-2">
+                  <ChangeHistory restaurantId={restaurant.id} />
                 </div>
-              )}
-            </>
+              </details>
+
+              {/* Метаинфо - компактно внизу */}
+              <div className="text-xs text-gray-400 pt-4 border-t border-gray-200 space-y-1">
+                <div className="flex justify-between">
+                  <span>ID:</span>
+                  <span className="font-mono">{restaurant.id.slice(0, 16)}...</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Источник:</span>
+                  <span className="capitalize">{restaurant.source}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Рейтинг:</span>
+                  <span>⭐ {restaurant.rating?.toFixed(1) || '—'} ({restaurant.ratingCount})</span>
+                </div>
+              </div>
+
+            </div>
           ) : (
-            <div className="text-center py-20 text-white/40">
+            <div className="p-5 text-center text-gray-500">
               Не удалось загрузить данные
             </div>
           )}
         </div>
+
+        {/* Footer с кнопкой сохранения */}
+        <div className="px-5 py-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+          <button
+            onClick={handleSave}
+            disabled={saving || loading}
+            className="w-full py-3.5 bg-yellow-400 hover:bg-yellow-500 text-gray-900 rounded-xl font-semibold transition-colors disabled:opacity-50"
+          >
+            {saving ? '⏳ Сохранение...' : 'Сохранить'}
+          </button>
         </div>
       </div>
     </>

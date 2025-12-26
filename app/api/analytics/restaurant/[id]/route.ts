@@ -173,22 +173,34 @@ export async function GET(
     });
     
     // Сравнение с конкурентами (рестораны того же района и категории)
-    const competitors = await prisma.restaurantDailyStats.groupBy({
-      by: ['restaurantId'],
+    // Сначала получаем ID конкурентов
+    const competitorRestaurants = await prisma.restaurant.findMany({
       where: {
-        date: { gte: startDate },
-        restaurant: {
-          city: restaurant.city,
-          cuisine: { hasSome: restaurant.cuisine },
-          id: { not: restaurant.id },
-        },
+        city: restaurant.city,
+        cuisine: { hasSome: restaurant.cuisine },
+        id: { not: restaurant.id },
       },
-      _sum: {
-        views: true,
-        cardViews: true,
-        calls: true,
-      },
+      select: { id: true },
+      take: 50, // Лимит для производительности
     });
+    
+    const competitorIds = competitorRestaurants.map(r => r.id);
+    
+    // Затем получаем их статистику
+    const competitors = competitorIds.length > 0 
+      ? await prisma.restaurantDailyStats.groupBy({
+          by: ['restaurantId'],
+          where: {
+            date: { gte: startDate },
+            restaurantId: { in: competitorIds },
+          },
+          _sum: {
+            views: true,
+            cardViews: true,
+            calls: true,
+          },
+        })
+      : [];
     
     const avgCompetitorViews = competitors.length > 0
       ? Math.round(competitors.reduce((sum, c) => sum + (c._sum.views || 0), 0) / competitors.length)
