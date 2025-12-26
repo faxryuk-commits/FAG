@@ -482,10 +482,14 @@ export async function GET(request: NextRequest) {
     // Определяем нужна ли пост-фильтрация
     const needsPostFilter = moodId || cuisineType || search;
     
+    // Для админки с includeAll считаем total сразу
+    const totalCount = includeAll ? await prisma.restaurant.count({ where }) : 0;
+    
     let restaurants = await prisma.restaurant.findMany({
       where,
-      // Получаем больше записей для сортировки на уровне JS
-      take: 1000,
+      // Для админки - только нужная страница, для публичного - больше для сортировки
+      take: includeAll ? limit : 1000,
+      skip: includeAll ? offset : 0,
       // Выбираем только нужные поля для списка (оптимизация)
       select: {
         id: true,
@@ -719,17 +723,21 @@ export async function GET(request: NextRequest) {
       });
     }
     
-    // Применяем пагинацию
+    // Применяем пагинацию (только если не админка - там уже применена)
     const totalBeforePagination = restaurants.length;
-    restaurants = restaurants.slice(offset, offset + limit);
+    if (!includeAll) {
+      restaurants = restaurants.slice(offset, offset + limit);
+    }
     
-    const total = search ? totalBeforePagination : await prisma.restaurant.count({ where });
+    // Для админки используем заранее посчитанный totalCount
+    const total = includeAll ? totalCount : (search ? totalBeforePagination : await prisma.restaurant.count({ where }));
     
     // Считаем архивированные для отображения в UI
     const archivedCount = await prisma.restaurant.count({ where: { isArchived: true } });
     
     return NextResponse.json({
       restaurants,
+      total, // Добавляем total на верхний уровень для удобства
       archivedCount,
       pagination: {
         page,
