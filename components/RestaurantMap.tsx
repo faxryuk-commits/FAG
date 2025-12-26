@@ -138,11 +138,11 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
     iconAnchor: [10, 10],
   });
 
-  // Улучшенные стили карты
-  // Dark: Stadia Alidade Smooth Dark - красивая тёмная тема
-  // Light: CartoDB Voyager - чистая светлая тема
+  // Бесплатные тайлы карт (без API ключа)
+  // Dark: CartoDB Dark Matter - тёмная тема
+  // Light: CartoDB Voyager - светлая тема
   const tileUrl = theme === 'dark'
-    ? 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png'
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
     : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
   // Компонент карточки ресторана
