@@ -2619,18 +2619,6 @@ function RestaurantDetailModal({
 
   if (!isOpen) return null;
 
-  // Скелетон загрузки
-  const LoadingSkeleton = () => (
-    <div className="space-y-4 animate-pulse">
-      <div className="h-8 bg-white/10 rounded-lg w-1/3"></div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="h-10 bg-white/10 rounded-lg"></div>
-        <div className="h-10 bg-white/10 rounded-lg"></div>
-      </div>
-      <div className="h-20 bg-white/10 rounded-lg"></div>
-    </div>
-  );
-
   return (
     <>
       {/* Затемнение фона */}
@@ -2649,22 +2637,6 @@ function RestaurantDetailModal({
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full">
             ✕
           </button>
-        </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={handleSave}
-              disabled={saving || loading}
-              className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm font-medium disabled:opacity-50"
-            >
-              {saving ? '⏳' : '💾'}
-            </button>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-lg bg-white/10 text-white/50 hover:bg-white/20 hover:text-white flex items-center justify-center"
-            >
-              ✕
-            </button>
-          </div>
         </div>
 
         {/* Скроллируемый контент */}
@@ -2817,14 +2789,16 @@ function RestaurantDetailModal({
                       />
                     </div>
                   </div>
-                      <input
-                        type="url"
-                        value={editedData.menuUrl ?? restaurant.menuUrl ?? ''}
-                        onChange={e => setEditedData(p => ({ ...p, menuUrl: e.target.value }))}
-                        placeholder="https://..."
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-sm text-gray-500 mb-1.5">Ссылка на меню</label>
+                    <input
+                      type="url"
+                      value={editedData.menuUrl ?? restaurant.menuUrl ?? ''}
+                      onChange={e => setEditedData(p => ({ ...p, menuUrl: e.target.value }))}
+                      placeholder="https://..."
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
                     <div>
                       <label className="block text-sm text-gray-500 mb-1.5">Кухня</label>
                       <input
