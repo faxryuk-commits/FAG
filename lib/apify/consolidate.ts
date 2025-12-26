@@ -747,6 +747,7 @@ export async function saveWithConsolidation(
     sourceId, 
     _openingHours, 
     _reviews, 
+    _menuItems,         // Позиции меню
     _popularTimes,      // Временное поле - не в схеме Prisma
     _reservationUrl,    // Временное поле - не в схеме Prisma
     _menu,              // Временное поле - не в схеме Prisma
@@ -779,9 +780,10 @@ export async function saveWithConsolidation(
     }
   }
 
-  // Парсим время работы и отзывы
+  // Парсим время работы, отзывы и меню
   const workingHours = parseWorkingHours(_openingHours);
   const reviews = parseReviews(_reviews, source);
+  const menuItems = Array.isArray(_menuItems) ? _menuItems.filter((item: any) => item?.name) : [];
 
   // Ищем существующий дубликат
   const duplicate = await findDuplicate(name, latitude, longitude, source, sourceId);
@@ -907,6 +909,16 @@ export async function saveWithConsolidation(
       // Отзывы
       reviews: reviews.length > 0 ? {
         create: reviews,
+      } : undefined,
+      // Позиции меню (если есть)
+      menuItems: menuItems && menuItems.length > 0 ? {
+        create: menuItems.map((item: any) => ({
+          name: item.name || '',
+          description: item.description || null,
+          price: item.price || null,
+          category: item.category || null,
+          image: item.image || null,
+        })),
       } : undefined,
     },
   });

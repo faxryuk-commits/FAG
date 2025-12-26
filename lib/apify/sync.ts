@@ -171,6 +171,105 @@ function extractReviews(data: any): any[] {
 }
 
 /**
+ * Извлекает URL меню из данных
+ */
+function extractMenuUrl(data: any): string | null {
+  // Объект menu с link
+  if (data.menu && typeof data.menu === 'object' && data.menu.link) {
+    return data.menu.link;
+  }
+  // Прямая строка
+  if (typeof data.menu === 'string' && data.menu.startsWith('http')) {
+    return data.menu;
+  }
+  // Другие поля
+  return data.menuUrl || data.menuLink || data.orderOnlineUrl || null;
+}
+
+/**
+ * Извлекает позиции меню из данных Google Maps
+ * Google может возвращать меню в поле menu.menuItems
+ */
+function extractMenuItems(data: any): any[] {
+  const items: any[] = [];
+  
+  // Google Maps menu object
+  if (data.menu && typeof data.menu === 'object') {
+    // Формат: menu.menuItems или menu.categories[].items[]
+    if (Array.isArray(data.menu.menuItems)) {
+      for (const item of data.menu.menuItems) {
+        items.push({
+          name: item.name || item.title || '',
+          description: item.description || '',
+          price: parsePrice(item.price),
+          category: item.category || item.section || null,
+          image: item.image || item.photo || null,
+        });
+      }
+    }
+    
+    // Формат с категориями
+    if (Array.isArray(data.menu.categories)) {
+      for (const cat of data.menu.categories) {
+        const categoryName = cat.name || cat.title || '';
+        const catItems = cat.items || cat.menuItems || [];
+        for (const item of catItems) {
+          items.push({
+            name: item.name || item.title || '',
+            description: item.description || '',
+            price: parsePrice(item.price),
+            category: categoryName,
+            image: item.image || item.photo || null,
+          });
+        }
+      }
+    }
+  }
+  
+  // Прямое поле menuItems
+  if (Array.isArray(data.menuItems)) {
+    for (const item of data.menuItems) {
+      items.push({
+        name: item.name || item.title || '',
+        description: item.description || '',
+        price: parsePrice(item.price),
+        category: item.category || item.section || null,
+        image: item.image || item.photo || null,
+      });
+    }
+  }
+  
+  // Поле dishes (некоторые актёры)
+  if (Array.isArray(data.dishes)) {
+    for (const item of data.dishes) {
+      items.push({
+        name: item.name || item.title || '',
+        description: item.description || '',
+        price: parsePrice(item.price),
+        category: item.category || null,
+        image: item.image || item.photo || null,
+      });
+    }
+  }
+  
+  return items.filter(item => item.name);
+}
+
+/**
+ * Парсит цену из разных форматов
+ */
+function parsePrice(price: any): number | null {
+  if (typeof price === 'number') return price;
+  if (!price) return null;
+  
+  const str = String(price);
+  // Убираем валюту и пробелы, оставляем числа
+  const numbers = str.replace(/[^\d.,]/g, '').replace(',', '.');
+  const parsed = parseFloat(numbers);
+  return isNaN(parsed) ? null : parsed;
+}
+
+/**
  * Формирует input для актера в зависимости от источника
  */
 function getActorInput(source: SyncSource, searchQuery: string, location: string, maxResults: number) {
@@ -628,7 +727,9 @@ function normalizeData(source: SyncSource, data: any) {
         // Отзывы
         _reviews: extractReviews(data),
         // Меню - ссылка (из документации актёра: поле "menu")
-        menuUrl: data.menu || data.menuUrl || data.menuLink || data.orderOnlineUrl || null,
+        menuUrl: extractMenuUrl(data),
+        // Позиции меню если есть
+        _menuItems: extractMenuItems(data),
         // Популярные часы (histogram)
         _popularTimes: data.popularTimesHistogram || data.popularTimes || null,
         // Бронирование столиков
