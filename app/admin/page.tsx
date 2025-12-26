@@ -2189,7 +2189,736 @@ interface ApiUsageStats {
   };
 }
 
-// Панель управления ресторанами (Google Places API)
+// Детальный интерфейс ресторана для CMS
+interface RestaurantDetail {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  address: string;
+  city: string;
+  country: string | null;
+  latitude: number;
+  longitude: number;
+  phone: string | null;
+  website: string | null;
+  email: string | null;
+  menuUrl: string | null;
+  rating: number | null;
+  ratingCount: number;
+  priceRange: string | null;
+  cuisine: string[];
+  images: string[];
+  source: string;
+  sourceId: string;
+  sourceUrl: string | null;
+  brand: string | null;
+  isActive: boolean;
+  isVerified: boolean;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastSynced: string | null;
+  workingHours: Array<{
+    id: string;
+    dayOfWeek: number;
+    openTime: string;
+    closeTime: string;
+    isClosed: boolean;
+  }>;
+  menuItems: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    price: number | null;
+    category: string | null;
+    image: string | null;
+  }>;
+  reviews: Array<{
+    id: string;
+    author: string;
+    rating: number;
+    text: string | null;
+    date: string;
+    photos: string[];
+  }>;
+}
+
+// Модальное окно детального редактирования ресторана
+function RestaurantDetailModal({
+  isOpen,
+  restaurantId,
+  onClose,
+  onSaved,
+}: {
+  isOpen: boolean;
+  restaurantId: string | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [restaurant, setRestaurant] = useState<RestaurantDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [activeSection, setActiveSection] = useState<'info' | 'hours' | 'menu' | 'photos' | 'reviews' | 'meta'>('info');
+  const [editedData, setEditedData] = useState<Partial<RestaurantDetail>>({});
+  const [editedHours, setEditedHours] = useState<RestaurantDetail['workingHours']>([]);
+  const [newMenuItem, setNewMenuItem] = useState({ name: '', price: '', category: '', description: '' });
+
+  useEffect(() => {
+    if (isOpen && restaurantId) {
+      fetchRestaurantDetail();
+    }
+  }, [isOpen, restaurantId]);
+
+  const fetchRestaurantDetail = async () => {
+    if (!restaurantId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/restaurants/${restaurantId}`);
+      if (res.ok) {
+        const data = await res.json();
+        const r = data.restaurant || data;
+        setRestaurant(r);
+        setEditedData({
+          name: r.name,
+          address: r.address,
+          city: r.city,
+          phone: r.phone,
+          website: r.website,
+          email: r.email,
+          menuUrl: r.menuUrl,
+          description: r.description,
+          priceRange: r.priceRange,
+          cuisine: r.cuisine,
+          brand: r.brand,
+          isActive: r.isActive,
+          isVerified: r.isVerified,
+          isArchived: r.isArchived,
+        });
+        setEditedHours(r.workingHours || []);
+      }
+    } catch (error) {
+      console.error('Error fetching restaurant:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!restaurant) return;
+    setSaving(true);
+    try {
+      // Сохраняем основные данные
+      const res = await fetch(`/api/restaurants/${restaurant.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editedData),
+      });
+      
+      if (res.ok) {
+        // Сохраняем время работы
+        await fetch(`/api/restaurants/${restaurant.id}/hours`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hours: editedHours }),
+        });
+        
+        alert('✅ Данные сохранены');
+        onSaved();
+        fetchRestaurantDetail();
+      } else {
+        const data = await res.json();
+        alert(`❌ Ошибка: ${data.error}`);
+      }
+    } catch (error) {
+      alert(`❌ Ошибка: ${error}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (!restaurant) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/restaurants/${restaurant.id}/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: 'full', force: true }),
+      });
+      
+      if (res.ok) {
+        alert('✅ Данные обновлены из Google');
+        fetchRestaurantDetail();
+      } else {
+        const data = await res.json();
+        alert(`❌ ${data.error}`);
+      }
+    } catch (error) {
+      alert(`❌ Ошибка: ${error}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addMenuItem = async () => {
+    if (!restaurant || !newMenuItem.name) return;
+    try {
+      const res = await fetch(`/api/restaurants/${restaurant.id}/menu`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newMenuItem.name,
+          price: newMenuItem.price ? parseFloat(newMenuItem.price) : null,
+          category: newMenuItem.category || null,
+          description: newMenuItem.description || null,
+        }),
+      });
+      
+      if (res.ok) {
+        setNewMenuItem({ name: '', price: '', category: '', description: '' });
+        fetchRestaurantDetail();
+      }
+    } catch (error) {
+      console.error('Error adding menu item:', error);
+    }
+  };
+
+  const deleteMenuItem = async (itemId: string) => {
+    if (!restaurant || !confirm('Удалить позицию меню?')) return;
+    try {
+      await fetch(`/api/restaurants/${restaurant.id}/menu?itemId=${itemId}`, {
+        method: 'DELETE',
+      });
+      fetchRestaurantDetail();
+    } catch (error) {
+      console.error('Error deleting menu item:', error);
+    }
+  };
+
+  const updateHour = (dayOfWeek: number, field: 'openTime' | 'closeTime' | 'isClosed', value: string | boolean) => {
+    setEditedHours(prev => {
+      const existing = prev.find(h => h.dayOfWeek === dayOfWeek);
+      if (existing) {
+        return prev.map(h => h.dayOfWeek === dayOfWeek ? { ...h, [field]: value } : h);
+      } else {
+        return [...prev, { 
+          id: `new-${dayOfWeek}`, 
+          dayOfWeek, 
+          openTime: '09:00', 
+          closeTime: '22:00', 
+          isClosed: false,
+          [field]: value 
+        }];
+      }
+    });
+  };
+
+  const DAYS = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+  const SECTIONS = [
+    { id: 'info', label: '📋 Основное', icon: '📋' },
+    { id: 'hours', label: '🕐 Время работы', icon: '🕐' },
+    { id: 'menu', label: '🍽️ Меню', icon: '🍽️' },
+    { id: 'photos', label: '📷 Фото', icon: '📷' },
+    { id: 'reviews', label: '⭐ Отзывы', icon: '⭐' },
+    { id: 'meta', label: '⚙️ Метаданные', icon: '⚙️' },
+  ];
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-6xl max-h-[95vh] bg-gradient-to-br from-[#1a1a2e] to-[#16213e] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between bg-black/20">
+          <div className="flex items-center gap-4">
+            {restaurant?.images?.[0] && (
+              <img src={restaurant.images[0]} alt="" className="w-12 h-12 rounded-xl object-cover" />
+            )}
+            <div>
+              <h2 className="text-xl font-bold text-white">
+                {loading ? 'Загрузка...' : restaurant?.name || 'Ресторан'}
+              </h2>
+              <p className="text-sm text-white/50">
+                {restaurant?.address}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefresh}
+              disabled={saving || loading}
+              className="px-4 py-2 bg-blue-500/20 text-blue-300 rounded-lg hover:bg-blue-500/30 text-sm disabled:opacity-50"
+            >
+              🔄 Обновить из Google
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || loading}
+              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm font-medium disabled:opacity-50"
+            >
+              {saving ? '⏳ Сохранение...' : '💾 Сохранить'}
+            </button>
+            <button
+              onClick={onClose}
+              className="w-10 h-10 rounded-xl bg-white/10 text-white/70 hover:bg-white/20 hover:text-white flex items-center justify-center text-xl"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <div className="px-6 py-3 border-b border-white/10 flex gap-2 overflow-x-auto bg-black/10">
+          {SECTIONS.map(s => (
+            <button
+              key={s.id}
+              onClick={() => setActiveSection(s.id as any)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+                activeSection === s.id
+                  ? 'bg-white/20 text-white'
+                  : 'text-white/50 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-4xl animate-spin">⏳</div>
+            </div>
+          ) : restaurant ? (
+            <>
+              {/* Основная информация */}
+              {activeSection === 'info' && (
+                <div className="space-y-6">
+                  {/* Статусы */}
+                  <div className="flex gap-4 flex-wrap">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editedData.isActive ?? restaurant.isActive}
+                        onChange={e => setEditedData(p => ({ ...p, isActive: e.target.checked }))}
+                        className="w-5 h-5 rounded accent-green-500"
+                      />
+                      <span className="text-white/70">✅ Активен</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editedData.isVerified ?? restaurant.isVerified}
+                        onChange={e => setEditedData(p => ({ ...p, isVerified: e.target.checked }))}
+                        className="w-5 h-5 rounded accent-blue-500"
+                      />
+                      <span className="text-white/70">🔵 Верифицирован</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editedData.isArchived ?? restaurant.isArchived}
+                        onChange={e => setEditedData(p => ({ ...p, isArchived: e.target.checked }))}
+                        className="w-5 h-5 rounded accent-orange-500"
+                      />
+                      <span className="text-white/70">📦 В архиве</span>
+                    </label>
+                  </div>
+
+                  {/* Основные поля */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-white/50 mb-1">Название</label>
+                      <input
+                        type="text"
+                        value={editedData.name ?? ''}
+                        onChange={e => setEditedData(p => ({ ...p, name: e.target.value }))}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-white/50 mb-1">Бренд/Сеть</label>
+                      <input
+                        type="text"
+                        value={editedData.brand ?? ''}
+                        onChange={e => setEditedData(p => ({ ...p, brand: e.target.value }))}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                        placeholder="Evos, Oqtepa Lavash..."
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm text-white/50 mb-1">Адрес</label>
+                      <input
+                        type="text"
+                        value={editedData.address ?? ''}
+                        onChange={e => setEditedData(p => ({ ...p, address: e.target.value }))}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-white/50 mb-1">Город</label>
+                      <input
+                        type="text"
+                        value={editedData.city ?? ''}
+                        onChange={e => setEditedData(p => ({ ...p, city: e.target.value }))}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-white/50 mb-1">Ценовая категория</label>
+                      <select
+                        value={editedData.priceRange ?? ''}
+                        onChange={e => setEditedData(p => ({ ...p, priceRange: e.target.value }))}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                      >
+                        <option value="">Не указано</option>
+                        <option value="$">$ — Бюджетно</option>
+                        <option value="$$">$$ — Средне</option>
+                        <option value="$$$">$$$ — Дорого</option>
+                        <option value="$$$$">$$$$ — Премиум</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-white/50 mb-1">Телефон</label>
+                      <input
+                        type="text"
+                        value={editedData.phone ?? ''}
+                        onChange={e => setEditedData(p => ({ ...p, phone: e.target.value }))}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-white/50 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={editedData.email ?? ''}
+                        onChange={e => setEditedData(p => ({ ...p, email: e.target.value }))}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-white/50 mb-1">Сайт</label>
+                      <input
+                        type="url"
+                        value={editedData.website ?? ''}
+                        onChange={e => setEditedData(p => ({ ...p, website: e.target.value }))}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-white/50 mb-1">Ссылка на меню</label>
+                      <input
+                        type="url"
+                        value={editedData.menuUrl ?? ''}
+                        onChange={e => setEditedData(p => ({ ...p, menuUrl: e.target.value }))}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm text-white/50 mb-1">Описание</label>
+                      <textarea
+                        value={editedData.description ?? ''}
+                        onChange={e => setEditedData(p => ({ ...p, description: e.target.value }))}
+                        rows={3}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white resize-none"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm text-white/50 mb-1">Кухня (через запятую)</label>
+                      <input
+                        type="text"
+                        value={(editedData.cuisine ?? restaurant.cuisine)?.join(', ') ?? ''}
+                        onChange={e => setEditedData(p => ({ ...p, cuisine: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
+                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
+                        placeholder="Узбекская, Европейская, Фастфуд..."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Рейтинг (только отображение) */}
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <h3 className="text-white/70 text-sm mb-3">📊 Рейтинг (автоматически из Google)</h3>
+                    <div className="flex items-center gap-6">
+                      <div className="text-center">
+                        <div className="text-4xl font-bold text-yellow-400">
+                          {restaurant.rating?.toFixed(1) || '—'}
+                        </div>
+                        <div className="text-xs text-white/40">рейтинг</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-4xl font-bold text-white/70">
+                          {restaurant.ratingCount}
+                        </div>
+                        <div className="text-xs text-white/40">отзывов</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Время работы */}
+              {activeSection === 'hours' && (
+                <div className="space-y-4">
+                  <p className="text-white/50 text-sm mb-4">
+                    Редактируйте время работы для каждого дня недели
+                  </p>
+                  {DAYS.map((day, idx) => {
+                    const hour = editedHours.find(h => h.dayOfWeek === idx);
+                    return (
+                      <div key={idx} className="flex items-center gap-4 p-3 bg-white/5 rounded-lg">
+                        <div className="w-32 text-white/70 font-medium">{day}</div>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={hour?.isClosed ?? false}
+                            onChange={e => updateHour(idx, 'isClosed', e.target.checked)}
+                            className="w-4 h-4 rounded accent-red-500"
+                          />
+                          <span className="text-white/50 text-sm">Выходной</span>
+                        </label>
+                        {!hour?.isClosed && (
+                          <>
+                            <input
+                              type="time"
+                              value={hour?.openTime || '09:00'}
+                              onChange={e => updateHour(idx, 'openTime', e.target.value)}
+                              className="px-3 py-1.5 bg-white/10 border border-white/10 rounded-lg text-white text-sm"
+                            />
+                            <span className="text-white/30">—</span>
+                            <input
+                              type="time"
+                              value={hour?.closeTime || '22:00'}
+                              onChange={e => updateHour(idx, 'closeTime', e.target.value)}
+                              className="px-3 py-1.5 bg-white/10 border border-white/10 rounded-lg text-white text-sm"
+                            />
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Меню */}
+              {activeSection === 'menu' && (
+                <div className="space-y-6">
+                  {/* Добавление позиции */}
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <h3 className="text-white/70 text-sm mb-3">➕ Добавить позицию</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <input
+                        type="text"
+                        placeholder="Название"
+                        value={newMenuItem.name}
+                        onChange={e => setNewMenuItem(p => ({ ...p, name: e.target.value }))}
+                        className="px-3 py-2 bg-white/10 border border-white/10 rounded-lg text-white text-sm"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Цена"
+                        value={newMenuItem.price}
+                        onChange={e => setNewMenuItem(p => ({ ...p, price: e.target.value }))}
+                        className="px-3 py-2 bg-white/10 border border-white/10 rounded-lg text-white text-sm"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Категория"
+                        value={newMenuItem.category}
+                        onChange={e => setNewMenuItem(p => ({ ...p, category: e.target.value }))}
+                        className="px-3 py-2 bg-white/10 border border-white/10 rounded-lg text-white text-sm"
+                      />
+                      <button
+                        onClick={addMenuItem}
+                        disabled={!newMenuItem.name}
+                        className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                      >
+                        Добавить
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Список позиций */}
+                  <div className="space-y-2">
+                    {restaurant.menuItems.length === 0 ? (
+                      <div className="text-center py-8 text-white/40">
+                        Меню пока пустое
+                      </div>
+                    ) : (
+                      restaurant.menuItems.map(item => (
+                        <div key={item.id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            {item.image && (
+                              <img src={item.image} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                            )}
+                            <div>
+                              <div className="text-white font-medium">{item.name}</div>
+                              <div className="text-sm text-white/50">
+                                {item.category && <span className="mr-2">{item.category}</span>}
+                                {item.description}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {item.price && (
+                              <span className="text-green-400 font-medium">
+                                {item.price.toLocaleString()} сум
+                              </span>
+                            )}
+                            <button
+                              onClick={() => deleteMenuItem(item.id)}
+                              className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Фото */}
+              {activeSection === 'photos' && (
+                <div className="space-y-4">
+                  <p className="text-white/50 text-sm">
+                    {restaurant.images.length} фотографий
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {restaurant.images.map((img, idx) => (
+                      <div key={idx} className="relative group">
+                        <img
+                          src={img}
+                          alt=""
+                          className="w-full aspect-square object-cover rounded-xl"
+                        />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center">
+                          <a
+                            href={img}
+                            target="_blank"
+                            className="px-3 py-1.5 bg-white/20 text-white text-sm rounded-lg"
+                          >
+                            Открыть
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {restaurant.images.length === 0 && (
+                    <div className="text-center py-8 text-white/40">
+                      Фотографий нет
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Отзывы */}
+              {activeSection === 'reviews' && (
+                <div className="space-y-4">
+                  <p className="text-white/50 text-sm">
+                    {restaurant.reviews.length} отзывов в базе
+                  </p>
+                  {restaurant.reviews.length === 0 ? (
+                    <div className="text-center py-8 text-white/40">
+                      Отзывов нет
+                    </div>
+                  ) : (
+                    restaurant.reviews.slice(0, 20).map(review => (
+                      <div key={review.id} className="p-4 bg-white/5 rounded-xl">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-white font-medium">{review.author}</span>
+                            <span className="text-yellow-400">
+                              {'⭐'.repeat(review.rating)}
+                            </span>
+                          </div>
+                          <span className="text-white/40 text-sm">
+                            {new Date(review.date).toLocaleDateString()}
+                          </span>
+                        </div>
+                        {review.text && (
+                          <p className="text-white/70 text-sm">{review.text}</p>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* Метаданные */}
+              {activeSection === 'meta' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <div className="text-white/40 text-xs mb-1">ID</div>
+                      <div className="text-white font-mono text-sm">{restaurant.id}</div>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <div className="text-white/40 text-xs mb-1">Slug</div>
+                      <div className="text-white font-mono text-sm">{restaurant.slug}</div>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <div className="text-white/40 text-xs mb-1">Источник</div>
+                      <div className="text-white">{restaurant.source}</div>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <div className="text-white/40 text-xs mb-1">ID источника</div>
+                      <div className="text-white font-mono text-xs break-all">{restaurant.sourceId}</div>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <div className="text-white/40 text-xs mb-1">Координаты</div>
+                      <div className="text-white text-sm">{restaurant.latitude}, {restaurant.longitude}</div>
+                    </div>
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <div className="text-white/40 text-xs mb-1">URL источника</div>
+                      {restaurant.sourceUrl ? (
+                        <a href={restaurant.sourceUrl} target="_blank" className="text-blue-400 text-sm hover:underline">
+                          Открыть
+                        </a>
+                      ) : (
+                        <span className="text-white/30">—</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-white/5 rounded-xl p-4">
+                    <h3 className="text-white/70 mb-3">📅 Временные метки</h3>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <div className="text-white/40 text-xs">Создан</div>
+                        <div className="text-white">{new Date(restaurant.createdAt).toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div className="text-white/40 text-xs">Обновлён</div>
+                        <div className="text-white">{new Date(restaurant.updatedAt).toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div className="text-white/40 text-xs">Синхронизирован</div>
+                        <div className="text-white">
+                          {restaurant.lastSynced 
+                            ? new Date(restaurant.lastSynced).toLocaleString() 
+                            : '—'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-20 text-white/40">
+              Не удалось загрузить данные
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Полнофункциональная CMS панель управления ресторанами
 function RestaurantManagementPanel() {
   const [restaurants, setRestaurants] = useState<Array<{
     id: string;
@@ -2199,50 +2928,73 @@ function RestaurantManagementPanel() {
     ratingCount: number;
     lastSynced: string | null;
     source: string;
-    canRefresh: boolean;
+    images: string[];
+    isActive: boolean;
+    isArchived: boolean;
+    isVerified: boolean;
+    phone: string | null;
   }>>([]);
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
-  const [results, setResults] = useState<Record<string, { success: boolean; message: string }>>({});
-  const [filter, setFilter] = useState<'all' | 'outdated' | 'popular'>('outdated');
+  const [filter, setFilter] = useState<'all' | 'active' | 'archived' | 'noPhotos' | 'noRating' | 'unverified'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [batchRefreshing, setBatchRefreshing] = useState(false);
-  const [apiStatus, setApiStatus] = useState<{ available: boolean; message?: string } | null>(null);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState<{
+    total: number;
+    active: number;
+    archived: number;
+    verified: number;
+    noPhotos: number;
+    noRating: number;
+  } | null>(null);
+  const LIMIT = 30;
 
   useEffect(() => {
     fetchRestaurants();
-    checkApiStatus();
-  }, [filter]);
+    fetchStats();
+  }, [filter, page]);
 
-  const checkApiStatus = async () => {
+  const fetchStats = async () => {
     try {
-      // Проверяем доступность API на примере первого ресторана
-      const res = await fetch('/api/restaurants/test/refresh');
-      if (res.status === 501) {
+      const res = await fetch('/api/quality');
+      if (res.ok) {
         const data = await res.json();
-        setApiStatus({ available: false, message: data.hint });
-      } else {
-        setApiStatus({ available: true });
+        setStats({
+          total: data.total || 0,
+          active: data.active || 0,
+          archived: data.archived || 0,
+          verified: data.verified || 0,
+          noPhotos: data.noPhotos || 0,
+          noRating: data.noRating || 0,
+        });
       }
-    } catch {
-      setApiStatus({ available: true }); // Предполагаем что API доступен
+    } catch (error) {
+      console.error('Error fetching stats:', error);
     }
   };
 
   const fetchRestaurants = async () => {
     setLoading(true);
     try {
-      // Берём рестораны для обновления
-      const sortBy = filter === 'popular' ? 'ratingCount' : 'lastSynced';
-      const res = await fetch(`/api/restaurants?limit=100&sortBy=${sortBy}&includeArchived=false`);
+      const params = new URLSearchParams({
+        limit: LIMIT.toString(),
+        offset: (page * LIMIT).toString(),
+        includeAll: 'true',
+      });
+      
+      // Применяем фильтры
+      if (filter === 'archived') params.append('archived', 'true');
+      if (filter === 'noPhotos') params.append('noPhotos', 'true');
+      if (filter === 'noRating') params.append('noRating', 'true');
+      if (filter === 'active') params.append('active', 'true');
+      if (filter === 'unverified') params.append('unverified', 'true');
+      if (searchQuery) params.append('search', searchQuery);
+      
+      const res = await fetch(`/api/restaurants?${params}`);
       const data = await res.json();
       
-      const now = new Date();
-      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      
-      let items = (data.restaurants || []).map((r: any) => ({
+      const items = (data.restaurants || []).map((r: any) => ({
         id: r.id,
         name: r.name,
         address: r.address,
@@ -2250,17 +3002,15 @@ function RestaurantManagementPanel() {
         ratingCount: r.ratingCount,
         lastSynced: r.lastSynced,
         source: r.source,
-        canRefresh: !r.lastSynced || new Date(r.lastSynced) < oneDayAgo,
+        images: r.images || [],
+        isActive: r.isActive ?? true,
+        isArchived: r.isArchived ?? false,
+        isVerified: r.isVerified ?? false,
+        phone: r.phone,
       }));
 
-      // Фильтруем
-      if (filter === 'outdated') {
-        items = items.filter((r: any) => !r.lastSynced || new Date(r.lastSynced) < oneWeekAgo);
-      } else if (filter === 'popular') {
-        items = items.sort((a: any, b: any) => (b.ratingCount || 0) - (a.ratingCount || 0)).slice(0, 50);
-      }
-
       setRestaurants(items);
+      setTotal(data.total || items.length);
     } catch (error) {
       console.error('Error fetching restaurants:', error);
     } finally {
@@ -2268,243 +3018,227 @@ function RestaurantManagementPanel() {
     }
   };
 
-  const refreshSingle = async (id: string, force = false) => {
-    setRefreshing(prev => new Set(prev).add(id));
-    
-    try {
-      const res = await fetch(`/api/restaurants/${id}/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: 'basic', force }),
-      });
-      
-      const data = await res.json();
-      
-      if (res.ok) {
-        setResults(prev => ({ ...prev, [id]: { success: true, message: '✅ Обновлено' } }));
-        // Обновляем список
-        setRestaurants(prev => prev.map(r => 
-          r.id === id ? { ...r, lastSynced: new Date().toISOString(), canRefresh: false } : r
-        ));
-      } else if (res.status === 429) {
-        setResults(prev => ({ ...prev, [id]: { success: false, message: '⏳ Кулдаун' } }));
-      } else if (res.status === 501) {
-        setResults(prev => ({ ...prev, [id]: { success: false, message: '🔧 API не настроен' } }));
-      } else {
-        setResults(prev => ({ ...prev, [id]: { success: false, message: `❌ ${data.error}` } }));
-      }
-    } catch (error) {
-      setResults(prev => ({ ...prev, [id]: { success: false, message: '❌ Ошибка сети' } }));
-    } finally {
-      setRefreshing(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
-  };
+  const FILTERS = [
+    { id: 'all', label: '📋 Все', color: 'blue' },
+    { id: 'active', label: '✅ Активные', color: 'green' },
+    { id: 'archived', label: '📦 Архив', color: 'orange' },
+    { id: 'noPhotos', label: '📷 Без фото', color: 'red' },
+    { id: 'noRating', label: '⭐ Без рейтинга', color: 'yellow' },
+    { id: 'unverified', label: '❓ Не проверены', color: 'purple' },
+  ];
 
-  const refreshBatch = async () => {
-    if (selectedIds.size === 0) {
-      alert('Выберите рестораны для обновления');
-      return;
-    }
-    
-    const cost = (selectedIds.size * 0.017).toFixed(2);
-    if (!confirm(`Обновить ${selectedIds.size} ресторанов?\n\nПримерная стоимость: ~$${cost}`)) return;
-    
-    setBatchRefreshing(true);
-    
-    for (const id of selectedIds) {
-      await refreshSingle(id, true);
-      // Небольшая задержка между запросами
-      await new Promise(r => setTimeout(r, 500));
-    }
-    
-    setBatchRefreshing(false);
-    setSelectedIds(new Set());
-    fetchRestaurants();
-  };
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const selectAll = () => {
-    if (selectedIds.size === filteredRestaurants.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredRestaurants.map(r => r.id)));
-    }
-  };
-
-  const filteredRestaurants = restaurants.filter(r => 
-    searchQuery === '' || 
-    r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.address.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const totalPages = Math.ceil(total / LIMIT);
 
   return (
-    <div>
-      {/* API Status */}
-      {apiStatus && !apiStatus.available && (
-        <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
-          <div className="text-yellow-300 font-medium mb-1">⚠️ Google Places API не настроен</div>
-          <p className="text-sm text-white/50">{apiStatus.message}</p>
+    <div className="space-y-6">
+      {/* Статистика */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+          <div className="bg-white/5 rounded-xl p-3 text-center">
+            <div className="text-2xl font-bold text-white">{stats.total}</div>
+            <div className="text-xs text-white/40">Всего</div>
+          </div>
+          <div className="bg-green-500/10 rounded-xl p-3 text-center">
+            <div className="text-2xl font-bold text-green-400">{stats.active}</div>
+            <div className="text-xs text-white/40">Активные</div>
+          </div>
+          <div className="bg-blue-500/10 rounded-xl p-3 text-center">
+            <div className="text-2xl font-bold text-blue-400">{stats.verified}</div>
+            <div className="text-xs text-white/40">Проверены</div>
+          </div>
+          <div className="bg-orange-500/10 rounded-xl p-3 text-center">
+            <div className="text-2xl font-bold text-orange-400">{stats.archived}</div>
+            <div className="text-xs text-white/40">В архиве</div>
+          </div>
+          <div className="bg-red-500/10 rounded-xl p-3 text-center">
+            <div className="text-2xl font-bold text-red-400">{stats.noPhotos}</div>
+            <div className="text-xs text-white/40">Без фото</div>
+          </div>
+          <div className="bg-yellow-500/10 rounded-xl p-3 text-center">
+            <div className="text-2xl font-bold text-yellow-400">{stats.noRating}</div>
+            <div className="text-xs text-white/40">Без рейтинга</div>
+          </div>
         </div>
       )}
-      
-      {/* Фильтры и поиск */}
-      <div className="space-y-3 mb-4">
-        <div className="flex gap-2">
+
+      {/* Фильтры */}
+      <div className="flex flex-wrap gap-2">
+        {FILTERS.map(f => (
           <button
-            onClick={() => setFilter('outdated')}
-            className={`flex-1 py-2 text-xs rounded-lg transition-colors ${
-              filter === 'outdated' 
-                ? 'bg-orange-500/30 text-orange-300 border border-orange-500/50' 
+            key={f.id}
+            onClick={() => { setFilter(f.id as any); setPage(0); }}
+            className={`px-4 py-2 text-sm rounded-lg transition-all ${
+              filter === f.id
+                ? `bg-${f.color}-500/30 text-${f.color}-300 border border-${f.color}-500/50`
                 : 'bg-white/5 text-white/60 hover:bg-white/10'
             }`}
           >
-            📅 Устаревшие (&gt;7 дней)
+            {f.label}
           </button>
-          <button
-            onClick={() => setFilter('popular')}
-            className={`flex-1 py-2 text-xs rounded-lg transition-colors ${
-              filter === 'popular' 
-                ? 'bg-purple-500/30 text-purple-300 border border-purple-500/50' 
-                : 'bg-white/5 text-white/60 hover:bg-white/10'
-            }`}
-          >
-            ⭐ Популярные (топ-50)
-          </button>
-          <button
-            onClick={() => setFilter('all')}
-            className={`flex-1 py-2 text-xs rounded-lg transition-colors ${
-              filter === 'all' 
-                ? 'bg-blue-500/30 text-blue-300 border border-blue-500/50' 
-                : 'bg-white/5 text-white/60 hover:bg-white/10'
-            }`}
-          >
-            📋 Все
-          </button>
-        </div>
-        
-        <input
-          type="text"
-          placeholder="🔍 Поиск по названию или адресу..."
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-white/30 focus:outline-none focus:border-white/30"
-        />
+        ))}
       </div>
 
-      {/* Массовые действия */}
-      {selectedIds.size > 0 && (
-        <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg flex items-center justify-between">
-          <div>
-            <span className="text-blue-300 font-medium">{selectedIds.size} выбрано</span>
-            <span className="text-xs text-white/40 ml-2">~${(selectedIds.size * 0.017).toFixed(2)}</span>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setSelectedIds(new Set())}
-              className="px-3 py-1.5 bg-white/10 text-white/60 text-xs rounded-lg hover:bg-white/20"
-            >
-              Отменить
-            </button>
-            <button
-              onClick={refreshBatch}
-              disabled={batchRefreshing}
-              className="px-3 py-1.5 bg-green-500/30 text-green-300 text-xs rounded-lg hover:bg-green-500/40 disabled:opacity-50"
-            >
-              {batchRefreshing ? '⏳ Обновление...' : '🔄 Обновить выбранные'}
-            </button>
-          </div>
+      {/* Поиск */}
+      <div className="flex gap-3">
+        <div className="flex-1 relative">
+          <input
+            type="text"
+            placeholder="🔍 Поиск по названию, адресу, телефону..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && fetchRestaurants()}
+            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-white/30"
+          />
         </div>
-      )}
+        <button
+          onClick={() => { setPage(0); fetchRestaurants(); }}
+          className="px-6 py-3 bg-blue-500/30 text-blue-300 rounded-xl hover:bg-blue-500/40 font-medium"
+        >
+          Найти
+        </button>
+      </div>
 
       {/* Список ресторанов */}
-      {loading ? (
-        <div className="text-center py-8 text-white/40">Загрузка...</div>
-      ) : filteredRestaurants.length === 0 ? (
-        <div className="text-center py-8 text-white/40">Нет ресторанов для обновления</div>
-      ) : (
-        <div className="space-y-2">
-          {/* Заголовок с выбором всех */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg">
-            <input
-              type="checkbox"
-              checked={selectedIds.size === filteredRestaurants.length && filteredRestaurants.length > 0}
-              onChange={selectAll}
-              className="w-4 h-4 rounded accent-blue-500"
-            />
-            <span className="text-xs text-white/40">
-              Выбрать все ({filteredRestaurants.length})
-            </span>
+      <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+        {/* Заголовок таблицы */}
+        <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-white/5 text-xs text-white/40 font-medium">
+          <div className="col-span-1">Фото</div>
+          <div className="col-span-4">Название / Адрес</div>
+          <div className="col-span-2">Рейтинг</div>
+          <div className="col-span-2">Статус</div>
+          <div className="col-span-2">Обновлено</div>
+          <div className="col-span-1"></div>
+        </div>
+
+        {/* Содержимое */}
+        {loading ? (
+          <div className="text-center py-12 text-white/40">
+            <div className="text-3xl mb-2">⏳</div>
+            Загрузка...
           </div>
-          
-          <div className="max-h-[400px] overflow-y-auto space-y-1">
-            {filteredRestaurants.map(r => (
+        ) : restaurants.length === 0 ? (
+          <div className="text-center py-12 text-white/40">
+            <div className="text-3xl mb-2">📭</div>
+            Ничего не найдено
+          </div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {restaurants.map(r => (
               <div
                 key={r.id}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                  selectedIds.has(r.id) ? 'bg-blue-500/20' : 'bg-white/5 hover:bg-white/10'
-                }`}
+                onClick={() => setSelectedRestaurant(r.id)}
+                className="grid grid-cols-12 gap-4 px-4 py-3 hover:bg-white/5 cursor-pointer transition-colors items-center"
               >
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(r.id)}
-                  onChange={() => toggleSelect(r.id)}
-                  className="w-4 h-4 rounded accent-blue-500"
-                />
-                
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-white font-medium truncate">{r.name}</div>
-                  <div className="text-xs text-white/40 truncate">{r.address}</div>
-                  <div className="flex items-center gap-2 text-xs mt-0.5">
-                    {r.rating && (
-                      <span className="text-yellow-400">⭐ {r.rating.toFixed(1)}</span>
-                    )}
-                    <span className="text-white/30">({r.ratingCount} отзывов)</span>
-                    {r.lastSynced && (
-                      <span className="text-white/20">
-                        • {new Date(r.lastSynced).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
+                {/* Фото */}
+                <div className="col-span-1">
+                  {r.images[0] ? (
+                    <img src={r.images[0]} alt="" className="w-12 h-12 rounded-lg object-cover" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center text-white/30">
+                      📷
+                    </div>
+                  )}
                 </div>
-                
-                {results[r.id] && (
-                  <span className={`text-xs ${results[r.id].success ? 'text-green-400' : 'text-red-400'}`}>
-                    {results[r.id].message}
-                  </span>
-                )}
-                
-                <button
-                  onClick={() => refreshSingle(r.id, !r.canRefresh)}
-                  disabled={refreshing.has(r.id) || batchRefreshing}
-                  className={`px-3 py-1.5 text-xs rounded-lg transition-colors disabled:opacity-50 ${
-                    r.canRefresh
-                      ? 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
-                      : 'bg-orange-500/20 text-orange-300 hover:bg-orange-500/30'
-                  }`}
-                  title={r.canRefresh ? 'Обновить' : 'Принудительно обновить (кулдаун)'}
-                >
-                  {refreshing.has(r.id) ? '⏳' : r.canRefresh ? '🔄' : '⚡'}
-                </button>
+
+                {/* Название */}
+                <div className="col-span-4 min-w-0">
+                  <div className="text-white font-medium truncate">{r.name}</div>
+                  <div className="text-sm text-white/40 truncate">{r.address}</div>
+                  {r.phone && <div className="text-xs text-white/30">{r.phone}</div>}
+                </div>
+
+                {/* Рейтинг */}
+                <div className="col-span-2">
+                  {r.rating ? (
+                    <div className="flex items-center gap-1">
+                      <span className="text-yellow-400 font-medium">{r.rating.toFixed(1)}</span>
+                      <span className="text-white/30 text-sm">({r.ratingCount})</span>
+                    </div>
+                  ) : (
+                    <span className="text-white/20">—</span>
+                  )}
+                </div>
+
+                {/* Статус */}
+                <div className="col-span-2 flex flex-wrap gap-1">
+                  {r.isActive && (
+                    <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded">
+                      Активен
+                    </span>
+                  )}
+                  {r.isVerified && (
+                    <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded">
+                      ✓
+                    </span>
+                  )}
+                  {r.isArchived && (
+                    <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded">
+                      Архив
+                    </span>
+                  )}
+                  {!r.isActive && !r.isArchived && (
+                    <span className="px-2 py-0.5 bg-gray-500/20 text-gray-400 text-xs rounded">
+                      Скрыт
+                    </span>
+                  )}
+                </div>
+
+                {/* Дата */}
+                <div className="col-span-2 text-sm text-white/40">
+                  {r.lastSynced ? (
+                    new Date(r.lastSynced).toLocaleDateString()
+                  ) : (
+                    <span className="text-white/20">Не обновлялся</span>
+                  )}
+                </div>
+
+                {/* Действия */}
+                <div className="col-span-1 text-right">
+                  <button className="p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-lg">
+                    ✏️
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Пагинация */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-white/10">
+            <div className="text-sm text-white/40">
+              Показано {page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} из {total}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="px-3 py-1.5 bg-white/5 text-white/60 rounded-lg hover:bg-white/10 disabled:opacity-30"
+              >
+                ← Назад
+              </button>
+              <span className="px-3 py-1.5 text-white/40">
+                {page + 1} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="px-3 py-1.5 bg-white/5 text-white/60 rounded-lg hover:bg-white/10 disabled:opacity-30"
+              >
+                Вперёд →
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Модальное окно редактирования */}
+      <RestaurantDetailModal
+        isOpen={selectedRestaurant !== null}
+        restaurantId={selectedRestaurant}
+        onClose={() => setSelectedRestaurant(null)}
+        onSaved={() => fetchRestaurants()}
+      />
     </div>
   );
 }

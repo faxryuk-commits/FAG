@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
     // Получаем общую статистику
     const [
       total,
+      active,
+      verified,
       noPhotos,
       noReviews,
       noRating,
@@ -43,6 +45,8 @@ export async function GET(request: NextRequest) {
       archived
     ] = await Promise.all([
       prisma.restaurant.count({ where: baseWhere }),
+      prisma.restaurant.count({ where: { ...baseWhere, isActive: true } }),
+      prisma.restaurant.count({ where: { ...baseWhere, isVerified: true } }),
       prisma.restaurant.count({ where: { ...baseWhere, images: { equals: [] } } }),
       prisma.restaurant.count({ where: { ...baseWhere, ratingCount: 0 } }),
       prisma.restaurant.count({ where: { ...baseWhere, rating: null } }),
@@ -168,8 +172,18 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({
+      // Основные счётчики для панели управления
+      total,
+      active,
+      verified,
+      archived,
+      noPhotos,
+      noRating,
+      // Детальная статистика
       stats: {
         total,
+        active,
+        verified,
         archived,
         issues: {
           no_photos: noPhotos,
