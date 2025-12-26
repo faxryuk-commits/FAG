@@ -247,3 +247,25 @@ model RestaurantSyncMeta {
   @@map("restaurant_sync_meta")
 }
 
+// Статистика использования API
+model ApiUsage {
+  id          String   @id @default(cuid())
+  service     String   // google_places, apify
+  endpoint    String   // place_details, text_search, etc.
+  cost        Float    // Стоимость в USD
+  
+  // Период (месяц)
+  year        Int
+  month       Int
+  
+  // Счётчики
+  requests    Int      @default(0)
+  totalCost   Float    @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([service, endpoint, year, month])
+  @@map("api_usage")
+}
+

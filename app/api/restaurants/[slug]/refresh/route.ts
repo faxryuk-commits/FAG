@@ -28,6 +28,48 @@ interface RefreshOptions {
   force?: boolean;
 }
 
+// Стоимость операций Google Places API (New)
+const COSTS = {
+  place_details: 0.017,    // Place Details
+  text_search: 0.032,      // Text Search
+  photo: 0.007,            // Place Photo
+};
+
+// Логирование использования API
+async function logApiUsage(endpoint: string, cost: number) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+
+  try {
+    await prisma.apiUsage.upsert({
+      where: {
+        service_endpoint_year_month: {
+          service: 'google_places',
+          endpoint,
+          year,
+          month,
+        },
+      },
+      update: {
+        requests: { increment: 1 },
+        totalCost: { increment: cost },
+      },
+      create: {
+        service: 'google_places',
+        endpoint,
+        cost,
+        year,
+        month,
+        requests: 1,
+        totalCost: cost,
+      },
+    });
+  } catch (error) {
+    console.error('Error logging API usage:', error);
+  }
+}
+
 // POST - обновить данные заведения
 export async function POST(
   request: NextRequest,
@@ -101,6 +143,9 @@ export async function POST(
         error: 'Failed to fetch place details',
       }, { status: 502 });
     }
+
+    // Логируем использование API
+    await logApiUsage('place_details', COSTS.place_details);
 
     // Обновляем данные в БД
     const updateData: any = {
