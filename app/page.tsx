@@ -3,6 +3,17 @@
 import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
+
+// Динамический импорт карты (отключаем SSR)
+const RestaurantMap = dynamic(() => import('@/components/RestaurantMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-[70vh] rounded-2xl bg-white/5 flex items-center justify-center">
+      <div className="text-white/50">⏳ Загрузка карты...</div>
+    </div>
+  ),
+});
 
 // Популярные запросы (статические)
 const POPULAR_SEARCHES = [
@@ -221,6 +232,9 @@ export default function Home() {
   
   // Тема: light / dark
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  
+  // Режим отображения: список или карта
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   
   useEffect(() => {
     setGreeting(getTimeGreeting());
@@ -889,9 +903,38 @@ export default function Home() {
                       : 'Все места'}
               </span>
             </h2>
-            <span className={`text-sm ${theme === 'dark' ? 'text-white/40' : 'text-gray-400'}`}>
-              {restaurants.length}{totalCount > restaurants.length ? ` из ${totalCount}` : ''} мест
-            </span>
+            
+            <div className="flex items-center gap-3">
+              {/* Переключатель режима: Список / Карта */}
+              <div className={`flex rounded-xl p-1 ${
+                theme === 'dark' ? 'bg-white/10' : 'bg-gray-100'
+              }`}>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    viewMode === 'list'
+                      ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-lg'
+                      : theme === 'dark' ? 'text-white/60 hover:text-white' : 'text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  📋 Список
+                </button>
+                <button
+                  onClick={() => setViewMode('map')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    viewMode === 'map'
+                      ? 'bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-lg'
+                      : theme === 'dark' ? 'text-white/60 hover:text-white' : 'text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  🗺️ Карта
+                </button>
+              </div>
+              
+              <span className={`text-sm ${theme === 'dark' ? 'text-white/40' : 'text-gray-400'}`}>
+                {restaurants.length}{totalCount > restaurants.length ? ` из ${totalCount}` : ''} мест
+              </span>
+            </div>
           </div>
 
           {loading ? (
@@ -923,19 +966,29 @@ export default function Home() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {displayedRestaurants.map((restaurant, index) => (
-                  <RestaurantCard 
-                    key={restaurant.id} 
-                    restaurant={restaurant} 
-                    theme={theme}
-                    priority={index < 6} // Первые 6 карточек загружаем приоритетно
-                  />
-                ))}
-              </div>
+              {/* Режим карты */}
+              {viewMode === 'map' ? (
+                <RestaurantMap 
+                  restaurants={displayedRestaurants}
+                  userLocation={userLocation}
+                  theme={theme}
+                />
+              ) : (
+                /* Режим списка */
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {displayedRestaurants.map((restaurant, index) => (
+                    <RestaurantCard 
+                      key={restaurant.id} 
+                      restaurant={restaurant} 
+                      theme={theme}
+                      priority={index < 6} // Первые 6 карточек загружаем приоритетно
+                    />
+                  ))}
+                </div>
+              )}
               
-              {/* Загрузить ещё */}
-              {hasMore && restaurants.length > 0 && (
+              {/* Загрузить ещё (только для списка) */}
+              {viewMode === 'list' && hasMore && restaurants.length > 0 && (
                 <div className="text-center mt-10">
                   <button
                     onClick={loadMore}
