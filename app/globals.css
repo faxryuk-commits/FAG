@@ -121,6 +121,7 @@ body {
   border: none !important;
   background: transparent !important;
   box-shadow: none !important;
+  pointer-events: none !important;
 }
 
 .restaurant-tooltip .leaflet-tooltip-content {
@@ -141,17 +142,29 @@ body {
   border-radius: 8px !important;
   padding: 4px 8px !important;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+  pointer-events: none !important;
 }
 
 .custom-tooltip::before {
   border-top-color: white !important;
 }
 
-/* Tooltip animation */
-.leaflet-tooltip {
-  transition: opacity 0.15s ease-in-out, transform 0.15s ease-in-out;
+/* Tooltip - только один активный */
+.leaflet-tooltip-pane {
+  z-index: 650 !important;
 }
 
-.leaflet-tooltip-pane {
+.leaflet-tooltip {
+  transition: opacity 0.1s ease-out;
+  pointer-events: none !important;
+}
+
+/* Маркеры поверх tooltip */
+.leaflet-marker-pane {
+  z-index: 600 !important;
+}
+
+/* При наведении на маркер - поднимаем его z-index */
+.custom-marker:hover {
   z-index: 1000 !important;
 }

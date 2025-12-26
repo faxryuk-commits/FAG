@@ -244,8 +244,10 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
           >
             <Tooltip 
               direction="top" 
-              offset={[0, -15]} 
+              offset={[0, -20]} 
               opacity={1}
+              permanent={false}
+              sticky={false}
               className="restaurant-tooltip"
             >
               <div className="w-72 bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-100">
