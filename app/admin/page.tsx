@@ -2254,6 +2254,134 @@ const REFRESH_OPTIONS = [
   { id: 'full', label: 'Всё сразу', desc: 'Полное обновление', cost: '$0.017' },
 ];
 
+// Компонент истории изменений
+function ChangeHistory({ restaurantId }: { restaurantId: string }) {
+  const [logs, setLogs] = useState<Array<{
+    id: string;
+    action: string;
+    source: string;
+    requestType: string | null;
+    requestData: any;
+    responseData: any;
+    success: boolean;
+    errorMessage: string | null;
+    cost: number | null;
+    changedFields: string[];
+    createdAt: string;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [restaurantId]);
+
+  const fetchLogs = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/restaurants/${restaurantId}/history`);
+      if (res.ok) {
+        const data = await res.json();
+        setLogs(data.logs || []);
+      }
+    } catch (error) {
+      console.error('Error fetching history:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getActionLabel = (action: string) => {
+    const labels: Record<string, string> = {
+      refresh: '🔄 Обновление из Google',
+      manual_edit: '✏️ Ручное редактирование',
+      archive: '📦 Архивирование',
+      restore: '↩️ Восстановление',
+      update: '💾 Сохранение',
+    };
+    return labels[action] || action;
+  };
+
+  const getSourceLabel = (source: string) => {
+    const labels: Record<string, string> = {
+      google_api: 'Google Places API',
+      manual: 'Вручную',
+      apify: 'Apify',
+      system: 'Система',
+    };
+    return labels[source] || source;
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-8 text-white/40">
+        <div className="animate-spin text-2xl mb-2">⏳</div>
+        Загрузка истории...
+      </div>
+    );
+  }
+
+  if (logs.length === 0) {
+    return (
+      <div className="text-center py-8 text-white/40">
+        <div className="text-2xl mb-2">📜</div>
+        История изменений пуста
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="text-xs text-white/40 mb-2">
+        {logs.length} записей в истории
+      </div>
+      {logs.map(log => (
+        <div 
+          key={log.id} 
+          className={`p-3 rounded-lg text-xs ${
+            log.success ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="font-medium text-white">{getActionLabel(log.action)}</span>
+            <span className="text-white/30">
+              {new Date(log.createdAt).toLocaleString()}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-white/50 mb-1">
+            <span>{getSourceLabel(log.source)}</span>
+            {log.requestType && (
+              <>
+                <span>•</span>
+                <span>{log.requestType}</span>
+              </>
+            )}
+            {log.cost && (
+              <>
+                <span>•</span>
+                <span className="text-green-400">${log.cost.toFixed(3)}</span>
+              </>
+            )}
+          </div>
+          {log.changedFields && log.changedFields.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {log.changedFields.map(field => (
+                <span key={field} className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px]">
+                  {field}
+                </span>
+              ))}
+            </div>
+          )}
+          {!log.success && log.errorMessage && (
+            <div className="mt-1 text-red-300 text-[10px]">
+              ❌ {log.errorMessage}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Модальное окно детального редактирования ресторана
 function RestaurantDetailModal({
   isOpen,
@@ -2270,7 +2398,7 @@ function RestaurantDetailModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeSection, setActiveSection] = useState<'info' | 'hours' | 'menu' | 'photos' | 'reviews' | 'meta' | 'update'>('info');
+  const [activeSection, setActiveSection] = useState<'info' | 'hours' | 'menu' | 'photos' | 'reviews' | 'meta' | 'update' | 'history'>('info');
   const [editedData, setEditedData] = useState<Partial<RestaurantDetail>>({});
   const [editedHours, setEditedHours] = useState<RestaurantDetail['workingHours']>([]);
   const [newMenuItem, setNewMenuItem] = useState({ name: '', price: '', category: '', description: '' });
@@ -2334,6 +2462,17 @@ function RestaurantDetailModal({
   const handleSave = async () => {
     if (!restaurant) return;
     setSaving(true);
+    
+    // Определяем какие поля изменились
+    const changedFields: string[] = [];
+    Object.keys(editedData).forEach(key => {
+      const original = (restaurant as any)[key];
+      const edited = (editedData as any)[key];
+      if (JSON.stringify(original) !== JSON.stringify(edited)) {
+        changedFields.push(key);
+      }
+    });
+    
     try {
       // Сохраняем основные данные
       const res = await fetch(`/api/restaurants/${restaurant.id}`, {
@@ -2350,11 +2489,39 @@ function RestaurantDetailModal({
           body: JSON.stringify({ hours: editedHours }),
         });
         
+        // Логируем в историю изменений
+        await fetch(`/api/restaurants/${restaurant.id}/history`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'manual_edit',
+            source: 'manual',
+            requestData: editedData,
+            responseData: { success: true },
+            success: true,
+            changedFields: changedFields.length > 0 ? changedFields : ['workingHours'],
+          }),
+        });
+        
         alert('✅ Данные сохранены');
         onSaved();
         fetchRestaurantDetail();
       } else {
         const data = await res.json();
+        
+        // Логируем ошибку
+        await fetch(`/api/restaurants/${restaurant.id}/history`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'manual_edit',
+            source: 'manual',
+            requestData: editedData,
+            success: false,
+            errorMessage: data.error,
+          }),
+        });
+        
         alert(`❌ Ошибка: ${data.error}`);
       }
     } catch (error) {
@@ -2465,11 +2632,15 @@ function RestaurantDetailModal({
   );
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/70"
-      onClick={e => e.target === e.currentTarget && onClose()}
-    >
-      <div className="w-full max-w-4xl max-h-[85vh] bg-[#1a1a2e] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col animate-[modalOpen_0.15s_ease-out]">
+    <>
+      {/* Затемнение фона */}
+      <div 
+        className="fixed inset-0 z-40 bg-black/50 transition-opacity"
+        onClick={onClose}
+      />
+      
+      {/* Боковая панель справа */}
+      <div className="fixed top-0 right-0 z-50 h-full w-[500px] max-w-[90vw] bg-[#1a1a2e] border-l border-white/10 shadow-2xl flex flex-col animate-[slideIn_0.2s_ease-out]">
         {/* Компактный Header */}
         <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-black/30">
           <div className="flex items-center gap-3 min-w-0">
@@ -2479,7 +2650,7 @@ function RestaurantDetailModal({
               <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">📍</div>
             )}
             <div className="min-w-0">
-              <h2 className="text-lg font-bold text-white truncate">
+              <h2 className="text-base font-bold text-white truncate">
                 {loading ? '...' : restaurant?.name || 'Ресторан'}
               </h2>
               <p className="text-xs text-white/40 truncate">
@@ -2504,32 +2675,36 @@ function RestaurantDetailModal({
           </div>
         </div>
 
-        {/* Компактные табы */}
-        <div className="px-2 py-1.5 border-b border-white/10 flex gap-1 overflow-x-auto bg-black/20 scrollbar-hide">
-          {[
-            { id: 'info', icon: '📋', label: 'Основное' },
-            { id: 'hours', icon: '🕐', label: 'Часы' },
-            { id: 'photos', icon: '📷', label: `Фото${restaurant?.images?.length ? ` (${restaurant.images.length})` : ''}` },
-            { id: 'reviews', icon: '⭐', label: `Отзывы${restaurant?.reviews?.length ? ` (${restaurant.reviews.length})` : ''}` },
-            { id: 'update', icon: '🔄', label: 'Google' },
-            { id: 'meta', icon: '⚙️', label: 'Мета' },
-          ].map(s => (
-            <button
-              key={s.id}
-              onClick={() => setActiveSection(s.id as any)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-                activeSection === s.id
-                  ? 'bg-blue-500/30 text-blue-300 border border-blue-500/50'
-                  : 'text-white/50 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              {s.icon} {s.label}
-            </button>
-          ))}
-        </div>
+        {/* Вертикальные табы слева и контент справа */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Вертикальные табы */}
+          <div className="w-12 bg-black/20 border-r border-white/10 flex flex-col py-2">
+            {[
+              { id: 'info', icon: '📋', label: 'Инфо' },
+              { id: 'hours', icon: '🕐', label: 'Часы' },
+              { id: 'photos', icon: '📷', label: 'Фото' },
+              { id: 'reviews', icon: '⭐', label: 'Отзывы' },
+              { id: 'update', icon: '🔄', label: 'Google' },
+              { id: 'history', icon: '📜', label: 'История' },
+              { id: 'meta', icon: '⚙️', label: 'Мета' },
+            ].map(s => (
+              <button
+                key={s.id}
+                onClick={() => setActiveSection(s.id as any)}
+                title={s.label}
+                className={`w-full py-2.5 text-center transition-all ${
+                  activeSection === s.id
+                    ? 'bg-blue-500/30 text-blue-300 border-r-2 border-blue-400'
+                    : 'text-white/50 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                {s.icon}
+              </button>
+            ))}
+          </div>
 
-        {/* Контент */}
-        <div className="flex-1 overflow-y-auto p-4">
+          {/* Контент */}
+          <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <LoadingSkeleton />
           ) : restaurant ? (
@@ -2827,30 +3002,36 @@ function RestaurantDetailModal({
                 </div>
               )}
 
+              {/* История изменений */}
+              {activeSection === 'history' && (
+                <ChangeHistory restaurantId={restaurant.id} />
+              )}
+
               {/* Метаданные - компактная таблица */}
               {activeSection === 'meta' && (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="bg-white/5 rounded-lg p-2">
                       <div className="text-white/30">ID</div>
-                      <div className="text-white font-mono truncate" title={restaurant.id}>{restaurant.id.slice(0, 12)}...</div>
+                      <div className="text-white font-mono truncate text-[10px]" title={restaurant.id}>{restaurant.id}</div>
                     </div>
                     <div className="bg-white/5 rounded-lg p-2">
                       <div className="text-white/30">Slug</div>
-                      <div className="text-white font-mono truncate">{restaurant.slug}</div>
+                      <div className="text-white font-mono truncate text-[10px]">{restaurant.slug}</div>
                     </div>
                     <div className="bg-white/5 rounded-lg p-2">
                       <div className="text-white/30">Источник</div>
                       <div className="text-white capitalize">{restaurant.source}</div>
                     </div>
-                    <div className="bg-white/5 rounded-lg p-2 col-span-2">
-                      <div className="text-white/30">Source ID</div>
-                      <div className="text-white font-mono text-[10px] truncate">{restaurant.sourceId}</div>
-                    </div>
                     <div className="bg-white/5 rounded-lg p-2">
                       <div className="text-white/30">Координаты</div>
                       <div className="text-white text-[10px]">{restaurant.latitude?.toFixed(4)}, {restaurant.longitude?.toFixed(4)}</div>
                     </div>
+                  </div>
+
+                  <div className="bg-white/5 rounded-lg p-2">
+                    <div className="text-white/30 text-xs mb-1">Source ID</div>
+                    <div className="text-white font-mono text-[10px] break-all">{restaurant.sourceId}</div>
                   </div>
 
                   <div className="bg-white/5 rounded-lg p-2">
@@ -2865,7 +3046,7 @@ function RestaurantDetailModal({
                       </div>
                       <div>
                         <div className="text-white/30">Синхр</div>
-                        <div className="text-white">
+                        <div className="text-white text-[10px]">
                           {restaurant.lastSynced 
                             ? new Date(restaurant.lastSynced).toLocaleString() 
                             : '—'}
@@ -2882,8 +3063,9 @@ function RestaurantDetailModal({
             </div>
           )}
         </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

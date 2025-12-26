@@ -93,6 +93,42 @@ async function logApiUsage(endpoint: string, cost: number) {
   }
 }
 
+// Логирование в историю изменений
+async function logChangeHistory(params: {
+  restaurantId: string;
+  action: string;
+  source: string;
+  requestType?: string;
+  requestData?: any;
+  responseData?: any;
+  success: boolean;
+  errorMessage?: string;
+  cost?: number;
+  changedFields?: string[];
+}) {
+  try {
+    await prisma.changeLog.create({
+      data: {
+        restaurantId: params.restaurantId,
+        action: params.action,
+        source: params.source,
+        requestType: params.requestType,
+        requestData: params.requestData || null,
+        responseData: params.responseData || null,
+        success: params.success,
+        errorMessage: params.errorMessage,
+        cost: params.cost,
+        changedFields: params.changedFields || [],
+      },
+    });
+  } catch (error: any) {
+    // Игнорируем если таблица не существует
+    if (error?.code !== 'P2021') {
+      console.error('Error logging change history:', error);
+    }
+  }
+}
+
 // POST - обновить данные заведения
 export async function POST(
   request: NextRequest,
@@ -228,6 +264,34 @@ export async function POST(
       }
     }
 
+    // Определяем какие поля изменились
+    const changedFields: string[] = [];
+    if (updateData.rating !== undefined) changedFields.push('rating');
+    if (updateData.ratingCount !== undefined) changedFields.push('ratingCount');
+    if (updateData.phone !== undefined) changedFields.push('phone');
+    if (updateData.website !== undefined) changedFields.push('website');
+    if (updateData.priceRange !== undefined) changedFields.push('priceRange');
+    if (placeData.currentOpeningHours?.periods) changedFields.push('workingHours');
+
+    // Логируем в историю изменений
+    await logChangeHistory({
+      restaurantId: restaurant.id,
+      action: 'refresh',
+      source: 'google_api',
+      requestType: body.fields || 'basic',
+      requestData: { placeId, fieldMask: fieldConfig.mask },
+      responseData: { 
+        rating: placeData.rating,
+        ratingCount: placeData.userRatingCount,
+        phone: placeData.nationalPhoneNumber,
+        hasHours: !!placeData.currentOpeningHours,
+        photosCount: placeData.photos?.length || 0,
+      },
+      success: true,
+      cost: fieldConfig.cost,
+      changedFields,
+    });
+
     return NextResponse.json({
       success: true,
       message: 'Данные обновлены',
@@ -240,13 +304,18 @@ export async function POST(
       },
       cost: `~$${fieldConfig.cost.toFixed(3)}`,
       fieldType: body.fields || 'basic',
+      changedFields,
     });
 
   } catch (error) {
     console.error('Error refreshing restaurant:', error);
+    
+    // Логируем ошибку в историю
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
     return NextResponse.json({
       error: 'Failed to refresh restaurant',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      details: errorMessage,
     }, { status: 500 });
   }
 }

@@ -274,3 +274,39 @@ model ApiUsage {
   @@map("api_usage")
 }
 
+// История изменений ресторанов
+model ChangeLog {
+  id            String   @id @default(cuid())
+  restaurantId  String
+  
+  // Тип операции
+  action        String   // update, refresh, archive, restore, manual_edit
+  
+  // Источник изменения
+  source        String   // google_api, manual, apify, system
+  
+  // Запрос
+  requestType   String?  // basic, hours, photos, reviews, full
+  requestData   Json?    // Данные запроса
+  
+  // Ответ
+  responseData  Json?    // Данные ответа
+  
+  // Результат
+  success       Boolean  @default(true)
+  errorMessage  String?  @db.Text
+  
+  // Стоимость (если API)
+  cost          Float?
+  
+  // Что изменилось
+  changedFields String[] // ["rating", "phone", "workingHours"]
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([restaurantId])
+  @@index([createdAt])
+  @@index([action])
+  @@map("change_logs")
+}
+
