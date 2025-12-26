@@ -17,8 +17,8 @@ const Marker = dynamic(
   () => import('react-leaflet').then(mod => mod.Marker),
   { ssr: false }
 );
-const Popup = dynamic(
-  () => import('react-leaflet').then(mod => mod.Popup),
+const Tooltip = dynamic(
+  () => import('react-leaflet').then(mod => mod.Tooltip),
   { ssr: false }
 );
 
@@ -146,9 +146,13 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
             position={[userLocation.lat, userLocation.lng]}
             icon={userIcon}
           >
-            <Popup>
-              <div className="text-center font-medium">📍 Вы здесь</div>
-            </Popup>
+            <Tooltip 
+              direction="top" 
+              offset={[0, -10]}
+              className="custom-tooltip"
+            >
+              <div className="text-center font-medium text-sm px-2 py-1">📍 Вы здесь</div>
+            </Tooltip>
           </Marker>
         )}
         
@@ -165,64 +169,86 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
             eventHandlers={{
               mouseover: () => setHoveredId(restaurant.id),
               mouseout: () => setHoveredId(null),
+              click: () => window.location.href = `/restaurants/${restaurant.slug}`
             }}
           >
-            <Popup>
-              <div className="w-64 p-0 -m-3">
-                {/* Превью карточки */}
-                <Link href={`/restaurants/${restaurant.slug}`}>
-                  <div className="group cursor-pointer">
-                    {/* Изображение */}
-                    <div className="h-32 relative overflow-hidden">
-                      {restaurant.images?.[0] ? (
-                        <img 
-                          src={restaurant.images[0]} 
-                          alt={restaurant.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-orange-500/30 to-pink-500/30 flex items-center justify-center">
-                          <span className="text-4xl">🍽️</span>
-                        </div>
-                      )}
-                      {/* Рейтинг */}
-                      {restaurant.rating && (
-                        <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 rounded-lg text-white text-sm font-bold flex items-center gap-1">
-                          <span className="text-amber-400">★</span>
-                          <span>{restaurant.rating.toFixed(1)}</span>
-                        </div>
-                      )}
+            <Tooltip 
+              direction="top" 
+              offset={[0, -15]} 
+              opacity={1}
+              className="restaurant-tooltip"
+            >
+              <div className="w-72 bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-100">
+                {/* Изображение с градиентом */}
+                <div className="h-36 relative overflow-hidden">
+                  {restaurant.images?.[0] ? (
+                    <img 
+                      src={restaurant.images[0]} 
+                      alt={restaurant.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-orange-400 via-pink-500 to-purple-500 flex items-center justify-center">
+                      <span className="text-5xl drop-shadow-lg">🍽️</span>
                     </div>
-                    
-                    {/* Информация */}
-                    <div className="p-3">
-                      <h3 className="font-bold text-gray-900 line-clamp-1 group-hover:text-orange-500 transition-colors">
-                        {restaurant.name}
-                      </h3>
-                      <p className="text-xs text-gray-500 line-clamp-1 mt-1">
-                        {restaurant.address}
-                      </p>
-                      {restaurant.distance !== undefined && (
-                        <div className="mt-2 text-xs text-blue-600 font-medium">
-                          📍 {restaurant.distance < 1 
-                            ? `${Math.round(restaurant.distance * 1000)} м` 
-                            : `${restaurant.distance.toFixed(1)} км`}
-                        </div>
-                      )}
-                      {restaurant.cuisine?.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {restaurant.cuisine.slice(0, 2).map((c, i) => (
-                            <span key={i} className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
-                              {c}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                  )}
+                  
+                  {/* Градиент для читаемости */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  
+                  {/* Рейтинг и расстояние */}
+                  <div className="absolute bottom-2 left-2 right-2 flex justify-between items-end">
+                    {restaurant.rating && (
+                      <div className="px-2.5 py-1 bg-white/95 backdrop-blur-sm rounded-lg text-sm font-bold flex items-center gap-1.5 shadow-lg">
+                        <span className="text-amber-500 text-base">★</span>
+                        <span className="text-gray-900">{restaurant.rating.toFixed(1)}</span>
+                      </div>
+                    )}
+                    {restaurant.distance !== undefined && (
+                      <div className="px-2.5 py-1 bg-blue-500/90 backdrop-blur-sm rounded-lg text-xs font-semibold text-white shadow-lg">
+                        {restaurant.distance < 1 
+                          ? `${Math.round(restaurant.distance * 1000)} м` 
+                          : `${restaurant.distance.toFixed(1)} км`}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Информация */}
+                <div className="p-3">
+                  <h3 className="font-bold text-gray-900 line-clamp-1 text-base">
+                    {restaurant.name}
+                  </h3>
+                  
+                  <p className="text-xs text-gray-500 line-clamp-1 mt-1 flex items-center gap-1">
+                    <span className="text-gray-400">📍</span>
+                    {restaurant.address || 'Адрес не указан'}
+                  </p>
+                  
+                  {/* Теги кухни */}
+                  {restaurant.cuisine?.length > 0 && (
+                    <div className="mt-2.5 flex flex-wrap gap-1.5">
+                      {restaurant.cuisine.slice(0, 3).map((c, i) => (
+                        <span 
+                          key={i} 
+                          className="px-2 py-0.5 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200/50 rounded-full text-xs text-orange-700 font-medium"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* CTA */}
+                  <div className="mt-3 pt-2.5 border-t border-gray-100">
+                    <div className="text-xs text-center text-orange-600 font-semibold flex items-center justify-center gap-1.5">
+                      <span>Кликните для подробностей</span>
+                      <span className="text-sm">→</span>
                     </div>
                   </div>
-                </Link>
+                </div>
               </div>
-            </Popup>
+            </Tooltip>
           </Marker>
         ))}
       </MapContainer>

@@ -114,3 +114,44 @@ body {
   background: transparent;
   border: none;
 }
+
+/* Restaurant Tooltip Styles */
+.restaurant-tooltip {
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.restaurant-tooltip .leaflet-tooltip-content {
+  margin: 0;
+  padding: 0;
+}
+
+.leaflet-tooltip-top.restaurant-tooltip::before,
+.leaflet-tooltip-bottom.restaurant-tooltip::before,
+.leaflet-tooltip-left.restaurant-tooltip::before,
+.leaflet-tooltip-right.restaurant-tooltip::before {
+  display: none;
+}
+
+.custom-tooltip {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+  padding: 4px 8px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+}
+
+.custom-tooltip::before {
+  border-top-color: white !important;
+}
+
+/* Tooltip animation */
+.leaflet-tooltip {
+  transition: opacity 0.15s ease-in-out, transform 0.15s ease-in-out;
+}
+
+.leaflet-tooltip-pane {
+  z-index: 1000 !important;
+}
