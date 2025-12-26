@@ -17,16 +17,6 @@ const Marker = dynamic(
   () => import('react-leaflet').then(mod => mod.Marker),
   { ssr: false }
 );
-const Popup = dynamic(
-  () => import('react-leaflet').then(mod => mod.Popup),
-  { ssr: false }
-);
-
-interface WorkingHour {
-  dayOfWeek: number;
-  openTime: string;
-  closeTime: string;
-}
 
 interface Restaurant {
   id: string;
@@ -40,9 +30,6 @@ interface Restaurant {
   images: string[];
   cuisine: string[];
   distance?: number;
-  phone?: string;
-  website?: string;
-  workingHours?: WorkingHour[];
 }
 
 interface RestaurantMapProps {
@@ -51,98 +38,55 @@ interface RestaurantMapProps {
   theme: 'dark' | 'light';
 }
 
-// Названия дней недели
-const DAYS = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
-
 export default function RestaurantMap({ restaurants, userLocation, theme }: RestaurantMapProps) {
   const [isClient, setIsClient] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
-  const [restaurantDetails, setRestaurantDetails] = useState<any>(null);
-  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [sliderIndex, setSliderIndex] = useState(0);
   const [L, setL] = useState<any>(null);
+  const sliderRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setIsClient(true);
-    // Импортируем Leaflet на клиенте
     import('leaflet').then((leaflet) => {
       setL(leaflet.default);
     });
   }, []);
 
-  // Кэш деталей ресторанов
-  const detailsCache = useRef<Record<string, any>>({});
-
-  // Загрузка деталей ресторана (в фоне)
-  const fetchRestaurantDetails = async (slug: string) => {
-    // Если уже в кэше - используем кэш
-    if (detailsCache.current[slug]) {
-      setRestaurantDetails(detailsCache.current[slug]);
-      setLoadingDetails(false);
-      return;
-    }
+  // Автопрокрутка слайдера каждые 4 секунды (когда не наведено)
+  useEffect(() => {
+    if (hoveredId) return;
     
-    setLoadingDetails(true);
-    try {
-      const res = await fetch(`/api/restaurants/${slug}`);
-      const data = await res.json();
-      const details = data.restaurant || data;
-      // Сохраняем в кэш
-      detailsCache.current[slug] = details;
-      setRestaurantDetails(details);
-    } catch (error) {
-      console.error('Error fetching restaurant details:', error);
-    } finally {
-      setLoadingDetails(false);
-    }
+    const topRestaurants = getTopRestaurants();
+    if (topRestaurants.length === 0) return;
+    
+    const interval = setInterval(() => {
+      setSliderIndex(prev => (prev + 1) % topRestaurants.length);
+    }, 4000);
+    
+    return () => clearInterval(interval);
+  }, [hoveredId, restaurants]);
+
+  // Фильтруем рестораны с координатами
+  const validRestaurants = restaurants.filter(r => r.latitude && r.longitude);
+
+  // Топ заведения для слайдера (рейтинг 4.5+ с фото)
+  const getTopRestaurants = () => {
+    return validRestaurants
+      .filter(r => r.rating && r.rating >= 4.5 && r.images?.length > 0)
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+      .slice(0, 10);
   };
 
-  // Открытие попапа с деталями - МГНОВЕННО
-  const handleMarkerClick = (restaurant: Restaurant) => {
-    // Сразу показываем модал с имеющимися данными
-    setSelectedRestaurant(restaurant);
-    setRestaurantDetails(null);
-    // Загружаем дополнительные данные в фоне
-    fetchRestaurantDetails(restaurant.slug);
-  };
+  const topRestaurants = getTopRestaurants();
 
-  // Закрытие попапа
-  const closeModal = () => {
-    setSelectedRestaurant(null);
-    setRestaurantDetails(null);
-  };
-
-  // Форматирование времени работы
-  const formatWorkingHours = (hours: WorkingHour[] | undefined) => {
-    if (!hours || hours.length === 0) return null;
-    
-    const today = new Date().getDay();
-    const todayHours = hours.find(h => h.dayOfWeek === today);
-    
-    if (!todayHours) return null;
-    if (todayHours.openTime === '00:00' && todayHours.closeTime === '23:59') return null;
-    
-    return todayHours;
-  };
-
-  // Проверка открыт ли сейчас
-  const isOpenNow = (hours: WorkingHour[] | undefined) => {
-    if (!hours || hours.length === 0) return null;
-    
-    const now = new Date();
-    const today = now.getDay();
-    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    
-    const todayHours = hours.find(h => h.dayOfWeek === today);
-    if (!todayHours) return null;
-    if (todayHours.openTime === '00:00' && todayHours.closeTime === '23:59') return null;
-    
-    return currentTime >= todayHours.openTime && currentTime <= todayHours.closeTime;
-  };
+  // Текущий ресторан для отображения в панели
+  const currentRestaurant = hoveredId 
+    ? validRestaurants.find(r => r.id === hoveredId)
+    : topRestaurants[sliderIndex];
 
   if (!isClient || !L) {
     return (
-      <div className={`w-full h-[70vh] rounded-2xl flex items-center justify-center ${
+      <div className={`w-full h-[60vh] rounded-2xl flex items-center justify-center ${
         theme === 'dark' ? 'bg-white/5' : 'bg-gray-100'
       }`}>
         <div className={theme === 'dark' ? 'text-white/50' : 'text-gray-500'}>
@@ -152,18 +96,15 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
     );
   }
 
-  // Центр карты - геолокация пользователя или Ташкент
+  // Центр карты
   const center: [number, number] = userLocation 
     ? [userLocation.lat, userLocation.lng]
-    : [41.311081, 69.240562]; // Ташкент
+    : [41.311081, 69.240562];
 
-  // Фильтруем рестораны с координатами
-  const validRestaurants = restaurants.filter(r => r.latitude && r.longitude);
-
-  // Создаём кастомные иконки
+  // Кастомные иконки маркеров
   const createIcon = (isHovered: boolean, hasPhoto: boolean, rating: number | null) => {
     const color = rating && rating >= 4.5 ? '#22c55e' : rating && rating >= 4.0 ? '#f59e0b' : '#ef4444';
-    const size = isHovered ? 40 : 32;
+    const size = isHovered ? 36 : 28;
     
     return L.divIcon({
       className: 'custom-marker',
@@ -172,14 +113,14 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
           width: ${size}px;
           height: ${size}px;
           background: ${color};
-          border: 3px solid white;
+          border: 2px solid white;
           border-radius: 50%;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: ${isHovered ? '18px' : '14px'};
-          transition: all 0.2s;
+          font-size: ${isHovered ? '14px' : '11px'};
+          transition: all 0.15s;
           cursor: pointer;
         ">
           ${hasPhoto ? '🍽️' : '📍'}
@@ -190,356 +131,256 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
     });
   };
 
-  // Иконка пользователя
   const userIcon = L.divIcon({
     className: 'user-marker',
-    html: `
-      <div style="
-        width: 24px;
-        height: 24px;
-        background: #3b82f6;
-        border: 3px solid white;
-        border-radius: 50%;
-        box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.3), 0 4px 12px rgba(0,0,0,0.3);
-      "></div>
-    `,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
+    html: `<div style="width:20px;height:20px;background:#3b82f6;border:2px solid white;border-radius:50%;box-shadow:0 0 0 6px rgba(59,130,246,0.3);"></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
   });
 
-  // Выбираем стиль карты в зависимости от темы
   const tileUrl = theme === 'dark'
     ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
     : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-  return (
-    <div className="w-full h-[70vh] rounded-2xl overflow-hidden relative">
-      <MapContainer
-        center={center}
-        zoom={13}
-        style={{ height: '100%', width: '100%' }}
-        zoomControl={true}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url={tileUrl}
-        />
-        
-        {/* Маркер пользователя */}
-        {userLocation && (
-          <Marker 
-            position={[userLocation.lat, userLocation.lng]}
-            icon={userIcon}
+  // Компонент карточки ресторана
+  const RestaurantCard = ({ restaurant, isActive = false }: { restaurant: Restaurant; isActive?: boolean }) => (
+    <Link 
+      href={`/restaurants/${restaurant.slug}`}
+      className={`block rounded-xl overflow-hidden transition-all ${
+        isActive 
+          ? 'ring-2 ring-orange-500 shadow-lg' 
+          : 'hover:shadow-md'
+      } ${theme === 'dark' ? 'bg-white/10' : 'bg-white border border-gray-200'}`}
+    >
+      {/* Изображение */}
+      <div className="h-28 sm:h-32 relative overflow-hidden">
+        {restaurant.images?.[0] ? (
+          <img 
+            src={restaurant.images[0]} 
+            alt={restaurant.name}
+            className="w-full h-full object-cover"
+            loading="lazy"
           />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center">
+            <span className="text-3xl">🍽️</span>
+          </div>
         )}
         
-        {/* Маркеры ресторанов */}
-        {validRestaurants.map((restaurant) => (
-          <Marker
-            key={restaurant.id}
-            position={[restaurant.latitude!, restaurant.longitude!]}
-            icon={createIcon(
-              hoveredId === restaurant.id,
-              restaurant.images?.length > 0,
-              restaurant.rating
-            )}
-            eventHandlers={{
-              mouseover: () => setHoveredId(restaurant.id),
-              mouseout: () => setHoveredId(null),
-              click: () => handleMarkerClick(restaurant)
-            }}
-          />
-        ))}
-      </MapContainer>
-      
-      {/* Легенда */}
-      <div className={`absolute bottom-4 left-4 p-3 rounded-xl backdrop-blur-xl text-xs z-[1000] ${
-        theme === 'dark' 
-          ? 'bg-black/70 text-white' 
-          : 'bg-white/90 text-gray-700 shadow-lg'
-      }`}>
-        <div className="font-medium mb-2">Рейтинг:</div>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-green-500"></span>
-            <span>4.5+ Отлично</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-amber-500"></span>
-            <span>4.0+ Хорошо</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-red-500"></span>
-            <span>&lt; 4.0</span>
-          </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+        
+        {/* Рейтинг */}
+        <div className="absolute bottom-2 left-2 right-2 flex justify-between items-end">
+          {restaurant.rating && (
+            <div className="px-2 py-0.5 bg-white/95 rounded-md text-xs font-bold flex items-center gap-1">
+              <span className="text-amber-500">★</span>
+              <span className="text-gray-900">{restaurant.rating.toFixed(1)}</span>
+            </div>
+          )}
+          {restaurant.distance !== undefined && (
+            <div className="px-2 py-0.5 bg-blue-500 rounded-md text-xs font-semibold text-white">
+              {restaurant.distance < 1 
+                ? `${Math.round(restaurant.distance * 1000)}м` 
+                : `${restaurant.distance.toFixed(1)}км`}
+            </div>
+          )}
         </div>
       </div>
       
-      {/* Счётчик */}
-      <div className={`absolute top-4 right-4 px-3 py-2 rounded-xl backdrop-blur-xl text-sm z-[1000] ${
-        theme === 'dark' 
-          ? 'bg-black/70 text-white' 
-          : 'bg-white/90 text-gray-700 shadow-lg'
-      }`}>
-        📍 {validRestaurants.length} мест на карте
-      </div>
-
-      {/* Карточка превью при наведении - фиксирована в правом нижнем углу */}
-      {hoveredId && (() => {
-        const hovered = validRestaurants.find(r => r.id === hoveredId);
-        if (!hovered) return null;
-        return (
-          <div 
-            className="absolute bottom-4 right-4 w-72 bg-white rounded-xl shadow-2xl overflow-hidden z-[1000] border border-gray-200"
-            style={{ animation: 'modalOpen 0.1s ease-out' }}
-          >
-            {/* Изображение */}
-            <div className="h-32 relative overflow-hidden">
-              {hovered.images?.[0] ? (
-                <img 
-                  src={hovered.images[0]} 
-                  alt={hovered.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-orange-400 via-pink-500 to-purple-500 flex items-center justify-center">
-                  <span className="text-4xl">🍽️</span>
-                </div>
-              )}
-              
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-              
-              {/* Рейтинг */}
-              <div className="absolute bottom-2 left-2 right-2 flex justify-between items-end">
-                {hovered.rating && (
-                  <div className="px-2 py-1 bg-white/95 rounded-lg text-sm font-bold flex items-center gap-1">
-                    <span className="text-amber-500">★</span>
-                    <span className="text-gray-900">{hovered.rating.toFixed(1)}</span>
-                  </div>
-                )}
-                {hovered.distance !== undefined && (
-                  <div className="px-2 py-1 bg-blue-500 rounded-lg text-xs font-semibold text-white">
-                    {hovered.distance < 1 
-                      ? `${Math.round(hovered.distance * 1000)} м` 
-                      : `${hovered.distance.toFixed(1)} км`}
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Инфо */}
-            <div className="p-3">
-              <h3 className="font-bold text-gray-900 line-clamp-1">{hovered.name}</h3>
-              <p className="text-xs text-gray-500 line-clamp-1 mt-1">
-                📍 {hovered.address || 'Адрес не указан'}
-              </p>
-              {hovered.cuisine?.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {hovered.cuisine.slice(0, 2).map((c, i) => (
-                    <span key={i} className="px-2 py-0.5 bg-orange-50 border border-orange-200/50 rounded-full text-xs text-orange-700">
-                      {c}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-center text-orange-600 font-medium">
-                Нажмите для подробностей →
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Модальное окно с деталями ресторана */}
-      {selectedRestaurant && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[2000] flex items-center justify-center p-4"
-          style={{ animation: 'modalBgOpen 0.1s ease-out' }}
-          onClick={closeModal}
-        >
-          <div 
-            className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden shadow-2xl"
-            style={{ animation: 'modalOpen 0.1s ease-out' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Шапка с изображением */}
-            <div className="h-52 relative">
-              {selectedRestaurant.images?.[0] ? (
-                <img 
-                  src={selectedRestaurant.images[0]} 
-                  alt={selectedRestaurant.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-orange-400 via-pink-500 to-purple-500 flex items-center justify-center">
-                  <span className="text-7xl drop-shadow-lg">🍽️</span>
-                </div>
-              )}
-              
-              {/* Градиент */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-              
-              {/* Кнопка закрытия */}
-              <button 
-                onClick={closeModal}
-                className="absolute top-3 right-3 w-10 h-10 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white text-xl transition-colors"
+      {/* Инфо */}
+      <div className="p-2.5">
+        <h3 className={`font-bold text-sm line-clamp-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+          {restaurant.name}
+        </h3>
+        <p className={`text-xs line-clamp-1 mt-0.5 ${theme === 'dark' ? 'text-white/60' : 'text-gray-500'}`}>
+          📍 {restaurant.address || 'Ташкент'}
+        </p>
+        {restaurant.cuisine?.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {restaurant.cuisine.slice(0, 2).map((c, i) => (
+              <span 
+                key={i} 
+                className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                  theme === 'dark' 
+                    ? 'bg-white/10 text-white/80' 
+                    : 'bg-orange-50 text-orange-700'
+                }`}
               >
-                ✕
-              </button>
-              
-              {/* Галерея миниатюр */}
-              {selectedRestaurant.images?.length > 1 && (
-                <div className="absolute bottom-3 left-3 right-3 flex gap-2 overflow-x-auto scrollbar-hide">
-                  {selectedRestaurant.images.slice(0, 5).map((img, i) => (
-                    <div key={i} className="w-12 h-12 flex-shrink-0 rounded-lg overflow-hidden border-2 border-white/50">
-                      <img src={img} alt="" className="w-full h-full object-cover" />
-                    </div>
-                  ))}
-                  {selectedRestaurant.images.length > 5 && (
-                    <div className="w-12 h-12 flex-shrink-0 rounded-lg bg-black/50 flex items-center justify-center text-white text-xs font-bold">
-                      +{selectedRestaurant.images.length - 5}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            
-            {/* Контент */}
-            <div className="p-5 overflow-y-auto max-h-[calc(85vh-208px)]">
-              {/* Название и рейтинг */}
-              <div className="flex items-start justify-between gap-4">
-                <h2 className="text-xl font-bold text-gray-900">
-                  {selectedRestaurant.name}
-                </h2>
-                {selectedRestaurant.rating && (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 rounded-xl">
-                    <span className="text-amber-500 text-lg">★</span>
-                    <span className="font-bold text-gray-900">{selectedRestaurant.rating.toFixed(1)}</span>
-                    {selectedRestaurant.ratingCount > 0 && (
-                      <span className="text-xs text-gray-500">({selectedRestaurant.ratingCount})</span>
-                    )}
-                  </div>
-                )}
+                {c}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+
+  return (
+    <div className="flex flex-col lg:flex-row gap-3 h-[60vh] lg:h-[55vh]">
+      {/* Левая панель - карточки */}
+      <div className={`w-full lg:w-72 flex-shrink-0 rounded-xl overflow-hidden ${
+        theme === 'dark' ? 'bg-white/5' : 'bg-gray-50'
+      }`}>
+        {/* Заголовок панели */}
+        <div className={`p-3 border-b ${theme === 'dark' ? 'border-white/10' : 'border-gray-200'}`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-sm font-medium ${theme === 'dark' ? 'text-white/80' : 'text-gray-700'}`}>
+              {hoveredId ? '🎯 Выбрано' : '⭐ Топ заведения'}
+            </span>
+            {!hoveredId && topRestaurants.length > 0 && (
+              <div className="flex gap-1">
+                {topRestaurants.slice(0, 5).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setSliderIndex(i)}
+                    className={`w-1.5 h-1.5 rounded-full transition-colors ${
+                      i === sliderIndex 
+                        ? 'bg-orange-500' 
+                        : theme === 'dark' ? 'bg-white/20' : 'bg-gray-300'
+                    }`}
+                  />
+                ))}
               </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Контент панели */}
+        <div className="p-3 h-[calc(100%-52px)] overflow-y-auto">
+          {currentRestaurant ? (
+            <div className="space-y-3">
+              {/* Основная карточка */}
+              <RestaurantCard 
+                restaurant={currentRestaurant} 
+                isActive={!!hoveredId}
+              />
               
-              {/* Адрес и расстояние */}
-              <div className="mt-3 flex items-center gap-3 text-sm text-gray-600">
-                <span className="text-gray-400">📍</span>
-                <span>{selectedRestaurant.address || 'Адрес не указан'}</span>
-                {selectedRestaurant.distance !== undefined && (
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                    {selectedRestaurant.distance < 1 
-                      ? `${Math.round(selectedRestaurant.distance * 1000)} м` 
-                      : `${selectedRestaurant.distance.toFixed(1)} км`}
-                  </span>
-                )}
-              </div>
-              
-              {/* Кухня */}
-              {selectedRestaurant.cuisine?.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {selectedRestaurant.cuisine.map((c, i) => (
-                    <span 
-                      key={i} 
-                      className="px-3 py-1 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200/50 rounded-full text-sm text-orange-700 font-medium"
-                    >
-                      {c}
-                    </span>
-                  ))}
-                </div>
-              )}
-              
-              {/* Время работы */}
-              {loadingDetails ? (
-                <div className="mt-4 p-4 bg-gray-50 rounded-xl animate-pulse">
-                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                </div>
-              ) : restaurantDetails?.workingHours?.length > 0 && (
-                <div className="mt-4 p-4 bg-gray-50 rounded-xl">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="font-medium text-gray-900 flex items-center gap-2">
-                      🕐 Время работы
-                    </span>
-                    {isOpenNow(restaurantDetails.workingHours) !== null && (
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        isOpenNow(restaurantDetails.workingHours) 
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-red-100 text-red-700'
-                      }`}>
-                        {isOpenNow(restaurantDetails.workingHours) ? '🟢 Открыто' : '🔴 Закрыто'}
-                      </span>
-                    )}
-                  </div>
-                  <div className="space-y-1.5 text-sm">
-                    {restaurantDetails.workingHours
-                      .filter((h: WorkingHour) => !(h.openTime === '00:00' && h.closeTime === '23:59'))
-                      .sort((a: WorkingHour, b: WorkingHour) => a.dayOfWeek - b.dayOfWeek)
-                      .map((hour: WorkingHour) => {
-                        const isToday = new Date().getDay() === hour.dayOfWeek;
-                        return (
-                          <div 
-                            key={hour.dayOfWeek} 
-                            className={`flex justify-between ${isToday ? 'font-semibold text-orange-600' : 'text-gray-600'}`}
-                          >
-                            <span>{DAYS[hour.dayOfWeek]}</span>
-                            <span>{hour.openTime} - {hour.closeTime}</span>
-                          </div>
-                        );
-                      })}
-                  </div>
-                </div>
-              )}
-              
-              {/* Контакты */}
-              {restaurantDetails && (restaurantDetails.phone || restaurantDetails.website) && (
-                <div className="mt-4 space-y-2">
-                  {restaurantDetails.phone && (
-                    <a 
-                      href={`tel:${restaurantDetails.phone}`}
-                      className="flex items-center gap-3 p-3 bg-green-50 hover:bg-green-100 rounded-xl text-green-700 transition-colors"
-                    >
-                      <span className="text-lg">📞</span>
-                      <span className="font-medium">{restaurantDetails.phone}</span>
-                    </a>
-                  )}
-                  {restaurantDetails.website && (
-                    <a 
-                      href={restaurantDetails.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-3 bg-blue-50 hover:bg-blue-100 rounded-xl text-blue-700 transition-colors"
-                    >
-                      <span className="text-lg">🌐</span>
-                      <span className="font-medium truncate">{restaurantDetails.website.replace(/^https?:\/\//, '')}</span>
-                    </a>
-                  )}
-                </div>
-              )}
-              
-              {/* Кнопки действий */}
-              <div className="mt-5 flex gap-3">
-                <Link 
-                  href={`/restaurants/${selectedRestaurant.slug}`}
-                  className="flex-1 py-3 px-4 bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white font-semibold rounded-xl text-center transition-all shadow-lg shadow-orange-500/25"
+              {/* Быстрые действия */}
+              <div className="flex gap-2">
+                <Link
+                  href={`/restaurants/${currentRestaurant.slug}`}
+                  className="flex-1 py-2 px-3 bg-gradient-to-r from-orange-500 to-pink-500 text-white text-xs font-semibold rounded-lg text-center"
                 >
                   Подробнее →
                 </Link>
-                {restaurantDetails?.latitude && restaurantDetails?.longitude && (
+                {currentRestaurant.latitude && currentRestaurant.longitude && (
                   <a
-                    href={`https://www.google.com/maps/dir/?api=1&destination=${restaurantDetails.latitude},${restaurantDetails.longitude}`}
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${currentRestaurant.latitude},${currentRestaurant.longitude}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-colors"
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold ${
+                      theme === 'dark' ? 'bg-white/10 text-white' : 'bg-gray-200 text-gray-700'
+                    }`}
                   >
-                    🗺️ Маршрут
+                    🗺️
                   </a>
                 )}
               </div>
+              
+              {/* Миниатюры других топ заведений (только когда не наведено) */}
+              {!hoveredId && topRestaurants.length > 1 && (
+                <div className="pt-2 border-t border-gray-200/20">
+                  <div className={`text-[10px] font-medium mb-2 ${theme === 'dark' ? 'text-white/50' : 'text-gray-400'}`}>
+                    ЕЩЁ РЕКОМЕНДУЕМ
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {topRestaurants
+                      .filter((_, i) => i !== sliderIndex)
+                      .slice(0, 4)
+                      .map((r) => (
+                        <button
+                          key={r.id}
+                          onClick={() => setSliderIndex(topRestaurants.findIndex(t => t.id === r.id))}
+                          className={`text-left p-1.5 rounded-lg transition-colors ${
+                            theme === 'dark' ? 'hover:bg-white/10' : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-md overflow-hidden flex-shrink-0">
+                              {r.images?.[0] ? (
+                                <img src={r.images[0]} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full bg-orange-100 flex items-center justify-center text-xs">🍽️</div>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className={`text-[10px] font-medium truncate ${theme === 'dark' ? 'text-white/80' : 'text-gray-700'}`}>
+                                {r.name}
+                              </div>
+                              <div className="text-[10px] text-amber-500">★ {r.rating?.toFixed(1)}</div>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
+          ) : (
+            <div className={`text-center py-8 ${theme === 'dark' ? 'text-white/40' : 'text-gray-400'}`}>
+              <div className="text-3xl mb-2">🗺️</div>
+              <div className="text-sm">Наведите на маркер</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Карта */}
+      <div className="flex-1 rounded-xl overflow-hidden relative min-h-[200px]">
+        <MapContainer
+          center={center}
+          zoom={12}
+          style={{ height: '100%', width: '100%' }}
+          zoomControl={true}
+        >
+          <TileLayer
+            attribution='&copy; OpenStreetMap'
+            url={tileUrl}
+          />
+          
+          {userLocation && (
+            <Marker 
+              position={[userLocation.lat, userLocation.lng]}
+              icon={userIcon}
+            />
+          )}
+          
+          {validRestaurants.map((restaurant) => (
+            <Marker
+              key={restaurant.id}
+              position={[restaurant.latitude!, restaurant.longitude!]}
+              icon={createIcon(
+                hoveredId === restaurant.id,
+                restaurant.images?.length > 0,
+                restaurant.rating
+              )}
+              eventHandlers={{
+                mouseover: () => setHoveredId(restaurant.id),
+                mouseout: () => setHoveredId(null),
+                click: () => window.location.href = `/restaurants/${restaurant.slug}`
+              }}
+            />
+          ))}
+        </MapContainer>
+        
+        {/* Легенда - компактная */}
+        <div className={`absolute bottom-2 left-2 p-2 rounded-lg backdrop-blur-xl text-[10px] z-[1000] ${
+          theme === 'dark' ? 'bg-black/60 text-white' : 'bg-white/90 text-gray-600 shadow'
+        }`}>
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span>4.5+</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span>4.0+</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span>&lt;4.0</span>
           </div>
         </div>
-      )}
+        
+        {/* Счётчик */}
+        <div className={`absolute top-2 right-2 px-2 py-1 rounded-lg backdrop-blur-xl text-xs z-[1000] ${
+          theme === 'dark' ? 'bg-black/60 text-white' : 'bg-white/90 text-gray-600 shadow'
+        }`}>
+          📍 {validRestaurants.length}
+        </div>
+      </div>
     </div>
   );
 }
-
