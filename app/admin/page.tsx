@@ -2382,7 +2382,446 @@ function ChangeHistory({ restaurantId }: { restaurantId: string }) {
   );
 }
 
-// Модальное окно детального редактирования ресторана
+// Accordion карточка ресторана с inline редактированием
+function RestaurantAccordionCard({
+  restaurant: r,
+  index,
+  isExpanded,
+  onToggle,
+  onSaved,
+}: {
+  restaurant: {
+    id: string;
+    name: string;
+    address: string;
+    rating: number | null;
+    ratingCount: number;
+    lastSynced: string | null;
+    source: string;
+    images: string[];
+    isActive: boolean;
+    isArchived: boolean;
+    isVerified: boolean;
+    phone: string | null;
+  };
+  index: number;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onSaved: () => void;
+}) {
+  const [detail, setDetail] = useState<RestaurantDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [editedData, setEditedData] = useState<Partial<RestaurantDetail>>({});
+  const [editedHours, setEditedHours] = useState<RestaurantDetail['workingHours']>([]);
+  const [refreshResult, setRefreshResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const DAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
+  // Загружаем детали при развороте
+  useEffect(() => {
+    if (isExpanded && !detail) {
+      fetchDetail();
+    }
+  }, [isExpanded]);
+
+  const fetchDetail = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/restaurants/${r.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        const rest = data.restaurant || data;
+        setDetail(rest);
+        setEditedData({
+          name: rest.name,
+          address: rest.address,
+          city: rest.city,
+          phone: rest.phone,
+          website: rest.website,
+          email: rest.email,
+          menuUrl: rest.menuUrl,
+          description: rest.description,
+          priceRange: rest.priceRange,
+          cuisine: rest.cuisine,
+          brand: rest.brand,
+          isActive: rest.isActive,
+          isVerified: rest.isVerified,
+          isArchived: rest.isArchived,
+        });
+        // Инициализируем часы работы
+        const existingHours = rest.workingHours || [];
+        const allDays = [0, 1, 2, 3, 4, 5, 6].map(day => {
+          const existing = existingHours.find((h: any) => h.dayOfWeek === day);
+          return existing || { id: `new-${day}`, dayOfWeek: day, openTime: '09:00', closeTime: '22:00', isClosed: false };
+        });
+        setEditedHours(allDays);
+      }
+    } catch (error) {
+      console.error('Error fetching restaurant:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!detail) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/restaurants/${detail.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...editedData, workingHours: editedHours }),
+      });
+      if (res.ok) {
+        // Логируем в историю
+        await fetch(`/api/restaurants/${detail.id}/history`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'manual_edit',
+            source: 'manual',
+            requestData: editedData,
+            success: true,
+          }),
+        });
+        onSaved();
+        fetchDetail();
+      } else {
+        const data = await res.json();
+        alert(`❌ ${data.error}`);
+      }
+    } catch (error) {
+      alert(`❌ ${error}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRefresh = async (fields: string = 'basic') => {
+    if (!detail) return;
+    setRefreshing(true);
+    setRefreshResult(null);
+    try {
+      const res = await fetch(`/api/restaurants/${detail.id}/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields, force: true }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRefreshResult({ success: true, message: '✅ Обновлено из Google' });
+        fetchDetail();
+        onSaved();
+      } else {
+        setRefreshResult({ success: false, message: `❌ ${data.error || 'Ошибка'}` });
+      }
+    } catch (error) {
+      setRefreshResult({ success: false, message: `❌ ${error}` });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const updateHour = (dayOfWeek: number, field: 'openTime' | 'closeTime' | 'isClosed', value: string | boolean) => {
+    setEditedHours(prev => {
+      const existing = prev.find(h => h.dayOfWeek === dayOfWeek);
+      if (existing) {
+        return prev.map(h => h.dayOfWeek === dayOfWeek ? { ...h, [field]: value } : h);
+      }
+      return [...prev, { id: `new-${dayOfWeek}`, dayOfWeek, openTime: '09:00', closeTime: '22:00', isClosed: false, [field]: value }];
+    });
+  };
+
+  return (
+    <div className={`bg-white/5 rounded-xl border transition-all ${isExpanded ? 'border-blue-500/50 bg-white/10' : 'border-white/10 hover:border-white/20'}`}>
+      {/* Заголовок карточки - кликабельный */}
+      <div
+        onClick={onToggle}
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none"
+      >
+        {/* Номер */}
+        <span className="w-10 text-center text-white/30 text-sm font-mono">{index}</span>
+        
+        {/* Фото */}
+        {r.images[0] ? (
+          <img src={r.images[0]} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+        ) : (
+          <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center text-white/30 flex-shrink-0">📷</div>
+        )}
+        
+        {/* Инфо */}
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-white truncate">{r.name}</div>
+          <div className="text-sm text-white/40 truncate">{r.address}</div>
+        </div>
+        
+        {/* Рейтинг */}
+        <div className="flex items-center gap-1 px-2">
+          {r.rating ? (
+            <>
+              <span className="text-yellow-400 font-medium">{r.rating.toFixed(1)}</span>
+              <span className="text-white/30 text-xs">({r.ratingCount})</span>
+            </>
+          ) : (
+            <span className="text-white/20">—</span>
+          )}
+        </div>
+        
+        {/* Статусы */}
+        <div className="flex gap-1">
+          {r.isActive && <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-xs rounded">✓</span>}
+          {r.isVerified && <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded">⭐</span>}
+          {r.isArchived && <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded">📦</span>}
+        </div>
+        
+        {/* Стрелка */}
+        <span className={`text-white/40 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
+      </div>
+      
+      {/* Развёрнутое содержимое */}
+      {isExpanded && (
+        <div className="border-t border-white/10 px-4 py-4">
+          {loading ? (
+            <div className="text-center py-8 text-white/40">
+              <div className="text-2xl mb-2">⏳</div>
+              Загрузка данных...
+            </div>
+          ) : detail ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Левая колонка - основные данные */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-white/60 border-b border-white/10 pb-2">📝 Основные данные</h4>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-white/40 mb-1">Название</label>
+                    <input
+                      type="text"
+                      value={editedData.name ?? ''}
+                      onChange={e => setEditedData(p => ({ ...p, name: e.target.value }))}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-white/40 mb-1">Телефон</label>
+                    <input
+                      type="text"
+                      value={editedData.phone ?? ''}
+                      onChange={e => setEditedData(p => ({ ...p, phone: e.target.value }))}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-xs text-white/40 mb-1">Адрес</label>
+                  <input
+                    type="text"
+                    value={editedData.address ?? ''}
+                    onChange={e => setEditedData(p => ({ ...p, address: e.target.value }))}
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-white/40 mb-1">Город</label>
+                    <input
+                      type="text"
+                      value={editedData.city ?? ''}
+                      onChange={e => setEditedData(p => ({ ...p, city: e.target.value }))}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-white/40 mb-1">Бренд/Сеть</label>
+                    <input
+                      type="text"
+                      value={editedData.brand ?? ''}
+                      onChange={e => setEditedData(p => ({ ...p, brand: e.target.value }))}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-white/40 mb-1">Сайт</label>
+                    <input
+                      type="url"
+                      value={editedData.website ?? ''}
+                      onChange={e => setEditedData(p => ({ ...p, website: e.target.value }))}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-white/40 mb-1">Меню URL</label>
+                    <input
+                      type="url"
+                      value={editedData.menuUrl ?? ''}
+                      onChange={e => setEditedData(p => ({ ...p, menuUrl: e.target.value }))}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                </div>
+                
+                {/* Статусы */}
+                <div className="flex items-center gap-4 pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editedData.isActive ?? true}
+                      onChange={e => setEditedData(p => ({ ...p, isActive: e.target.checked }))}
+                      className="w-4 h-4 rounded border-white/20 bg-white/5 text-green-500 focus:ring-green-500/50"
+                    />
+                    <span className="text-sm text-green-400">Активен</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editedData.isVerified ?? false}
+                      onChange={e => setEditedData(p => ({ ...p, isVerified: e.target.checked }))}
+                      className="w-4 h-4 rounded border-white/20 bg-white/5 text-blue-500 focus:ring-blue-500/50"
+                    />
+                    <span className="text-sm text-blue-400">Проверен</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editedData.isArchived ?? false}
+                      onChange={e => setEditedData(p => ({ ...p, isArchived: e.target.checked }))}
+                      className="w-4 h-4 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/50"
+                    />
+                    <span className="text-sm text-orange-400">В архиве</span>
+                  </label>
+                </div>
+              </div>
+              
+              {/* Правая колонка - время работы и действия */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-white/60 border-b border-white/10 pb-2">🕐 Время работы</h4>
+                
+                <div className="grid grid-cols-7 gap-1">
+                  {editedHours.sort((a, b) => a.dayOfWeek - b.dayOfWeek).map(h => (
+                    <div key={h.dayOfWeek} className="text-center">
+                      <div className="text-xs text-white/40 mb-1">{DAYS[h.dayOfWeek]}</div>
+                      {h.isClosed ? (
+                        <div className="text-xs text-red-400 py-1">Закр</div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          <input
+                            type="time"
+                            value={h.openTime}
+                            onChange={e => updateHour(h.dayOfWeek, 'openTime', e.target.value)}
+                            className="w-full px-1 py-0.5 bg-white/5 border border-white/10 rounded text-white text-[10px] focus:outline-none"
+                          />
+                          <input
+                            type="time"
+                            value={h.closeTime}
+                            onChange={e => updateHour(h.dayOfWeek, 'closeTime', e.target.value)}
+                            className="w-full px-1 py-0.5 bg-white/5 border border-white/10 rounded text-white text-[10px] focus:outline-none"
+                          />
+                        </div>
+                      )}
+                      <label className="flex items-center justify-center gap-1 mt-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={h.isClosed}
+                          onChange={e => updateHour(h.dayOfWeek, 'isClosed', e.target.checked)}
+                          className="w-3 h-3 rounded border-white/20 bg-white/5"
+                        />
+                        <span className="text-[9px] text-white/30">Вых</span>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Google API обновление */}
+                <div className="pt-2 border-t border-white/10">
+                  <h4 className="text-sm font-medium text-white/60 mb-2">🔄 Обновить из Google</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleRefresh('basic')}
+                      disabled={refreshing}
+                      className="px-3 py-1.5 bg-blue-500/20 text-blue-400 text-xs rounded-lg hover:bg-blue-500/30 disabled:opacity-50"
+                    >
+                      Базовые
+                    </button>
+                    <button
+                      onClick={() => handleRefresh('hours')}
+                      disabled={refreshing}
+                      className="px-3 py-1.5 bg-purple-500/20 text-purple-400 text-xs rounded-lg hover:bg-purple-500/30 disabled:opacity-50"
+                    >
+                      Часы работы
+                    </button>
+                    <button
+                      onClick={() => handleRefresh('photos')}
+                      disabled={refreshing}
+                      className="px-3 py-1.5 bg-green-500/20 text-green-400 text-xs rounded-lg hover:bg-green-500/30 disabled:opacity-50"
+                    >
+                      Фото
+                    </button>
+                    <button
+                      onClick={() => handleRefresh('full')}
+                      disabled={refreshing}
+                      className="px-3 py-1.5 bg-orange-500/20 text-orange-400 text-xs rounded-lg hover:bg-orange-500/30 disabled:opacity-50"
+                    >
+                      Всё
+                    </button>
+                  </div>
+                  {refreshing && <div className="text-xs text-white/40 mt-2">⏳ Обновление...</div>}
+                  {refreshResult && (
+                    <div className={`text-xs mt-2 ${refreshResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                      {refreshResult.message}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Мета-информация */}
+                <div className="pt-2 border-t border-white/10 text-xs text-white/30 space-y-1">
+                  <div>ID: <span className="text-white/50 font-mono">{detail.id}</span></div>
+                  <div>Источник: <span className="text-white/50">{detail.source}</span></div>
+                  {detail.sourceId && <div>Source ID: <span className="text-white/50 font-mono text-[10px]">{detail.sourceId}</span></div>}
+                  {detail.lastSynced && <div>Синхр: <span className="text-white/50">{new Date(detail.lastSynced).toLocaleString()}</span></div>}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-white/40">Ошибка загрузки</div>
+          )}
+          
+          {/* Кнопки действий */}
+          {detail && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
+              <div className="text-xs text-white/30">
+                {saving ? '⏳ Сохранение...' : 'Нажмите Сохранить для применения изменений'}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={onToggle}
+                  className="px-4 py-2 bg-white/5 text-white/60 rounded-lg hover:bg-white/10 text-sm"
+                >
+                  Закрыть
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm font-medium disabled:opacity-50"
+                >
+                  💾 Сохранить
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Модальное окно детального редактирования ресторана (устаревшее, оставлено для совместимости)
 function RestaurantDetailModal({
   isOpen,
   restaurantId,
@@ -3297,119 +3736,39 @@ function RestaurantManagementPanel() {
         </div>
       </div>
 
-      {/* Список ресторанов */}
-      <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
-        {/* Заголовок таблицы */}
-        <div className="grid grid-cols-[50px_60px_1fr_120px_120px_120px_50px] gap-2 px-4 py-3 bg-white/5 text-xs text-white/40 font-medium">
-          <div className="text-center">#</div>
-          <div>Фото</div>
-          <div>Название / Адрес</div>
-          <div>Рейтинг</div>
-          <div>Статус</div>
-          <div>Обновлено</div>
-          <div></div>
-        </div>
-
-        {/* Содержимое */}
+      {/* Список ресторанов - Accordion */}
+      <div className="space-y-2">
         {loading ? (
-          <div className="text-center py-12 text-white/40">
+          <div className="text-center py-12 text-white/40 bg-white/5 rounded-xl">
             <div className="text-3xl mb-2">⏳</div>
             Загрузка...
           </div>
         ) : restaurants.length === 0 ? (
-          <div className="text-center py-12 text-white/40">
+          <div className="text-center py-12 text-white/40 bg-white/5 rounded-xl">
             <div className="text-3xl mb-2">📭</div>
             Ничего не найдено
           </div>
         ) : (
-          <div className="divide-y divide-white/5">
-            {restaurants.map((r, idx) => (
-              <div
-                key={r.id}
-                onClick={() => setSelectedRestaurant(r.id)}
-                className="grid grid-cols-[50px_60px_1fr_120px_120px_120px_50px] gap-2 px-4 py-2.5 hover:bg-white/5 cursor-pointer transition-colors items-center"
-              >
-                {/* Номер */}
-                <div className="text-center text-white/30 text-sm font-mono">
-                  {page * limit + idx + 1}
-                </div>
-
-                {/* Фото */}
-                <div>
-                  {r.images[0] ? (
-                    <img src={r.images[0]} alt="" className="w-10 h-10 rounded-lg object-cover" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-white/30 text-sm">
-                      📷
-                    </div>
-                  )}
-                </div>
-
-                {/* Название */}
-                <div className="min-w-0">
-                  <div className="text-white font-medium truncate">{r.name}</div>
-                  <div className="text-sm text-white/40 truncate">{r.address}</div>
-                  {r.phone && <div className="text-xs text-white/30">{r.phone}</div>}
-                </div>
-
-                {/* Рейтинг */}
-                <div>
-                  {r.rating ? (
-                    <div className="flex items-center gap-1">
-                      <span className="text-yellow-400 font-medium">{r.rating.toFixed(1)}</span>
-                      <span className="text-white/30 text-xs">({r.ratingCount})</span>
-                    </div>
-                  ) : (
-                    <span className="text-white/20">—</span>
-                  )}
-                </div>
-
-                {/* Статус */}
-                <div className="flex flex-wrap gap-1">
-                  {r.isActive && (
-                    <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-xs rounded">
-                      Активен
-                    </span>
-                  )}
-                  {r.isVerified && (
-                    <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded">
-                      ✓
-                    </span>
-                  )}
-                  {r.isArchived && (
-                    <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded">
-                      📦
-                    </span>
-                  )}
-                </div>
-
-                {/* Дата */}
-                <div className="text-sm text-white/40">
-                  {r.lastSynced ? (
-                    new Date(r.lastSynced).toLocaleDateString()
-                  ) : (
-                    <span className="text-white/20">—</span>
-                  )}
-                </div>
-
-                {/* Действия */}
-                <div className="text-center">
-                  <button className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded-lg">
-                    ✏️
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+          restaurants.map((r, idx) => (
+            <RestaurantAccordionCard
+              key={r.id}
+              restaurant={r}
+              index={page * limit + idx + 1}
+              isExpanded={selectedRestaurant === r.id}
+              onToggle={() => setSelectedRestaurant(selectedRestaurant === r.id ? null : r.id)}
+              onSaved={fetchRestaurants}
+            />
+          ))
         )}
+      </div>
 
-        {/* Пагинация */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-white/10 bg-white/5">
-          <div className="text-sm text-white/40">
-            Показано <span className="text-white">{page * limit + 1}</span>–<span className="text-white">{Math.min((page + 1) * limit, total)}</span> из <span className="text-white">{total}</span>
-          </div>
-          
-          <div className="flex items-center gap-1">
+      {/* Пагинация */}
+      <div className="flex items-center justify-between px-4 py-3 bg-white/5 rounded-xl mt-4">
+        <div className="text-sm text-white/40">
+          Показано <span className="text-white">{page * limit + 1}</span>–<span className="text-white">{Math.min((page + 1) * limit, total)}</span> из <span className="text-white">{total}</span>
+        </div>
+        
+        <div className="flex items-center gap-1">
             {/* Первая страница */}
             <button
               onClick={() => setPage(0)}
@@ -3494,19 +3853,10 @@ function RestaurantManagementPanel() {
                 }}
                 className="w-16 px-2 py-1.5 bg-white/10 border border-white/10 rounded-lg text-white text-sm text-center focus:outline-none focus:border-white/30"
               />
-              <span className="text-white/40 text-sm">/ {totalPages}</span>
-            </div>
+            <span className="text-white/40 text-sm">/ {totalPages}</span>
           </div>
         </div>
       </div>
-
-      {/* Модальное окно редактирования */}
-      <RestaurantDetailModal
-        isOpen={selectedRestaurant !== null}
-        restaurantId={selectedRestaurant}
-        onClose={() => setSelectedRestaurant(null)}
-        onSaved={() => fetchRestaurants()}
-      />
     </div>
   );
 }
