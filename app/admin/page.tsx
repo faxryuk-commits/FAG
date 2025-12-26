@@ -2209,25 +2209,11 @@ function SmartRefreshSection() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchRefreshing, setBatchRefreshing] = useState(false);
   const [apiStatus, setApiStatus] = useState<{ available: boolean; message?: string } | null>(null);
-  const [usage, setUsage] = useState<ApiUsageStats | null>(null);
 
   useEffect(() => {
     fetchRestaurants();
     checkApiStatus();
-    fetchUsage();
   }, [filter]);
-
-  const fetchUsage = async () => {
-    try {
-      const res = await fetch('/api/usage');
-      if (res.ok) {
-        const data = await res.json();
-        setUsage(data);
-      }
-    } catch (error) {
-      console.error('Error fetching usage:', error);
-    }
-  };
 
   const checkApiStatus = async () => {
     try {
@@ -2300,8 +2286,6 @@ function SmartRefreshSection() {
         setRestaurants(prev => prev.map(r => 
           r.id === id ? { ...r, lastSynced: new Date().toISOString(), canRefresh: false } : r
         ));
-        // Обновляем счётчик использования
-        fetchUsage();
       } else if (res.status === 429) {
         setResults(prev => ({ ...prev, [id]: { success: false, message: '⏳ Кулдаун' } }));
       } else if (res.status === 501) {
@@ -2528,74 +2512,6 @@ function SmartRefreshSection() {
         </div>
       )}
       
-      {/* Счётчик использования API */}
-      {usage && (
-        <div className="mt-4 p-4 bg-gradient-to-r from-green-500/10 to-blue-500/10 border border-green-500/20 rounded-xl">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-medium text-white/80">💰 Использование Google Places API</h4>
-            <button
-              onClick={fetchUsage}
-              className="text-xs text-white/40 hover:text-white/60"
-            >
-              🔄
-            </button>
-          </div>
-          
-          {/* Прогресс-бар */}
-          <div className="mb-3">
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-white/50">Использовано в этом месяце</span>
-              <span className={usage.currentMonth.usagePercent > 80 ? 'text-red-400' : 'text-green-400'}>
-                ${usage.currentMonth.cost.toFixed(2)} / ${usage.currentMonth.freeLimit}
-              </span>
-            </div>
-            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-              <div 
-                className={`h-full rounded-full transition-all ${
-                  usage.currentMonth.usagePercent > 80 
-                    ? 'bg-gradient-to-r from-red-500 to-orange-500' 
-                    : 'bg-gradient-to-r from-green-500 to-emerald-400'
-                }`}
-                style={{ width: `${Math.min(100, usage.currentMonth.usagePercent)}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Статистика */}
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="bg-white/5 rounded-lg p-2">
-              <div className="text-lg font-bold text-green-400">{usage.currentMonth.requests}</div>
-              <div className="text-xs text-white/40">запросов</div>
-              <div className="text-xs text-white/30">этот месяц</div>
-            </div>
-            <div className="bg-white/5 rounded-lg p-2">
-              <div className="text-lg font-bold text-blue-400">${usage.currentMonth.remainingFree.toFixed(2)}</div>
-              <div className="text-xs text-white/40">осталось</div>
-              <div className="text-xs text-white/30">бесплатно</div>
-            </div>
-            <div className="bg-white/5 rounded-lg p-2">
-              <div className="text-lg font-bold text-purple-400">{Math.floor(usage.currentMonth.remainingFree / 0.017)}</div>
-              <div className="text-xs text-white/40">обновлений</div>
-              <div className="text-xs text-white/30">доступно</div>
-            </div>
-          </div>
-
-          {/* История */}
-          {usage.allTime.requests > 0 && (
-            <div className="mt-3 pt-3 border-t border-white/10 flex justify-between text-xs">
-              <span className="text-white/40">
-                Всего: {usage.allTime.requests} запросов (${usage.allTime.cost.toFixed(2)})
-              </span>
-              {usage.previousMonth.requests > 0 && (
-                <span className="text-white/30">
-                  Прошлый месяц: {usage.previousMonth.requests} (${usage.previousMonth.cost.toFixed(2)})
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Справка по стоимости */}
       <div className="mt-3 p-3 bg-white/5 rounded-lg">
         <div className="flex justify-between text-xs">
@@ -2962,6 +2878,19 @@ export default function AdminPage() {
   const [activeSource, setActiveSource] = useState<string>('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
+  const [googleApiUsage, setGoogleApiUsage] = useState<{
+    currentMonth: {
+      year: number;
+      month: number;
+      requests: number;
+      cost: number;
+      freeLimit: number;
+      remainingFree: number;
+      usagePercent: number;
+    };
+    previousMonth: { requests: number; cost: number };
+    allTime: { requests: number; cost: number };
+  } | null>(null);
   
   // Проверка сессии при загрузке
   useEffect(() => {
@@ -3002,6 +2931,19 @@ export default function AdminPage() {
     }
   };
 
+  // Загрузка использования Google Places API
+  const fetchGoogleApiUsage = async () => {
+    try {
+      const res = await fetch('/api/usage');
+      if (res.ok) {
+        const data = await res.json();
+        setGoogleApiUsage(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch Google API usage:', error);
+    }
+  };
+
   const fetchJobs = async () => {
     try {
       const res = await fetch('/api/sync');
@@ -3032,6 +2974,9 @@ export default function AdminPage() {
     
     // Загрузка использования Apify
     fetchApifyUsage();
+    
+    // Загрузка использования Google API
+    fetchGoogleApiUsage();
     
     // Начальная загрузка задач
     fetchJobs();
@@ -3245,6 +3190,89 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        {/* Google Places API Usage Banner */}
+        <div className="mb-6 bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-teal-500/20 backdrop-blur-xl rounded-2xl border border-green-500/30 p-4">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🌍</span>
+              <div>
+                <div className="text-white font-bold">Google Places API</div>
+                <div className="text-white/60 text-sm">Точечное обновление (в 60x дешевле!)</div>
+              </div>
+            </div>
+            
+            {googleApiUsage ? (
+              <>
+                <div className="flex-1 max-w-md mx-4">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-white/70">
+                      ${googleApiUsage.currentMonth.cost.toFixed(2)} / ${googleApiUsage.currentMonth.freeLimit}
+                    </span>
+                    <span className={`font-medium ${googleApiUsage.currentMonth.usagePercent > 80 ? 'text-red-400' : googleApiUsage.currentMonth.usagePercent > 50 ? 'text-yellow-400' : 'text-green-400'}`}>
+                      {googleApiUsage.currentMonth.usagePercent.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-500 ${
+                        googleApiUsage.currentMonth.usagePercent > 80 
+                          ? 'bg-gradient-to-r from-red-500 to-orange-500' 
+                          : googleApiUsage.currentMonth.usagePercent > 50 
+                            ? 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                            : 'bg-gradient-to-r from-green-500 to-emerald-500'
+                      }`}
+                      style={{ width: `${Math.min(100, googleApiUsage.currentMonth.usagePercent)}%` }}
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-6">
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-emerald-400">{googleApiUsage.currentMonth.requests}</div>
+                    <div className="text-xs text-white/50">Запросов</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-green-400">${googleApiUsage.currentMonth.remainingFree.toFixed(0)}</div>
+                    <div className="text-xs text-white/50">Осталось</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-teal-400">{Math.floor(googleApiUsage.currentMonth.remainingFree / 0.017).toLocaleString()}</div>
+                    <div className="text-xs text-white/50">Обновлений</div>
+                  </div>
+                  <button
+                    onClick={fetchGoogleApiUsage}
+                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+                    title="Обновить"
+                  >
+                    🔄
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-4 text-white/60">
+                <span>$0.017 за обновление</span>
+                <span>•</span>
+                <span>$200/мес бесплатно</span>
+                <span>•</span>
+                <span className="text-green-400">~11,700 обновлений</span>
+              </div>
+            )}
+          </div>
+          
+          {googleApiUsage && googleApiUsage.allTime.requests > 0 && (
+            <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-white/50">
+              <span>
+                Всего: {googleApiUsage.allTime.requests.toLocaleString()} запросов (${googleApiUsage.allTime.cost.toFixed(2)})
+              </span>
+              {googleApiUsage.previousMonth.requests > 0 && (
+                <span>
+                  Прошлый месяц: {googleApiUsage.previousMonth.requests} (${googleApiUsage.previousMonth.cost.toFixed(2)})
+                </span>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           
