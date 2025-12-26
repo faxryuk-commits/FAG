@@ -138,9 +138,12 @@ export default function RestaurantMap({ restaurants, userLocation, theme }: Rest
     iconAnchor: [10, 10],
   });
 
+  // Улучшенные стили карты
+  // Dark: Stadia Alidade Smooth Dark - красивая тёмная тема
+  // Light: CartoDB Voyager - чистая светлая тема
   const tileUrl = theme === 'dark'
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    ? 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
   // Компонент карточки ресторана
   const RestaurantCard = ({ restaurant, isActive = false }: { restaurant: Restaurant; isActive?: boolean }) => (
