@@ -310,3 +310,341 @@ model ChangeLog {
   @@map("change_logs")
 }
 
+// =============================================
+// АНАЛИТИКА - СОБЫТИЯ
+// =============================================
+
+// Основная таблица событий (Event Sourcing)
+model AnalyticsEvent {
+  id            String   @id @default(cuid())
+  restaurantId  String?  // null для общих событий
+  
+  // Тип события
+  eventType     String   // view, click, search, route, share, call, order, favorite
+  
+  // Детали события
+  eventData     Json?    // Дополнительные данные события
+  
+  // Источник
+  source        String   // web, mobile, widget, api
+  platform      String?  // ios, android, desktop, tablet
+  browser       String?  // chrome, safari, firefox
+  
+  // Пользователь (анонимный)
+  sessionId     String   // UUID сессии
+  visitorId     String?  // Fingerprint для повторных визитов
+  
+  // Геолокация пользователя
+  userLat       Float?
+  userLng       Float?
+  userCity      String?
+  userCountry   String?
+  
+  // Контекст
+  searchQuery   String?  // Что искал пользователь
+  referrer      String?  // Откуда пришёл
+  utmSource     String?  // UTM метки
+  utmMedium     String?
+  utmCampaign   String?
+  
+  // Время
+  createdAt     DateTime @default(now())
+  dayOfWeek     Int?     // 0-6
+  hourOfDay     Int?     // 0-23
+  
+  @@index([restaurantId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@index([sessionId])
+  @@index([visitorId])
+  @@map("analytics_events")
+}
+
+// =============================================
+// АНАЛИТИКА - АГРЕГАТЫ (для быстрых запросов)
+// =============================================
+
+// Дневная статистика по ресторану
+model RestaurantDailyStats {
+  id            String   @id @default(cuid())
+  restaurantId  String
+  date          DateTime @db.Date
+  
+  // Просмотры и клики
+  views         Int      @default(0)  // Просмотры в списке
+  cardViews     Int      @default(0)  // Открытия карточки
+  photoViews    Int      @default(0)  // Просмотры фото
+  menuViews     Int      @default(0)  // Просмотры меню
+  reviewViews   Int      @default(0)  // Просмотры отзывов
+  
+  // Действия
+  calls         Int      @default(0)  // Звонки (клик по телефону)
+  websiteClicks Int      @default(0)  // Переходы на сайт
+  routeClicks   Int      @default(0)  // Построение маршрута
+  shares        Int      @default(0)  // Поделились
+  favorites     Int      @default(0)  // Добавили в избранное
+  
+  // Конверсии (если интегрировано)
+  orders        Int      @default(0)  // Заказы
+  reservations  Int      @default(0)  // Бронирования
+  
+  // Поисковая аналитика
+  searchAppears Int      @default(0)  // Появления в поиске
+  searchClicks  Int      @default(0)  // Клики из поиска
+  
+  // Уникальные пользователи
+  uniqueVisitors Int     @default(0)
+  newVisitors    Int     @default(0)
+  returningVisitors Int  @default(0)
+  
+  // Вовлечённость
+  avgTimeOnCard  Float?  // Среднее время на карточке (сек)
+  bounceRate     Float?  // Процент отказов
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@unique([restaurantId, date])
+  @@index([restaurantId])
+  @@index([date])
+  @@map("restaurant_daily_stats")
+}
+
+// Месячная статистика (для трендов)
+model RestaurantMonthlyStats {
+  id            String   @id @default(cuid())
+  restaurantId  String
+  year          Int
+  month         Int
+  
+  // Суммарные показатели
+  totalViews        Int   @default(0)
+  totalCardViews    Int   @default(0)
+  totalCalls        Int   @default(0)
+  totalRoutes       Int   @default(0)
+  totalShares       Int   @default(0)
+  totalOrders       Int   @default(0)
+  totalReservations Int   @default(0)
+  
+  // Уникальные пользователи
+  uniqueVisitors    Int   @default(0)
+  
+  // Позиции
+  avgSearchPosition Float? // Средняя позиция в поиске
+  avgCategoryRank   Float? // Средняя позиция в категории
+  
+  // Сравнение с конкурентами (перцентиль)
+  viewsPercentile   Float? // Какой % конкурентов обошли по просмотрам
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@unique([restaurantId, year, month])
+  @@index([restaurantId])
+  @@map("restaurant_monthly_stats")
+}
+
+// =============================================
+// АНАЛИТИКА - ПОИСКОВЫЕ ЗАПРОСЫ
+// =============================================
+
+// Популярные поисковые запросы
+model SearchQuery {
+  id            String   @id @default(cuid())
+  query         String   // Текст запроса
+  normalizedQuery String // Нормализованный (lowercase, trim)
+  
+  // Статистика
+  searchCount   Int      @default(1)  // Сколько раз искали
+  clickCount    Int      @default(0)  // Сколько раз кликнули на результат
+  avgPosition   Float?   // Средняя позиция клика
+  
+  // Категории
+  category      String?  // К какой категории относится
+  intent        String?  // food, location, cuisine, dish, etc.
+  
+  // Время
+  lastSearched  DateTime @default(now())
+  createdAt     DateTime @default(now())
+  
+  @@unique([normalizedQuery])
+  @@index([searchCount])
+  @@index([category])
+  @@map("search_queries")
+}
+
+// Связь запросов с ресторанами (что находят по запросу)
+model SearchQueryRestaurant {
+  id            String   @id @default(cuid())
+  queryId       String
+  restaurantId  String
+  
+  // Позиция в выдаче
+  avgPosition   Float    @default(1)
+  
+  // Статистика
+  impressions   Int      @default(0)  // Показы
+  clicks        Int      @default(0)  // Клики
+  ctr           Float?   // Click-through rate
+  
+  updatedAt     DateTime @updatedAt
+  
+  @@unique([queryId, restaurantId])
+  @@index([restaurantId])
+  @@map("search_query_restaurants")
+}
+
+// =============================================
+// АНАЛИТИКА - КОНКУРЕНТЫ
+// =============================================
+
+// Анализ конкурентов (агрегированные данные района/категории)
+model CompetitorAnalysis {
+  id            String   @id @default(cuid())
+  restaurantId  String
+  
+  // Период
+  year          Int
+  month         Int
+  
+  // Позиция среди конкурентов
+  areaRank          Int?    // Позиция в районе
+  categoryRank      Int?    // Позиция в категории
+  cityRank          Int?    // Позиция в городе
+  
+  // Сравнительные показатели (% от среднего конкурента)
+  viewsVsAvg        Float?  // Просмотры vs среднее
+  ratingVsAvg       Float?  // Рейтинг vs среднее
+  reviewsVsAvg      Float?  // Отзывы vs среднее
+  
+  // Рыночная доля в категории
+  marketShare       Float?  // % просмотров от категории
+  
+  // Количество прямых конкурентов
+  competitorsCount  Int?
+  
+  createdAt     DateTime @default(now())
+  
+  @@unique([restaurantId, year, month])
+  @@index([restaurantId])
+  @@map("competitor_analysis")
+}
+
+// =============================================
+// АНАЛИТИКА - ОТЗЫВЫ (Sentiment Analysis)
+// =============================================
+
+// Анализ отзывов ресторана
+model ReviewAnalysis {
+  id            String   @id @default(cuid())
+  restaurantId  String   @unique
+  
+  // Общий sentiment
+  overallSentiment  Float?  // -1 до 1
+  
+  // Топ положительных тем
+  positiveTopics    String[] // ["вкусная еда", "быстрое обслуживание"]
+  
+  // Топ негативных тем
+  negativeTopics    String[] // ["долгое ожидание", "высокие цены"]
+  
+  // Часто упоминаемые блюда
+  mentionedDishes   Json?    // { "плов": 45, "лагман": 32 }
+  
+  // Частые слова
+  wordCloud         Json?    // { "вкусно": 120, "быстро": 85 }
+  
+  // Тренд рейтинга
+  ratingTrend       String?  // up, down, stable
+  ratingChange3m    Float?   // Изменение за 3 месяца
+  
+  // Скорость ответа владельца
+  ownerResponseRate Float?   // % отзывов с ответом
+  avgResponseTime   Float?   // Среднее время ответа (часы)
+  
+  updatedAt     DateTime @updatedAt
+  
+  @@map("review_analysis")
+}
+
+// =============================================
+// АНАЛИТИКА - ПРОГНОЗЫ И РЕКОМЕНДАЦИИ
+// =============================================
+
+// AI-рекомендации для ресторана
+model RestaurantInsights {
+  id            String   @id @default(cuid())
+  restaurantId  String   @unique
+  
+  // Оценка профиля (0-100)
+  profileScore      Int?     // Насколько заполнен профиль
+  photoScore        Int?     // Качество и количество фото
+  descriptionScore  Int?     // Качество описания
+  
+  // Рекомендации
+  recommendations   Json?    // [{ type: "add_photos", priority: "high", impact: "+15% views" }]
+  
+  // Прогнозы
+  predictedViews    Int?     // Прогноз просмотров на месяц
+  predictedCalls    Int?     // Прогноз звонков
+  
+  // Лучшее время для акций
+  peakHours         Int[]    // Часы пиковой активности [12, 13, 19, 20]
+  peakDays          Int[]    // Дни пиковой активности [5, 6] (сб, вс)
+  
+  // Сезонность
+  seasonalTrend     Json?    // { "summer": 1.2, "winter": 0.8 }
+  
+  updatedAt     DateTime @updatedAt
+  
+  @@map("restaurant_insights")
+}
+
+// =============================================
+// АНАЛИТИКА - ВОРОНКА КОНВЕРСИИ
+// =============================================
+
+// Воронка по дням
+model ConversionFunnel {
+  id            String   @id @default(cuid())
+  restaurantId  String
+  date          DateTime @db.Date
+  
+  // Этапы воронки
+  searchImpressions Int  @default(0)  // 1. Показ в поиске
+  listViews         Int  @default(0)  // 2. Просмотр в списке
+  cardOpens         Int  @default(0)  // 3. Открытие карточки
+  engagements       Int  @default(0)  // 4. Вовлечение (фото, меню, отзывы)
+  intents           Int  @default(0)  // 5. Намерение (звонок, маршрут, сайт)
+  conversions       Int  @default(0)  // 6. Конверсия (заказ, бронь)
+  
+  // Конверсии между этапами
+  searchToList      Float? // % перехода 1→2
+  listToCard        Float? // % перехода 2→3
+  cardToEngage      Float? // % перехода 3→4
+  engageToIntent    Float? // % перехода 4→5
+  intentToConvert   Float? // % перехода 5→6
+  
+  @@unique([restaurantId, date])
+  @@index([restaurantId])
+  @@map("conversion_funnels")
+}
+
+// =============================================
+// ПОЛЬЗОВАТЕЛИ - ИЗБРАННОЕ
+// =============================================
+
+// Избранные рестораны пользователей
+model Favorite {
+  id            String   @id @default(cuid())
+  restaurantId  String
+  visitorId     String   // Анонимный ID пользователя
+  
+  createdAt     DateTime @default(now())
+  
+  @@unique([restaurantId, visitorId])
+  @@index([visitorId])
+  @@index([restaurantId])
+  @@map("favorites")
+}
+
