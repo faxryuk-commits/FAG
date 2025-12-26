@@ -2189,8 +2189,8 @@ interface ApiUsageStats {
   };
 }
 
-// Секция точечного обновления через Google Places API
-function SmartRefreshSection() {
+// Панель управления ресторанами (Google Places API)
+function RestaurantManagementPanel() {
   const [restaurants, setRestaurants] = useState<Array<{
     id: string;
     name: string;
@@ -2353,18 +2353,12 @@ function SmartRefreshSection() {
   );
 
   return (
-    <div className="mt-6 pt-6 border-t border-white/10">
-      <h3 className="text-sm font-medium text-white/60 mb-3">🎯 Точечное обновление (Google Places API)</h3>
-      <p className="text-xs text-white/40 mb-3">
-        Обновить данные конкретных ресторанов напрямую из Google. <br/>
-        <span className="text-green-400">~$0.017 за запрос</span> (в 60 раз дешевле Apify!)
-      </p>
-      
+    <div>
       {/* API Status */}
       {apiStatus && !apiStatus.available && (
-        <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-          <div className="text-yellow-300 text-sm font-medium mb-1">⚠️ Google Places API не настроен</div>
-          <p className="text-xs text-white/50">{apiStatus.message}</p>
+        <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
+          <div className="text-yellow-300 font-medium mb-1">⚠️ Google Places API не настроен</div>
+          <p className="text-sm text-white/50">{apiStatus.message}</p>
         </div>
       )}
       
@@ -2511,19 +2505,6 @@ function SmartRefreshSection() {
           </div>
         </div>
       )}
-      
-      {/* Справка по стоимости */}
-      <div className="mt-3 p-3 bg-white/5 rounded-lg">
-        <div className="flex justify-between text-xs">
-          <span className="text-white/40">Стоимость обновления</span>
-          <span className="text-white/60">
-            1 = $0.017 | 10 = $0.17 | 100 = $1.70 | 1000 = $17
-          </span>
-        </div>
-        <div className="text-xs text-white/30 mt-1">
-          💡 Бесплатный лимит Google: $200/мес = ~11,700 обновлений
-        </div>
-      </div>
     </div>
   );
 }
@@ -2878,6 +2859,7 @@ export default function AdminPage() {
   const [activeSource, setActiveSource] = useState<string>('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'parsing' | 'management'>('parsing');
   const [googleApiUsage, setGoogleApiUsage] = useState<{
     currentMonth: {
       year: number;
@@ -3274,6 +3256,32 @@ export default function AdminPage() {
           )}
         </div>
 
+        {/* Вкладки навигации */}
+        <div className="mb-6 flex gap-2">
+          <button
+            onClick={() => setActiveTab('parsing')}
+            className={`px-6 py-3 rounded-xl font-medium text-sm transition-all ${
+              activeTab === 'parsing'
+                ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30'
+                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            🔍 Парсинг данных
+          </button>
+          <button
+            onClick={() => setActiveTab('management')}
+            className={`px-6 py-3 rounded-xl font-medium text-sm transition-all ${
+              activeTab === 'management'
+                ? 'bg-green-500 text-white shadow-lg shadow-green-500/30'
+                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            🎯 Управление ресторанами
+          </button>
+        </div>
+
+        {/* Контент вкладки Парсинг */}
+        {activeTab === 'parsing' && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           
           {/* Main Panel */}
@@ -4082,8 +4090,6 @@ export default function AdminPage() {
               {/* Enrich Data Section */}
               <EnrichSection />
 
-              {/* Smart Refresh Section - Google Places API */}
-              <SmartRefreshSection />
 
               {/* Delete Data Section */}
               <div className="mt-6 pt-6 border-t border-white/10">
@@ -4171,6 +4177,80 @@ export default function AdminPage() {
             </div>
           </div>
         </div>
+        </div>
+        )}
+
+        {/* Контент вкладки Управление ресторанами */}
+        {activeTab === 'management' && (
+          <div className="space-y-6">
+            {/* Заголовок */}
+            <div className="bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-teal-500/20 backdrop-blur-xl rounded-2xl border border-green-500/30 p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-14 h-14 bg-green-500/20 rounded-2xl flex items-center justify-center text-3xl">
+                  🎯
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Управление ресторанами</h2>
+                  <p className="text-white/60">
+                    Точечное обновление данных через Google Places API
+                  </p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white/5 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-bold text-green-400">$0.017</div>
+                  <div className="text-xs text-white/50 mt-1">за обновление</div>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-bold text-emerald-400">60x</div>
+                  <div className="text-xs text-white/50 mt-1">дешевле Apify</div>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-bold text-teal-400">$200</div>
+                  <div className="text-xs text-white/50 mt-1">бесплатно/мес</div>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-bold text-cyan-400">~11.7k</div>
+                  <div className="text-xs text-white/50 mt-1">обновлений</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Что обновляется */}
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+              <h3 className="text-lg font-bold text-white mb-4">📦 Что обновляется за $0.017:</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="flex items-center gap-2 text-white/70">
+                  <span className="text-green-400">✅</span> Рейтинг
+                </div>
+                <div className="flex items-center gap-2 text-white/70">
+                  <span className="text-green-400">✅</span> Количество отзывов
+                </div>
+                <div className="flex items-center gap-2 text-white/70">
+                  <span className="text-green-400">✅</span> Телефон
+                </div>
+                <div className="flex items-center gap-2 text-white/70">
+                  <span className="text-green-400">✅</span> Сайт
+                </div>
+                <div className="flex items-center gap-2 text-white/70">
+                  <span className="text-green-400">✅</span> Время работы
+                </div>
+                <div className="flex items-center gap-2 text-white/70">
+                  <span className="text-green-400">✅</span> Ценовая категория
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-white/10 text-sm text-white/50">
+                💡 Фото обновляются отдельно: $0.007 за каждое
+              </div>
+            </div>
+
+            {/* Основной блок управления */}
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+              <RestaurantManagementPanel />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Модальное окно мониторинга */}
