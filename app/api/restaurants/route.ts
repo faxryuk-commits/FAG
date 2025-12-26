@@ -553,6 +553,28 @@ export async function GET(request: NextRequest) {
     const MIN_REVIEWS = 25; // Минимум отзывов для полного доверия
     const AVG_RATING = 3.5; // Средний рейтинг по умолчанию
     
+    // Расчёт качества заведения (без учёта расстояния) для режима "Рядом"
+    const calculateQualityScore = (rating: number | null, reviewCount: number, photoCount: number) => {
+      let score = 0;
+      
+      // Рейтинг (0-50 баллов)
+      if (rating) {
+        score += rating * 10; // 5.0 = 50 баллов
+      }
+      
+      // Отзывы (0-30 баллов, логарифмический)
+      if (reviewCount > 0) {
+        score += Math.min(30, Math.log10(reviewCount + 1) * 12);
+      }
+      
+      // Фото (0-20 баллов)
+      if (photoCount > 0) {
+        score += Math.min(20, photoCount * 5);
+      }
+      
+      return score;
+    };
+    
     const calculateWeightedScore = (rating: number | null, reviewCount: number, hasPhotos: boolean, distance?: number) => {
       // Если нет рейтинга - в конец
       if (rating === null) return -1000;
@@ -583,18 +605,53 @@ export async function GET(request: NextRequest) {
       return score;
     };
     
-    restaurants.sort((a, b) => {
-      const photosA = (a.images as string[])?.length || 0;
-      const photosB = (b.images as string[])?.length || 0;
-      const distA = (a as any).distance;
-      const distB = (b as any).distance;
-      
-      const scoreA = calculateWeightedScore(a.rating, a.ratingCount || 0, photosA > 0, distA);
-      const scoreB = calculateWeightedScore(b.rating, b.ratingCount || 0, photosB > 0, distB);
-      
-      // Сортируем по score (выше = лучше)
-      return scoreB - scoreA;
-    });
+    // Специальная сортировка для режима "Рядом" с учётом качества
+    if (sortBy === 'distance' && userLat && userLng) {
+      // Комбинированный score: расстояние + качество
+      // Близкие И качественные заведения будут первыми
+      restaurants.sort((a, b) => {
+        const distA = (a as any).distance || 999;
+        const distB = (b as any).distance || 999;
+        const photosA = (a.images as string[])?.length || 0;
+        const photosB = (b.images as string[])?.length || 0;
+        
+        // Качество заведения (0-100)
+        const qualityA = calculateQualityScore(a.rating, a.ratingCount || 0, photosA);
+        const qualityB = calculateQualityScore(b.rating, b.ratingCount || 0, photosB);
+        
+        // Зоны расстояния (ближе = лучше)
+        // 0-1км = зона 0, 1-3км = зона 1, 3-7км = зона 2, 7+ = зона 3
+        const zoneA = distA < 1 ? 0 : distA < 3 ? 1 : distA < 7 ? 2 : 3;
+        const zoneB = distB < 1 ? 0 : distB < 3 ? 1 : distB < 7 ? 2 : 3;
+        
+        // Сначала сортируем по зоне расстояния
+        if (zoneA !== zoneB) {
+          return zoneA - zoneB;
+        }
+        
+        // Внутри одной зоны - по качеству
+        if (qualityA !== qualityB) {
+          return qualityB - qualityA;
+        }
+        
+        // При равном качестве - по точному расстоянию
+        return distA - distB;
+      });
+    } else {
+      // Обычная сортировка по weighted score
+      restaurants.sort((a, b) => {
+        const photosA = (a.images as string[])?.length || 0;
+        const photosB = (b.images as string[])?.length || 0;
+        const distA = (a as any).distance;
+        const distB = (b as any).distance;
+        
+        const scoreA = calculateWeightedScore(a.rating, a.ratingCount || 0, photosA > 0, distA);
+        const scoreB = calculateWeightedScore(b.rating, b.ratingCount || 0, photosB > 0, distB);
+        
+        // Сортируем по score (выше = лучше)
+        return scoreB - scoreA;
+      });
+    }
     
     // Применяем пагинацию
     const totalBeforePagination = restaurants.length;
