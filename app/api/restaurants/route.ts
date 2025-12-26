@@ -351,6 +351,11 @@ export async function GET(request: NextRequest) {
     const filterNoRating = searchParams.get('noRating') === 'true';
     const filterUnverified = searchParams.get('unverified') === 'true';
     
+    // Географические фильтры
+    const filterCountry = searchParams.get('country');
+    const filterCity = searchParams.get('filterCity');
+    const filterRegion = searchParams.get('region');
+    
     const where: any = {};
     
     // Для админки - разные фильтры
@@ -373,6 +378,18 @@ export async function GET(request: NextRequest) {
       
       if (filterUnverified) {
         where.isVerified = false;
+      }
+      
+      // Географические фильтры для админки
+      if (filterCountry) {
+        where.country = { contains: filterCountry, mode: 'insensitive' };
+      }
+      if (filterCity) {
+        where.city = { contains: filterCity, mode: 'insensitive' };
+      }
+      if (filterRegion) {
+        // Регион может быть в адресе
+        where.address = { contains: filterRegion, mode: 'insensitive' };
       }
     } else {
       // Для публичного API - только активные

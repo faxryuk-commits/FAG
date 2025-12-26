@@ -2310,7 +2310,19 @@ function RestaurantDetailModal({
           isVerified: r.isVerified,
           isArchived: r.isArchived,
         });
-        setEditedHours(r.workingHours || []);
+        // Инициализируем часы работы для всех 7 дней
+        const existingHours = r.workingHours || [];
+        const allDays = [0, 1, 2, 3, 4, 5, 6].map(day => {
+          const existing = existingHours.find((h: any) => h.dayOfWeek === day);
+          return existing || {
+            id: `new-${day}`,
+            dayOfWeek: day,
+            openTime: '09:00',
+            closeTime: '22:00',
+            isClosed: false,
+          };
+        });
+        setEditedHours(allDays);
       }
     } catch (error) {
       console.error('Error fetching restaurant:', error);
@@ -2906,11 +2918,28 @@ function RestaurantManagementPanel() {
     noPhotos: number;
     noRating: number;
   } | null>(null);
+  
+  // Географические фильтры
+  const [cities, setCities] = useState<Array<{ name: string; count: number }>>([]);
+  const [countries, setCountries] = useState<Array<{ name: string; count: number }>>([]);
+  const [selectedCity, setSelectedCity] = useState<string>('');
+  const [selectedCountry, setSelectedCountry] = useState<string>('');
+
+  // Загрузка списка городов и стран
+  useEffect(() => {
+    fetch('/api/locations')
+      .then(res => res.json())
+      .then(data => {
+        setCities(data.cities || []);
+        setCountries(data.countries || []);
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     fetchRestaurants();
     fetchStats();
-  }, [filter, page, limit]);
+  }, [filter, page, limit, selectedCity, selectedCountry]);
 
   const fetchStats = async () => {
     try {
@@ -2947,6 +2976,10 @@ function RestaurantManagementPanel() {
       if (filter === 'active') params.append('active', 'true');
       if (filter === 'unverified') params.append('unverified', 'true');
       if (searchQuery) params.append('search', searchQuery);
+      
+      // Географические фильтры
+      if (selectedCity) params.append('filterCity', selectedCity);
+      if (selectedCountry) params.append('country', selectedCountry);
       
       const res = await fetch(`/api/restaurants?${params}`);
       const data = await res.json();
@@ -3027,9 +3060,9 @@ function RestaurantManagementPanel() {
         </div>
       )}
 
-      {/* Поиск */}
-      <div className="flex gap-3">
-        <div className="flex-1 relative">
+      {/* Поиск и географические фильтры */}
+      <div className="flex flex-wrap gap-3">
+        <div className="flex-1 min-w-[200px]">
           <input
             type="text"
             placeholder="🔍 Поиск по названию, адресу, телефону..."
@@ -3039,12 +3072,57 @@ function RestaurantManagementPanel() {
             className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-white/30"
           />
         </div>
+        
+        {/* Фильтр по стране */}
+        <select
+          value={selectedCountry}
+          onChange={e => { setSelectedCountry(e.target.value); setPage(0); }}
+          className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-white/30 min-w-[150px]"
+        >
+          <option value="">🌍 Все страны</option>
+          {countries.map(c => (
+            <option key={c.name} value={c.name || ''}>
+              {c.name || 'Не указана'} ({c.count})
+            </option>
+          ))}
+        </select>
+        
+        {/* Фильтр по городу */}
+        <select
+          value={selectedCity}
+          onChange={e => { setSelectedCity(e.target.value); setPage(0); }}
+          className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-white/30 min-w-[150px]"
+        >
+          <option value="">🏙️ Все города</option>
+          {cities.slice(0, 50).map(c => (
+            <option key={c.name} value={c.name}>
+              {c.name} ({c.count})
+            </option>
+          ))}
+        </select>
+        
         <button
           onClick={() => { setPage(0); fetchRestaurants(); }}
           className="px-6 py-3 bg-blue-500/30 text-blue-300 rounded-xl hover:bg-blue-500/40 font-medium"
         >
           Найти
         </button>
+        
+        {/* Кнопка сброса фильтров */}
+        {(selectedCity || selectedCountry || searchQuery) && (
+          <button
+            onClick={() => { 
+              setSelectedCity(''); 
+              setSelectedCountry(''); 
+              setSearchQuery('');
+              setFilter('all');
+              setPage(0);
+            }}
+            className="px-4 py-3 bg-red-500/20 text-red-300 rounded-xl hover:bg-red-500/30"
+          >
+            ✕ Сбросить
+          </button>
+        )}
       </div>
 
       {/* Настройки отображения */}
