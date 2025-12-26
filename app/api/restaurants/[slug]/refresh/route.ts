@@ -53,13 +53,14 @@ interface RefreshOptions {
   force?: boolean;
 }
 
-// Логирование использования API
+// Логирование использования API (таблица может не существовать)
 async function logApiUsage(endpoint: string, cost: number) {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
 
   try {
+    // Проверяем существует ли таблица и логируем использование
     await prisma.apiUsage.upsert({
       where: {
         service_endpoint_year_month: {
@@ -83,8 +84,12 @@ async function logApiUsage(endpoint: string, cost: number) {
         totalCost: cost,
       },
     });
-  } catch (error) {
-    console.error('Error logging API usage:', error);
+  } catch (error: any) {
+    // Игнорируем если таблица не существует (P2021)
+    if (error?.code !== 'P2021') {
+      console.error('Error logging API usage:', error);
+    }
+    // Таблица не существует - пропускаем логирование
   }
 }
 
@@ -336,22 +341,48 @@ async function updateWorkingHours(restaurantId: string, periods: any[]) {
     'THURSDAY': 4, 'FRIDAY': 5, 'SATURDAY': 6,
   };
 
-  const hours = periods.map(period => ({
-    dayOfWeek: dayMap[period.open?.day] ?? 0,
-    openTime: formatTime(period.open?.hour, period.open?.minute),
-    closeTime: formatTime(period.close?.hour, period.close?.minute),
+  // Google может вернуть несколько периодов для одного дня (с перерывом)
+  // Группируем по дню и берём первый/последний период
+  const hoursByDay = new Map<number, { openTime: string; closeTime: string }>();
+  
+  for (const period of periods) {
+    const day = dayMap[period.open?.day];
+    if (day === undefined) continue;
+    
+    const openTime = formatTime(period.open?.hour, period.open?.minute);
+    const closeTime = formatTime(period.close?.hour, period.close?.minute);
+    
+    if (openTime === '00:00' && closeTime === '00:00') continue;
+    
+    const existing = hoursByDay.get(day);
+    if (existing) {
+      // Если уже есть - расширяем диапазон (берём самое раннее открытие и позднее закрытие)
+      if (openTime < existing.openTime) existing.openTime = openTime;
+      if (closeTime > existing.closeTime) existing.closeTime = closeTime;
+    } else {
+      hoursByDay.set(day, { openTime, closeTime });
+    }
+  }
+
+  const hours = Array.from(hoursByDay.entries()).map(([dayOfWeek, times]) => ({
+    dayOfWeek,
+    openTime: times.openTime,
+    closeTime: times.closeTime,
     isClosed: false,
-  })).filter(h => h.openTime !== '00:00' || h.closeTime !== '00:00');
+  }));
 
   if (hours.length > 0) {
-    // Удаляем старые часы
-    await prisma.workingHours.deleteMany({
-      where: { restaurantId },
-    });
+    // Используем транзакцию для атомарного удаления и вставки
+    await prisma.$transaction(async (tx) => {
+      // Удаляем старые часы
+      await tx.workingHours.deleteMany({
+        where: { restaurantId },
+      });
 
-    // Добавляем новые
-    await prisma.workingHours.createMany({
-      data: hours.map(h => ({ ...h, restaurantId })),
+      // Добавляем новые
+      await tx.workingHours.createMany({
+        data: hours.map(h => ({ ...h, restaurantId })),
+      });
     });
   }
 }
