@@ -187,9 +187,6 @@ export async function GET() {
       },
     });
     
-    // Всего лидов
-    const totalLeads = await prisma.lead.count();
-    
     return NextResponse.json({
       totalLeads,
       totalWithPhone,

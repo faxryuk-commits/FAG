@@ -302,57 +302,67 @@ export default function CRMDashboard() {
             </span>
           </div>
           
-          {/* Пагинация */}
-          {totalPages > 1 && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => goToPage(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded text-white/70 text-sm disabled:opacity-30"
-              >
-                ←
-              </button>
-              
-              {/* Номера страниц */}
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let page;
-                if (totalPages <= 5) {
-                  page = i + 1;
-                } else if (currentPage <= 3) {
-                  page = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  page = totalPages - 4 + i;
-                } else {
-                  page = currentPage - 2 + i;
-                }
-                return (
-                  <button
-                    key={page}
-                    onClick={() => goToPage(page)}
-                    className={`px-3 py-1.5 rounded text-sm transition-all ${
-                      currentPage === page 
-                        ? 'bg-purple-500 text-white' 
-                        : 'bg-white/5 hover:bg-white/10 text-white/70'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                );
-              })}
-              
-              <button
-                onClick={() => goToPage(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded text-white/70 text-sm disabled:opacity-30"
-              >
-                →
-              </button>
-              
-              <span className="text-white/40 text-xs ml-2">
-                {currentPage} / {totalPages}
-              </span>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {/* Пагинация */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded text-white/70 text-sm disabled:opacity-30"
+                >
+                  ←
+                </button>
+                
+                {/* Номера страниц */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let page;
+                  if (totalPages <= 5) {
+                    page = i + 1;
+                  } else if (currentPage <= 3) {
+                    page = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    page = totalPages - 4 + i;
+                  } else {
+                    page = currentPage - 2 + i;
+                  }
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => goToPage(page)}
+                      className={`px-3 py-1.5 rounded text-sm transition-all ${
+                        currentPage === page 
+                          ? 'bg-purple-500 text-white' 
+                          : 'bg-white/5 hover:bg-white/10 text-white/70'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+                
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded text-white/70 text-sm disabled:opacity-30"
+                >
+                  →
+                </button>
+                
+                <span className="text-white/40 text-xs ml-2">
+                  {currentPage} / {totalPages}
+                </span>
+              </div>
+            )}
+
+            {/* AI рассылка */}
+            <Link
+              href="/crm/campaigns"
+              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm font-medium shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
+            >
+              🤖 AI рассылка
+            </Link>
+          </div>
         </div>
 
         {/* Content */}
