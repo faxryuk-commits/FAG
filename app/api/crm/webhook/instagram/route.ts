@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { processIncomingAndRespond } from '@/lib/crm/ai-responder';
 
 export const dynamic = 'force-dynamic';
 
@@ -211,6 +212,18 @@ async function handleDirectMessage(event: any) {
     }
 
     console.log(`📩 Instagram DM saved: ${message.text?.slice(0, 50)}...`);
+
+    // 🤖 Автоматический AI ответ
+    try {
+      const aiResult = await processIncomingAndRespond(conversation.id);
+      if (aiResult.responded) {
+        console.log(`🤖 AI auto-responded: ${aiResult.response?.slice(0, 50)}...`);
+      } else {
+        console.log(`⏳ AI did not respond: ${aiResult.error || 'needs human'}`);
+      }
+    } catch (aiError) {
+      console.error('AI responder error:', aiError);
+    }
 
   } catch (error) {
     console.error('❌ Error in handleDirectMessage:', error);
