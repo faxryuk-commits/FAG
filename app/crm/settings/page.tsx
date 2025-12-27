@@ -182,6 +182,7 @@ export default function CRMSettings() {
               status="connected"
               description="Instagram, Сайт, Аналитика"
               onClick={() => {}}
+              active={false}
             />
           </Link>
           <Link href="/crm/settings/sms-devices">
