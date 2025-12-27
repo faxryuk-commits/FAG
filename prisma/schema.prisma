@@ -1673,6 +1673,9 @@ model CRMSettings {
   telegramPhone   String?
   telegramSession String?  @db.Text
   
+  // SMS Gateway (устройства для прямой отправки SMS)
+  smsDevices      String?  @db.Text  // JSON массив устройств
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   

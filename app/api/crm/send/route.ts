@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { sendSMSViaGateway } from '@/lib/crm/sms-gateway';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,18 +98,37 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Отправка SMS через Eskiz
+// Отправка SMS (сначала SMS Gateway, потом Eskiz)
 async function sendSMS(
   settings: any,
   phone: string | null,
   message: string
-): Promise<{ success: boolean; error?: string; messageId?: string }> {
+): Promise<{ success: boolean; error?: string; messageId?: string; via?: string }> {
   if (!phone) {
     return { success: false, error: 'Номер телефона не указан' };
   }
 
+  // Способ 1: SMS Gateway (с телефона) - предпочтительный
+  if (settings?.smsDevices) {
+    try {
+      const result = await sendSMSViaGateway(phone, message);
+      if (result.success) {
+        return {
+          success: true,
+          messageId: result.messageId,
+          via: `SMS Gateway (${result.device})`,
+        };
+      }
+      // Если SMS Gateway не сработал - пробуем Eskiz
+      console.log('SMS Gateway failed, trying Eskiz:', result.error);
+    } catch (error) {
+      console.log('SMS Gateway error, trying Eskiz:', error);
+    }
+  }
+
+  // Способ 2: Eskiz API
   if (!settings?.eskizEmail || !settings?.eskizPassword) {
-    return { success: false, error: 'Eskiz не настроен. Перейдите в настройки.' };
+    return { success: false, error: 'SMS не настроен. Добавьте устройство или Eskiz в настройках.' };
   }
 
   try {
@@ -151,6 +171,7 @@ async function sendSMS(
       return { 
         success: true, 
         messageId: smsData.id?.toString(),
+        via: 'Eskiz',
       };
     }
 

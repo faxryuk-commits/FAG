@@ -171,10 +171,20 @@ export default function CRMSettings() {
             icon="📱"
             status={statuses.find(s => s.service === 'Eskiz SMS')?.status || 
               (settings.eskiz.email ? 'connected' : 'not_configured')}
-            description="SMS рассылка"
+            description="SMS через API"
             onClick={() => setActiveTab('eskiz')}
             active={activeTab === 'eskiz'}
           />
+          <Link href="/crm/settings/sms-devices">
+            <StatusCard
+              title="SMS Gateway"
+              icon="📲"
+              status="connected"
+              description="SMS с телефона"
+              onClick={() => {}}
+              active={false}
+            />
+          </Link>
           <StatusCard
             title="Telegram"
             icon="✈️"
