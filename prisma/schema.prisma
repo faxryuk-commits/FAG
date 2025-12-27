@@ -10,6 +10,317 @@ datasource db {
   url      = env("POSTGRES_URL")
 }
 
+// =============================================
+// ПОЛЬЗОВАТЕЛИ И АУТЕНТИФИКАЦИЯ
+// =============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  phone         String?   @unique
+  passwordHash  String?
+  
+  // Профиль
+  name          String?
+  avatar        String?
+  
+  // Роль: customer, merchant, admin
+  role          String    @default("customer")
+  
+  // Статус
+  isActive      Boolean   @default(true)
+  isVerified    Boolean   @default(false) // Email/телефон подтверждён
+  
+  // OAuth
+  accounts      Account[]
+  sessions      Session[]
+  
+  // Связи
+  orders        Order[]
+  addresses     UserAddress[]
+  favorites     UserFavorite[]
+  reviews       UserReview[]
+  
+  // Мерчант данные (если роль = merchant)
+  merchantRestaurants MerchantRestaurant[]
+  
+  // Уведомления
+  notifications Notification[]
+  
+  // Временные метки
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+  
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@map("users")
+}
+
+// NextAuth.js - OAuth аккаунты
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type              String
+  provider          String  // google, telegram, etc.
+  providerAccountId String
+  
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+// NextAuth.js - Сессии
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+  
+  @@index([userId])
+  @@map("sessions")
+}
+
+// NextAuth.js - Токены верификации
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// Адреса доставки пользователя
+model UserAddress {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title     String   // "Дом", "Работа"
+  address   String
+  lat       Float?
+  lng       Float?
+  
+  entrance  String?  // Подъезд
+  floor     String?  // Этаж
+  apartment String?  // Квартира
+  comment   String?  // Комментарий курьеру
+  
+  isDefault Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([userId])
+  @@map("user_addresses")
+}
+
+// Избранное авторизованного пользователя
+model UserFavorite {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurantId String
+  
+  createdAt    DateTime @default(now())
+  
+  @@unique([userId, restaurantId])
+  @@index([userId])
+  @@map("user_favorites")
+}
+
+// Отзывы от авторизованных пользователей
+model UserReview {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurantId String
+  orderId      String?  // Привязка к заказу (опционально)
+  
+  rating       Int      // 1-5
+  text         String?  @db.Text
+  photos       String[]
+  
+  // Модерация
+  isApproved   Boolean  @default(false)
+  
+  // Ответ владельца
+  ownerResponse     String? @db.Text
+  ownerResponseDate DateTime?
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([userId, restaurantId])
+  @@index([restaurantId])
+  @@map("user_reviews")
+}
+
+// =============================================
+// МЕРЧАНТ СИСТЕМА
+// =============================================
+
+// Связь мерчантов с ресторанами
+model MerchantRestaurant {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurantId String
+  
+  // Роль в ресторане
+  role         String   @default("owner") // owner, manager, staff
+  
+  // Разрешения
+  canEditMenu      Boolean @default(true)
+  canViewOrders    Boolean @default(true)
+  canManageOrders  Boolean @default(true)
+  canViewAnalytics Boolean @default(true)
+  canEditSettings  Boolean @default(true)
+  
+  // Статус
+  isActive     Boolean  @default(true)
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@unique([userId, restaurantId])
+  @@index([restaurantId])
+  @@map("merchant_restaurants")
+}
+
+// Настройки ресторана для мерчанта
+model RestaurantSettings {
+  id              String   @id @default(cuid())
+  restaurantId    String   @unique
+  
+  // Доставка
+  deliveryEnabled Boolean  @default(true)
+  deliveryRadius  Float?   // км
+  deliveryMinOrder Float?  // Минимальная сумма заказа
+  deliveryFee     Float?   // Стоимость доставки
+  deliveryTime    String?  // "30-45 мин"
+  
+  // Самовывоз
+  pickupEnabled   Boolean  @default(true)
+  pickupDiscount  Float?   // Скидка на самовывоз %
+  
+  // Бронирование
+  reservationEnabled Boolean @default(true)
+  reservationDeposit Float?  // Залог за бронь
+  tablesCount        Int?    // Количество столов
+  
+  // Оплата
+  cashEnabled     Boolean  @default(true)
+  cardEnabled     Boolean  @default(true)
+  onlineEnabled   Boolean  @default(false) // Click, Payme
+  
+  // Уведомления
+  orderNotifyPhone String?  // Телефон для SMS о заказах
+  orderNotifyEmail String?  // Email для уведомлений
+  orderNotifyTelegram String? // Telegram chat_id
+  
+  // Автоподтверждение заказов
+  autoConfirmOrders Boolean @default(false)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("restaurant_settings")
+}
+
+// =============================================
+// УВЕДОМЛЕНИЯ
+// =============================================
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type      String   // order_created, order_confirmed, order_ready, etc.
+  title     String
+  message   String   @db.Text
+  
+  // Связи
+  orderId   String?
+  restaurantId String?
+  
+  // Статус
+  isRead    Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+  
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// =============================================
+// ПРОМОКОДЫ И СКИДКИ
+// =============================================
+
+model PromoCode {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  
+  // Тип скидки
+  discountType String   // percent, fixed
+  discountValue Float   // 10 (%) или 5000 (сум)
+  
+  // Ограничения
+  minOrderAmount Float?  // Минимальная сумма заказа
+  maxDiscount    Float?  // Максимальная скидка
+  usageLimit     Int?    // Лимит использований
+  usageCount     Int     @default(0)
+  perUserLimit   Int?    // Лимит на пользователя
+  
+  // Привязка
+  restaurantId   String? // null = для всех
+  
+  // Срок действия
+  validFrom      DateTime @default(now())
+  validUntil     DateTime?
+  
+  isActive       Boolean  @default(true)
+  
+  createdAt      DateTime @default(now())
+  
+  @@index([code])
+  @@map("promo_codes")
+}
+
+// Использование промокодов
+model PromoCodeUsage {
+  id          String   @id @default(cuid())
+  promoCodeId String
+  userId      String?
+  orderId     String
+  
+  discount    Float    // Сумма скидки
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([promoCodeId])
+  @@index([userId])
+  @@map("promo_code_usages")
+}
+
+// =============================================
+// РЕСТОРАНЫ
+// =============================================
+
 model Restaurant {
   id          String   @id @default(cuid())
   name        String
@@ -118,6 +429,13 @@ model MenuItem {
 model Order {
   id              String   @id @default(cuid())
   restaurantId    String
+  
+  // Пользователь (опционально, если авторизован)
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id])
+  
+  // Номер заказа для отображения
+  orderNumber     String   @unique @default(cuid())
   
   // Тип заказа
   orderType       String   // delivery, pickup, reservation
