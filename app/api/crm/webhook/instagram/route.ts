@@ -11,16 +11,25 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  // Получаем verify token из настроек
-  const settings = await prisma.cRMSettings.findFirst();
-  const verifyToken = settings?.instagramVerifyToken || process.env.INSTAGRAM_VERIFY_TOKEN;
+  // Получаем verify token из настроек (или используем дефолтный)
+  let verifyToken = 'delever_instagram_2024'; // Default token
+  try {
+    const settings = await prisma.cRMSettings.findFirst();
+    if (settings?.instagramVerifyToken) {
+      verifyToken = settings.instagramVerifyToken;
+    }
+  } catch (e) {
+    console.log('Using default verify token');
+  }
+
+  console.log(`Instagram webhook verify: mode=${mode}, token=${token}, expected=${verifyToken}`);
 
   if (mode === 'subscribe' && token === verifyToken) {
     console.log('✅ Instagram webhook verified');
     return new NextResponse(challenge, { status: 200 });
   }
 
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  return NextResponse.json({ error: 'Forbidden', received: token, expected: verifyToken }, { status: 403 });
 }
 
 // POST - Получение событий от Instagram
