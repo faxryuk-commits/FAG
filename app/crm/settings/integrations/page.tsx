@@ -202,13 +202,30 @@ const submitForm = async (formData) => {
 
             <div>
               <label className="text-white/50 text-sm mb-2 block">Page Access Token</label>
-              <input
-                type="password"
-                value={settings.instagramAccessToken || ''}
-                onChange={(e) => setSettings({ ...settings, instagramAccessToken: e.target.value })}
-                placeholder="EAAxxxxxxx..."
-                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
-              />
+              {settings.instagramAccessToken && settings.instagramAccessToken.includes('••••') ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-lg">
+                    <span className="text-green-400">✅ Токен установлен</span>
+                    <span className="text-white/40 font-mono text-sm">{settings.instagramAccessToken}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSettings({ ...settings, instagramAccessToken: '' })}
+                    className="text-sm text-yellow-400 hover:text-yellow-300"
+                  >
+                    🔄 Изменить токен
+                  </button>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={settings.instagramAccessToken || ''}
+                  onChange={(e) => setSettings({ ...settings, instagramAccessToken: e.target.value })}
+                  placeholder="EAAxxxxxxx..."
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white font-mono text-sm"
+                />
+              )}
+              <p className="text-white/30 text-xs mt-1">Токен должен начинаться с EAA... (Page Access Token, не User Token!)</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -236,14 +253,26 @@ const submitForm = async (formData) => {
 
             <div>
               <label className="text-white/50 text-sm mb-2 block">Webhook Verify Token</label>
-              <input
-                type="text"
-                value={settings.instagramVerifyToken || ''}
-                onChange={(e) => setSettings({ ...settings, instagramVerifyToken: e.target.value })}
-                placeholder="your_verify_token_here"
-                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white"
-              />
-              <p className="text-white/30 text-xs mt-1">Придумайте любую строку, она нужна для верификации webhook</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={settings.instagramVerifyToken || 'delever_instagram_2024'}
+                  onChange={(e) => setSettings({ ...settings, instagramVerifyToken: e.target.value })}
+                  placeholder="delever_instagram_2024"
+                  className="flex-1 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(settings.instagramVerifyToken || 'delever_instagram_2024');
+                    alert('Скопировано!');
+                  }}
+                  className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg"
+                >
+                  📋
+                </button>
+              </div>
+              <p className="text-white/30 text-xs mt-1">Этот токен нужно ввести в Meta Developers при настройке Webhook</p>
             </div>
 
             <div>
