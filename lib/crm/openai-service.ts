@@ -193,7 +193,7 @@ ${strategy.description}
 ${examples}
 
 ДОПОЛНИТЕЛЬНЫЕ ПРАВИЛА ДЛЯ МОДЕЛИ "${commModel.nameRu}":
-${commModel.promptModifier}
+${commModel.systemPromptAddition}
 
 Напиши ОДНО сообщение для первого контакта. Только текст сообщения, без пояснений.
 `;
