@@ -13,6 +13,14 @@ import {
   trackPhotoView,
   trackMenuView 
 } from '@/lib/analytics';
+import Cart from '@/components/Cart';
+
+interface CartItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
 
 interface Restaurant {
   id: string;
@@ -79,6 +87,35 @@ export default function RestaurantPage() {
   const [showGallery, setShowGallery] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [activeMenuCategory, setActiveMenuCategory] = useState<string | null>(null);
+
+  // Функции корзины
+  const addToCart = (item: { id: string; name: string; price: number }) => {
+    setCart(prev => {
+      const existing = prev.find(i => i.id === item.id);
+      if (existing) {
+        return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
+      }
+      return [...prev, { ...item, quantity: 1 }];
+    });
+  };
+
+  const updateCartQuantity = (id: string, quantity: number) => {
+    if (quantity <= 0) {
+      setCart(prev => prev.filter(i => i.id !== id));
+    } else {
+      setCart(prev => prev.map(i => i.id === id ? { ...i, quantity } : i));
+    }
+  };
+
+  const removeFromCart = (id: string) => {
+    setCart(prev => prev.filter(i => i.id !== id));
+  };
+
+  const clearCart = () => {
+    setCart([]);
+  };
 
   // Загрузка темы
   useEffect(() => {
@@ -378,6 +415,113 @@ export default function RestaurantPage() {
               </div>
             )}
 
+            {/* Menu */}
+            {restaurant.menuItems && restaurant.menuItems.length > 0 && (
+              <div className={`rounded-2xl p-4 ${
+                theme === 'dark' ? 'bg-white/5' : 'bg-white border border-gray-200 shadow-sm'
+              }`}>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className={`font-bold flex items-center gap-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                    🍽️ Меню <span className={`font-normal ${theme === 'dark' ? 'text-white/50' : 'text-gray-400'}`}>({restaurant.menuItems.length})</span>
+                  </h2>
+                </div>
+
+                {/* Category Tabs */}
+                {(() => {
+                  const categories = [...new Set(restaurant.menuItems.map(i => i.category || 'Другое'))];
+                  return categories.length > 1 && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <button
+                        onClick={() => setActiveMenuCategory(null)}
+                        className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                          activeMenuCategory === null
+                            ? 'bg-green-500 text-white'
+                            : theme === 'dark' ? 'bg-white/10 text-white/70' : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        Всё
+                      </button>
+                      {categories.map(cat => (
+                        <button
+                          key={cat}
+                          onClick={() => setActiveMenuCategory(cat)}
+                          className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                            activeMenuCategory === cat
+                              ? 'bg-green-500 text-white'
+                              : theme === 'dark' ? 'bg-white/10 text-white/70' : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {/* Menu Items */}
+                <div className="space-y-2">
+                  {restaurant.menuItems
+                    .filter(item => !activeMenuCategory || item.category === activeMenuCategory)
+                    .map(item => {
+                      const inCart = cart.find(c => c.id === item.id);
+                      return (
+                        <div 
+                          key={item.id} 
+                          className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${
+                            theme === 'dark' ? 'bg-white/5 hover:bg-white/10' : 'bg-gray-50 hover:bg-gray-100'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                              {item.name}
+                            </div>
+                            {item.description && (
+                              <div className={`text-sm truncate ${theme === 'dark' ? 'text-white/50' : 'text-gray-500'}`}>
+                                {item.description}
+                              </div>
+                            )}
+                          </div>
+                          {item.price && (
+                            <div className="text-green-500 font-bold whitespace-nowrap">
+                              {item.price.toLocaleString()} сум
+                            </div>
+                          )}
+                          {item.price && (
+                            inCart ? (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => updateCartQuantity(item.id, inCart.quantity - 1)}
+                                  className={`w-8 h-8 rounded-lg ${theme === 'dark' ? 'bg-white/10' : 'bg-gray-200'} font-bold`}
+                                >
+                                  −
+                                </button>
+                                <span className={`w-8 text-center font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+                                  {inCart.quantity}
+                                </span>
+                                <button
+                                  onClick={() => updateCartQuantity(item.id, inCart.quantity + 1)}
+                                  className="w-8 h-8 rounded-lg bg-green-500 text-white font-bold"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => addToCart({ id: item.id, name: item.name, price: item.price! })}
+                                className="px-3 py-1.5 bg-green-500 text-white text-sm rounded-lg hover:bg-green-600 transition-colors"
+                              >
+                                + В корзину
+                              </button>
+                            )
+                          )}
+                        </div>
+                      );
+                    })
+                  }
+                </div>
+              </div>
+            )}
+
             {/* Reviews */}
             <div className={`rounded-2xl p-4 ${
               theme === 'dark' ? 'bg-white/5' : 'bg-white border border-gray-200 shadow-sm'
@@ -555,6 +699,17 @@ export default function RestaurantPage() {
           </div>
         </div>
       </div>
+
+      {/* Cart */}
+      <Cart
+        restaurantId={restaurant.id}
+        restaurantName={restaurant.name}
+        items={cart}
+        onUpdateQuantity={updateCartQuantity}
+        onRemoveItem={removeFromCart}
+        onClearCart={clearCart}
+        theme={theme}
+      />
     </main>
   );
 }

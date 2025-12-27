@@ -111,6 +111,87 @@ model MenuItem {
   @@map("menu_items")
 }
 
+// =============================================
+// ЗАКАЗЫ И БРОНИРОВАНИЯ
+// =============================================
+
+model Order {
+  id              String   @id @default(cuid())
+  restaurantId    String
+  
+  // Тип заказа
+  orderType       String   // delivery, pickup, reservation
+  
+  // Статус
+  status          String   @default("pending") // pending, confirmed, preparing, ready, delivered, cancelled
+  
+  // Клиент
+  customerName    String
+  customerPhone   String
+  customerEmail   String?
+  
+  // Адрес доставки (для delivery)
+  deliveryAddress String?  @db.Text
+  deliveryLat     Float?
+  deliveryLng     Float?
+  deliveryNotes   String?  // Комментарий к доставке
+  
+  // Бронирование (для reservation)
+  reservationDate DateTime?
+  reservationTime String?  // "19:00"
+  guestsCount     Int?
+  
+  // Время самовывоза (для pickup)
+  pickupTime      String?  // "19:30"
+  
+  // Позиции заказа
+  items           OrderItem[]
+  
+  // Суммы
+  subtotal        Float    // Сумма товаров
+  deliveryFee     Float    @default(0)
+  discount        Float    @default(0)
+  total           Float    // Итоговая сумма
+  
+  // Оплата
+  paymentMethod   String?  // cash, card, online
+  isPaid          Boolean  @default(false)
+  
+  // Отслеживание
+  visitorId       String?  // Из куки
+  sessionId       String?
+  
+  // Временные метки
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  confirmedAt     DateTime?
+  completedAt     DateTime?
+  
+  @@index([restaurantId])
+  @@index([status])
+  @@index([customerPhone])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String @id @default(cuid())
+  orderId     String
+  order       Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  // Позиция
+  menuItemId  String?
+  name        String
+  price       Float
+  quantity    Int    @default(1)
+  
+  // Модификаторы
+  notes       String? // Без лука, острее и т.д.
+  
+  @@index([orderId])
+  @@map("order_items")
+}
+
 model Review {
   id           String   @id @default(cuid())
   restaurantId String
