@@ -132,6 +132,14 @@ export async function PUT(
   }
 }
 
+// PATCH - частичное обновление ресторана (alias для PUT)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { slug: string } }
+) {
+  return PUT(request, { params });
+}
+
 // DELETE - удалить ресторан
 export async function DELETE(
   request: NextRequest,

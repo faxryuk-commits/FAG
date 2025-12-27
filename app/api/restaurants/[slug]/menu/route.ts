@@ -148,6 +148,48 @@ export async function PUT(
   }
 }
 
+// PATCH - обновить одну позицию меню
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { slug: string } }
+) {
+  try {
+    const restaurantId = await findRestaurantId(params.slug);
+
+    if (!restaurantId) {
+      return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const { id, name, description, price, category, image } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Item ID is required' }, { status: 400 });
+    }
+
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (price !== undefined) updateData.price = price ? parseFloat(price) : null;
+    if (category !== undefined) updateData.category = category;
+    if (image !== undefined) updateData.image = image;
+
+    const menuItem = await prisma.menuItem.update({
+      where: { id },
+      data: updateData
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: 'Позиция обновлена',
+      item: menuItem
+    });
+  } catch (error) {
+    console.error('Error updating menu item:', error);
+    return NextResponse.json({ error: 'Failed to update menu item' }, { status: 500 });
+  }
+}
+
 // DELETE - удалить позицию меню
 export async function DELETE(
   request: NextRequest,
