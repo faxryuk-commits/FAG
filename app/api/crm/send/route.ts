@@ -230,17 +230,24 @@ async function sendTelegram(
           messageId: data.result.message_id?.toString(),
         };
       } else {
-        // Типичная ошибка - бот не может писать первым
-        if (data.error_code === 403) {
+        // Типичная ошибка - бот не может писать первым или юзер не найден
+        const botError = data.description || 'Ошибка отправки';
+        // Если есть MTProto — пробуем им
+        if (settings.telegramSession && settings.telegramApiId && settings.telegramApiHash) {
+          console.log('Bot send failed, trying MTProto:', botError);
+        } else {
+          // Если MTProto нет, отдаем ошибку бота
+          if (data.error_code === 403) {
+            return {
+              success: false,
+              error: 'Бот не может писать первым. Пользователь должен сначала написать боту.',
+            };
+          }
           return {
             success: false,
-            error: 'Бот не может писать этому пользователю. Пользователь должен сначала написать боту.',
+            error: `Telegram: ${botError}`,
           };
         }
-        return {
-          success: false,
-          error: `Telegram: ${data.description || 'Ошибка отправки'}`,
-        };
       }
     } catch (error) {
       return {
@@ -265,12 +272,9 @@ async function sendTelegram(
       
       await client.connect();
       
-      // telegram может быть @username или phone number
-      let peer;
-      if (telegram.startsWith('@')) {
-        peer = telegram;
-      } else {
-        // Это chat_id или phone
+      // telegram может быть @username или phone number / chat_id
+      let peer: string | Api.TypeInputPeer = telegram;
+      if (!telegram.startsWith('@')) {
         peer = telegram.replace(/[^\d]/g, '');
       }
       
