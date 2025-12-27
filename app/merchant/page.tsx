@@ -192,6 +192,7 @@ export default function MerchantDashboard() {
               { id: 'orders', label: '📦 Заказы', count: stats?.pending },
               { id: 'menu', label: '🍽️ Меню' },
               { id: 'analytics', label: '📈 Аналитика' },
+              { id: 'integrations', label: '🔌 Интеграции' },
               { id: 'settings', label: '⚙️ Настройки' },
             ].map((item) => (
               <button
@@ -411,6 +412,22 @@ export default function MerchantDashboard() {
             <div>
               <h1 className="text-2xl font-bold text-white mb-6">📈 Аналитика</h1>
               <MerchantAnalytics restaurantId={selectedRestaurant} />
+            </div>
+          )}
+
+          {/* ИНТЕГРАЦИИ */}
+          {activeTab === 'integrations' && selectedRestaurant && (
+            <div>
+              <h1 className="text-2xl font-bold text-white mb-6">🔌 Интеграции</h1>
+              <p className="text-white/60 mb-4">
+                Подключите POS системы, платежи, доставку и уведомления
+              </p>
+              <Link
+                href={`/merchant/integrations?restaurantId=${selectedRestaurant}`}
+                className="inline-block px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
+              >
+                Открыть настройки интеграций →
+              </Link>
             </div>
           )}
 

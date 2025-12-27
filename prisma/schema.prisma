@@ -318,6 +318,157 @@ model PromoCodeUsage {
 }
 
 // =============================================
+// ИНТЕГРАЦИИ - УНИВЕРСАЛЬНЫЙ СЛОЙ
+// =============================================
+
+// Доступные типы интеграций
+// pos - POS системы (iiko, R-Keeper, Poster, Jowi)
+// payment - Платежи (Click, Payme, Uzcard)
+// delivery - Курьеры (Yandex Delivery, Express24)
+// fiscal - Фискализация (OFD, налоговая)
+// crm - CRM системы
+// marketing - Маркетинг (SMS, Email)
+
+model Integration {
+  id              String   @id @default(cuid())
+  
+  // Тип интеграции
+  type            String   // pos, payment, delivery, fiscal, crm, marketing
+  provider        String   // iiko, rkeeper, click, payme, yandex_delivery, eskiz, etc.
+  
+  // Название для отображения
+  name            String
+  description     String?
+  
+  // Логотип провайдера
+  logo            String?
+  
+  // Документация
+  docsUrl         String?
+  
+  // Конфигурация по умолчанию
+  defaultConfig   Json?    // Шаблон настроек
+  
+  // Поддерживаемые события
+  supportedEvents String[] // order.created, order.paid, menu.sync, etc.
+  
+  // Статус
+  isActive        Boolean  @default(true)
+  
+  // Привязки к ресторанам
+  connections     IntegrationConnection[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([type, provider])
+  @@index([type])
+  @@map("integrations")
+}
+
+// Подключение интеграции к ресторану
+model IntegrationConnection {
+  id              String   @id @default(cuid())
+  
+  integrationId   String
+  integration     Integration @relation(fields: [integrationId], references: [id])
+  
+  restaurantId    String
+  
+  // Учётные данные (зашифрованы)
+  credentials     Json?    // { apiKey, apiSecret, terminalId, etc. }
+  
+  // Конфигурация подключения
+  config          Json?    // { webhookUrl, syncInterval, mappings, etc. }
+  
+  // Маппинг данных (меню, категории и т.д.)
+  dataMapping     Json?    // { localCategoryId: externalCategoryId, ... }
+  
+  // Статус
+  status          String   @default("pending") // pending, active, error, disabled
+  lastError       String?  @db.Text
+  lastSyncAt      DateTime?
+  
+  // Webhook URL для этого подключения
+  webhookSecret   String?  // Секрет для верификации webhooks
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Логи интеграции
+  logs            IntegrationLog[]
+  
+  @@unique([integrationId, restaurantId])
+  @@index([restaurantId])
+  @@index([status])
+  @@map("integration_connections")
+}
+
+// Логи интеграций
+model IntegrationLog {
+  id              String   @id @default(cuid())
+  
+  connectionId    String
+  connection      IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  
+  // Тип операции
+  operation       String   // sync_menu, push_order, webhook_received, etc.
+  direction       String   // inbound, outbound
+  
+  // Данные запроса/ответа
+  requestData     Json?
+  responseData    Json?
+  
+  // Результат
+  success         Boolean
+  errorMessage    String?  @db.Text
+  
+  // Связанные сущности
+  orderId         String?
+  menuItemId      String?
+  
+  // Метрики
+  durationMs      Int?     // Время выполнения
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([connectionId])
+  @@index([createdAt])
+  @@index([operation])
+  @@map("integration_logs")
+}
+
+// Очередь задач интеграций
+model IntegrationQueue {
+  id              String   @id @default(cuid())
+  
+  connectionId    String
+  
+  // Задача
+  operation       String   // sync_menu, push_order, etc.
+  payload         Json     // Данные для обработки
+  
+  // Статус
+  status          String   @default("pending") // pending, processing, completed, failed
+  attempts        Int      @default(0)
+  maxAttempts     Int      @default(3)
+  
+  // Планирование
+  scheduledAt     DateTime @default(now())
+  processedAt     DateTime?
+  
+  // Результат
+  result          Json?
+  error           String?  @db.Text
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([status, scheduledAt])
+  @@index([connectionId])
+  @@map("integration_queue")
+}
+
+// =============================================
 // РЕСТОРАНЫ
 // =============================================
 
