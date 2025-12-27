@@ -181,7 +181,7 @@ async function checkPhonesTelegram(
   config: { apiId: number; apiHash: string; session: string }
 ): Promise<CheckResult> {
   // Динамический импорт telegram библиотеки
-  const { TelegramClient } = await import('telegram');
+  const { TelegramClient, Api } = await import('telegram');
   const { StringSession } = await import('telegram/sessions');
   
   const result: CheckResult = {
@@ -209,9 +209,8 @@ async function checkPhonesTelegram(
       const batch = phones.slice(i, i + batchSize);
       
       try {
-        // Формируем контакты для импорта
-        const contacts = batch.map((p, idx) => ({
-          _: 'inputPhoneContact' as const,
+        // Формируем контакты для импорта используя Api класс
+        const contacts = batch.map((p, idx) => new Api.InputPhoneContact({
           clientId: BigInt(idx),
           phone: p.phone.replace(/[^\d+]/g, ''), // Очищаем номер
           firstName: `Lead_${p.id.slice(0, 8)}`,
@@ -219,19 +218,20 @@ async function checkPhonesTelegram(
         }));
         
         // Импортируем контакты
-        const imported = await client.invoke({
-          _: 'contacts.importContacts',
-          contacts,
-        }) as any;
+        const imported = await client.invoke(
+          new Api.contacts.ImportContacts({ contacts })
+        );
         
         // Обрабатываем результаты
         const userMap = new Map();
         if (imported.users) {
           for (const user of imported.users) {
-            userMap.set(user.phone, {
-              id: user.id?.toString(),
-              username: user.username,
-            });
+            if ('phone' in user && user.phone) {
+              userMap.set(user.phone, {
+                id: user.id?.toString(),
+                username: 'username' in user ? user.username : undefined,
+              });
+            }
           }
         }
         
@@ -262,19 +262,19 @@ async function checkPhonesTelegram(
         }
         
         // Удаляем импортированные контакты чтобы не засорять
-        if (imported.importedContacts && imported.importedContacts.length > 0) {
+        if (imported.users && imported.users.length > 0) {
           try {
-            const userIds = imported.users?.map((u: any) => ({
-              _: 'inputUser',
-              userId: u.id,
-              accessHash: u.accessHash || BigInt(0),
-            })) || [];
+            const userIds = imported.users
+              .filter((u): u is Api.User => 'accessHash' in u)
+              .map((u) => new Api.InputUser({
+                userId: u.id,
+                accessHash: u.accessHash || BigInt(0),
+              }));
             
             if (userIds.length > 0) {
-              await client.invoke({
-                _: 'contacts.deleteContacts',
-                id: userIds,
-              });
+              await client.invoke(
+                new Api.contacts.DeleteContacts({ id: userIds })
+              );
             }
           } catch (e) {
             // Игнорируем ошибки удаления
