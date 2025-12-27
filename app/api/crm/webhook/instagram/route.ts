@@ -86,10 +86,17 @@ export async function POST(request: NextRequest) {
 
 // Обработка Direct сообщений
 async function handleDirectMessage(event: any) {
+  console.log('📩 handleDirectMessage called:', JSON.stringify(event));
+  
   const senderId = event.sender?.id;
   const message = event.message;
   
-  if (!senderId || !message) return;
+  if (!senderId || !message) {
+    console.log('❌ Missing senderId or message:', { senderId, message });
+    return;
+  }
+  
+  try {
 
   // Ищем лида по всем полям (instagramId хранится в telegram поле временно)
   const allLeads = await prisma.lead.findMany({
@@ -148,6 +155,11 @@ async function handleDirectMessage(event: any) {
   });
 
   console.log(`📩 Instagram DM from ${senderId}: ${message.text?.slice(0, 50)}...`);
+  console.log('✅ Lead created/updated:', lead.id);
+  
+  } catch (error) {
+    console.error('❌ Error in handleDirectMessage:', error);
+  }
 }
 
 // Обработка комментариев
