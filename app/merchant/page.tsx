@@ -37,7 +37,7 @@ export default function MerchantDashboard() {
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'menu' | 'analytics' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'menu' | 'analytics' | 'integrations' | 'settings'>('dashboard');
 
   useEffect(() => {
     if (status === 'unauthenticated') {
