@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 
 interface IntegrationProvider {
@@ -30,7 +30,7 @@ interface IntegrationConnection {
   };
 }
 
-export default function IntegrationsPage() {
+function IntegrationsContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -373,3 +373,18 @@ export default function IntegrationsPage() {
   );
 }
 
+function IntegrationsFallback() {
+  return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <div className="text-white text-xl">⏳ Загрузка...</div>
+    </div>
+  );
+}
+
+export default function IntegrationsPage() {
+  return (
+    <Suspense fallback={<IntegrationsFallback />}>
+      <IntegrationsContent />
+    </Suspense>
+  );
+}
