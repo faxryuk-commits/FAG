@@ -73,6 +73,7 @@ export default function CRMDashboard() {
   const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [telegramStats, setTelegramStats] = useState<TelegramStats | null>(null);
+  const [inboxUnread, setInboxUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,6 +95,24 @@ export default function CRMDashboard() {
   useEffect(() => {
     fetchData();
   }, [searchQuery, currentPage, statusFilter]);
+
+  // Fetch Inbox unread count
+  const fetchInboxUnread = async () => {
+    try {
+      const res = await fetch('/api/crm/inbox');
+      const data = await res.json();
+      setInboxUnread(data.unreadTotal || 0);
+    } catch (error) {
+      console.error('Error fetching inbox:', error);
+    }
+  };
+
+  // Refresh inbox count every 10 seconds
+  useEffect(() => {
+    fetchInboxUnread();
+    const interval = setInterval(fetchInboxUnread, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -298,7 +317,8 @@ export default function CRMDashboard() {
             
             {/* Nav */}
             <div className="flex items-center gap-2">
-              <NavButton href="/crm/monitor" icon="📡" label="Монитор" pulse />
+              <NavButton href="/crm/inbox" icon="💬" label="Inbox" badge={inboxUnread > 0 ? inboxUnread : undefined} pulse={inboxUnread > 0} />
+              <NavButton href="/crm/monitor" icon="📡" label="Монитор" />
               <NavButton href="/crm/campaigns" icon="🚀" label="Рассылки" gradient />
               <NavButton href="/crm/telegram-finder" icon="✈️" label="TG Finder" />
               <NavButton href="/crm/import" icon="📥" label="Импорт" />
@@ -608,23 +628,31 @@ export default function CRMDashboard() {
 }
 
 // Navigation Button
-function NavButton({ href, icon, label, pulse, gradient }: { 
+function NavButton({ href, icon, label, pulse, gradient, badge }: { 
   href: string; 
   icon: string; 
   label: string; 
   pulse?: boolean;
   gradient?: boolean;
+  badge?: number;
 }) {
   return (
     <Link
       href={href}
-      className={`px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
+      className={`relative px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
         gradient 
           ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:shadow-lg hover:shadow-purple-500/25'
-          : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
+          : pulse && badge
+            ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+            : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
       }`}
     >
-      {pulse && <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
+      {badge && badge > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 min-w-[20px] text-center bg-red-500 text-white text-xs font-bold rounded-full animate-pulse shadow-lg shadow-red-500/50">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
+      {pulse && !badge && <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />}
       <span>{icon}</span>
       <span className="hidden lg:inline">{label}</span>
     </Link>

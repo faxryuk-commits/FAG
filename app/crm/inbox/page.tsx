@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+
+// Звук уведомления (base64 encoded short beep)
+const NOTIFICATION_SOUND = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2AgH5/d3V2eHl9goWJjI6QkI+Oi4qJiYmKi42PkZOUlZWVlJORkI6MiomHhoWEg4KBgYCAf39/f39/gICAgoOEhYaHiImKi4yNjo+QkJGRkZGRkJCPjo2Mi4qJiIeGhYSDgoGAgH9/fn5+fn5+fn9/gIGCg4SFhoeIiYqLjI2Oj5CQkZGRkZGQkI+OjYyLiomIh4aFhIOCgYB/f35+fn5+fn5/f4CAgYKDhIWGh4iJiouMjY6PkJCRkZGRkZCQj46NjIuKiYiHhoWEg4KBgH9/fn5+fn5+fn9/gIGCg4SFhoeIiYqLjI2Oj5CQkZGRkZGQkI+OjYyLiomIh4aFhIOCgYB/f35+fn5+fn5/f4CBgoOEhYaHiImKi4yNjo+QkJGRkZGRkJCPjo2Mi4qJiIeGhYSDgoGAf39+fn5+fn5+f3+AgYKDhIWGh4iJiouMjY6PkJCRkZGRkZCQj46NjIuKiYiHhoWEg4KBgH9/fn5+fn5+fn9/gIGCg4SFhoeIiYqLjI2Oj5CQ';
 
 interface ChatMessage {
   id: string;
@@ -46,12 +49,56 @@ export default function InboxPage() {
   const [filter, setFilter] = useState<'all' | 'new' | 'active' | 'qualified'>('all');
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [unreadTotal, setUnreadTotal] = useState(0);
+  const [prevUnreadTotal, setPrevUnreadTotal] = useState(0);
+  const [isBlinking, setIsBlinking] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Инициализация аудио
+  useEffect(() => {
+    audioRef.current = new Audio(NOTIFICATION_SOUND);
+    audioRef.current.volume = 0.5;
+  }, []);
+
+  // Звуковое уведомление при новых сообщениях
+  const playNotificationSound = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {});
+    }
+    // Также мигаем title
+    setIsBlinking(true);
+    setTimeout(() => setIsBlinking(false), 3000);
+  }, []);
+
+  // Обновление title при новых сообщениях
+  useEffect(() => {
+    if (unreadTotal > 0) {
+      document.title = isBlinking 
+        ? `🔴 (${unreadTotal}) Новые сообщения!` 
+        : `📥 (${unreadTotal}) Входящие - CRM`;
+    } else {
+      document.title = '📥 Входящие - CRM';
+    }
+  }, [unreadTotal, isBlinking]);
+
+  // Мигание title
+  useEffect(() => {
+    if (!isBlinking || unreadTotal === 0) return;
+    
+    const interval = setInterval(() => {
+      document.title = document.title.startsWith('🔴') 
+        ? `📥 (${unreadTotal}) Входящие - CRM`
+        : `🔴 (${unreadTotal}) Новые сообщения!`;
+    }, 500);
+    
+    return () => clearInterval(interval);
+  }, [isBlinking, unreadTotal]);
 
   useEffect(() => {
     fetchConversations();
-    // Polling для новых сообщений
-    const interval = setInterval(fetchConversations, 10000);
+    // Polling для новых сообщений каждые 5 секунд
+    const interval = setInterval(fetchConversations, 5000);
     return () => clearInterval(interval);
   }, [filter]);
 
@@ -66,8 +113,16 @@ export default function InboxPage() {
       
       const res = await fetch(`/api/crm/inbox?${params}`);
       const data = await res.json();
+      const newUnread = data.unreadTotal || 0;
+      
+      // Если появились новые сообщения - играем звук
+      if (newUnread > prevUnreadTotal && prevUnreadTotal >= 0) {
+        playNotificationSound();
+      }
+      
       setConversations(data.conversations || []);
-      setUnreadTotal(data.unreadTotal || 0);
+      setPrevUnreadTotal(unreadTotal);
+      setUnreadTotal(newUnread);
     } catch (error) {
       console.error('Error fetching conversations:', error);
     } finally {
@@ -195,7 +250,7 @@ export default function InboxPage() {
             <h1 className="text-xl font-bold flex items-center gap-2">
               📥 Входящие
               {unreadTotal > 0 && (
-                <span className="px-2 py-0.5 bg-red-500 text-white text-sm rounded-full">
+                <span className={`px-2.5 py-1 bg-red-500 text-white text-sm font-bold rounded-full ${isBlinking ? 'animate-pulse' : ''}`}>
                   {unreadTotal}
                 </span>
               )}
@@ -250,7 +305,7 @@ export default function InboxPage() {
                         </div>
                       )}
                       {conv.unreadCount > 0 && (
-                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center">
+                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center animate-pulse shadow-lg shadow-red-500/50">
                           {conv.unreadCount}
                         </span>
                       )}
