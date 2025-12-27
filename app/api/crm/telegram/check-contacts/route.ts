@@ -265,8 +265,8 @@ async function checkPhonesTelegram(
         // Удаляем импортированные контакты чтобы не засорять
         if (imported.users && imported.users.length > 0) {
           try {
-            const userIds = imported.users
-              .filter((u): u is Api.User => 'accessHash' in u)
+            const userIds = (imported.users as any[])
+              .filter((u) => 'accessHash' in u && u.accessHash)
               .map((u) => new Api.InputUser({
                 userId: u.id,
                 accessHash: u.accessHash || bigInt(0),
