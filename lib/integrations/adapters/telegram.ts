@@ -94,11 +94,12 @@ export class TelegramAdapter implements IntegrationAdapter {
    * Форматирование сообщения о заказе
    */
   private formatOrderMessage(order: any): string {
-    const orderType = {
+    const orderTypeMap: Record<string, string> = {
       delivery: '🚗 Доставка',
       pickup: '🏃 Самовывоз',
       reservation: '📅 Бронь',
-    }[order.orderType] || order.orderType;
+    };
+    const orderType = orderTypeMap[order.orderType as string] || order.orderType;
 
     const items = order.items
       ?.map((item: any) => `  • ${item.name} x${item.quantity} — ${item.price?.toLocaleString()} сум`)
