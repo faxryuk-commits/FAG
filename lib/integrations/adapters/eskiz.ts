@@ -16,8 +16,8 @@ interface EskizConfig {
 }
 
 export class EskizAdapter implements IntegrationAdapter {
-  private credentials: EskizCredentials;
-  private config: EskizConfig;
+  private credentials!: EskizCredentials;
+  private config!: EskizConfig;
   private token: string | null = null;
   private tokenExpiry: number = 0;
   private baseUrl = 'https://notify.eskiz.uz/api';

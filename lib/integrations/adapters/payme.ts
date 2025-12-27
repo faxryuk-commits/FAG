@@ -16,8 +16,8 @@ interface PaymeConfig {
 }
 
 export class PaymeAdapter implements IntegrationAdapter {
-  private credentials: PaymeCredentials;
-  private config: PaymeConfig;
+  private credentials!: PaymeCredentials;
+  private config!: PaymeConfig;
   private baseUrl = 'https://checkout.paycom.uz';
   private testUrl = 'https://test.paycom.uz';
 

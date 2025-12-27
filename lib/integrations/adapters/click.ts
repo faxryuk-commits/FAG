@@ -17,8 +17,8 @@ interface ClickConfig {
 }
 
 export class ClickAdapter implements IntegrationAdapter {
-  private credentials: ClickCredentials;
-  private config: ClickConfig;
+  private credentials!: ClickCredentials;
+  private config!: ClickConfig;
   private baseUrl = 'https://my.click.uz/services/pay';
 
   async init(credentials: ClickCredentials, config: ClickConfig): Promise<void> {

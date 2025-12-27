@@ -15,8 +15,8 @@ interface TelegramConfig {
 }
 
 export class TelegramAdapter implements IntegrationAdapter {
-  private credentials: TelegramCredentials;
-  private config: TelegramConfig;
+  private credentials!: TelegramCredentials;
+  private config!: TelegramConfig;
   private baseUrl = 'https://api.telegram.org/bot';
 
   async init(credentials: TelegramCredentials, config: TelegramConfig): Promise<void> {

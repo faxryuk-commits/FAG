@@ -17,8 +17,8 @@ interface IikoConfig {
 }
 
 export class IikoAdapter implements IntegrationAdapter {
-  private credentials: IikoCredentials;
-  private config: IikoConfig;
+  private credentials!: IikoCredentials;
+  private config!: IikoConfig;
   private token: string | null = null;
   private tokenExpiry: number = 0;
   private baseUrl = 'https://api-ru.iiko.services/api/1';
