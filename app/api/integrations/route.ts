@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
           logo: providerInfo.logo,
           docsUrl: providerInfo.docsUrl,
           supportedEvents: providerInfo.supportedEvents,
-          defaultConfig: providerInfo.configSchema,
+          defaultConfig: JSON.parse(JSON.stringify(providerInfo.configSchema)),
         },
       });
     }
