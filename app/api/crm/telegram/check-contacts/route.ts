@@ -28,10 +28,11 @@ interface CheckResult {
   }>;
 }
 
-// POST - Проверить все номера в базе
+// POST - Проверить номера в базе
 export async function POST(request: NextRequest) {
   try {
-    const { limit = 100, offset = 0, testMode = true } = await request.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({}));
+    const { limit = 100, offset = 0, testMode = true } = body;
     
     // Получаем настройки Telegram
     const settings = await prisma.cRMSettings.findFirst();
@@ -44,11 +45,12 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    // Получаем лидов с номерами телефонов
+    // Получаем лидов с номерами телефонов БЕЗ telegram
     const leads = await prisma.lead.findMany({
       where: {
         phone: { not: null },
         phoneType: 'mobile', // Только мобильные
+        telegram: null, // Только те, у кого ещё нет telegram
       },
       select: {
         id: true,

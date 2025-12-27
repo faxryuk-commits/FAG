@@ -35,6 +35,12 @@ export default function TelegramFinderPage() {
   const [testResult, setTestResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [batchSize, setBatchSize] = useState(100);
+  const [fullScanProgress, setFullScanProgress] = useState<{
+    running: boolean;
+    current: number;
+    total: number;
+    found: number;
+  } | null>(null);
 
   useEffect(() => {
     fetchStats();
@@ -110,6 +116,90 @@ export default function TelegramFinderPage() {
     } finally {
       setChecking(false);
     }
+  };
+
+  // Проверка ВСЕЙ базы
+  const runFullScan = async () => {
+    if (!stats?.mobileWithoutTelegram) {
+      alert('Нет номеров для проверки');
+      return;
+    }
+    
+    if (!confirm(`Проверить ВСЮ базу (${stats.mobileWithoutTelegram} номеров)?\n\nЭто займёт около ${Math.ceil(stats.mobileWithoutTelegram / 100) * 3} секунд.\n\nПроцесс можно будет остановить.`)) {
+      return;
+    }
+    
+    setError(null);
+    setCheckResult(null);
+    setFullScanProgress({
+      running: true,
+      current: 0,
+      total: stats.mobileWithoutTelegram,
+      found: 0,
+    });
+    
+    const batchSizeForScan = 100;
+    let offset = 0;
+    let totalFound = 0;
+    let allDetails: CheckResult['details'] = [];
+    
+    try {
+      while (offset < stats.mobileWithoutTelegram) {
+        const res = await fetch('/api/crm/telegram/check-contacts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            testMode: false, 
+            limit: batchSizeForScan,
+            offset: offset,
+          }),
+        });
+        
+        const data = await res.json();
+        
+        if (data.error) {
+          setError(data.error);
+          break;
+        }
+        
+        if (data.result) {
+          totalFound += data.result.withTelegram;
+          allDetails = [...allDetails, ...data.result.details];
+        }
+        
+        offset += batchSizeForScan;
+        
+        setFullScanProgress(prev => prev ? {
+          ...prev,
+          current: Math.min(offset, stats.mobileWithoutTelegram),
+          found: totalFound,
+        } : null);
+        
+        // Пауза между пачками
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      
+      // Финальный результат
+      setCheckResult({
+        total: offset,
+        checked: offset,
+        withTelegram: totalFound,
+        withoutTelegram: offset - totalFound,
+        errors: 0,
+        details: allDetails,
+      });
+      
+      fetchStats();
+      
+    } catch (e) {
+      setError('Ошибка при сканировании');
+    } finally {
+      setFullScanProgress(null);
+    }
+  };
+
+  const stopFullScan = () => {
+    setFullScanProgress(null);
   };
 
   return (
@@ -247,18 +337,57 @@ export default function TelegramFinderPage() {
           <div className="flex gap-3">
             <button
               onClick={runTestCheck}
-              disabled={checking}
+              disabled={checking || !!fullScanProgress}
               className="flex-1 px-4 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-medium transition-all disabled:opacity-50"
             >
               {checking ? '⏳ Проверяем...' : '👁️ Тест (без отправки)'}
             </button>
             <button
               onClick={runRealCheck}
-              disabled={checking}
+              disabled={checking || !!fullScanProgress}
               className="flex-1 px-4 py-3 bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 text-white rounded-xl font-medium transition-all disabled:opacity-50"
             >
-              {checking ? '⏳ Проверяем...' : `🚀 Проверить ${batchSize} номеров`}
+              {checking ? '⏳ Проверяем...' : `🚀 Проверить ${batchSize}`}
             </button>
+          </div>
+          
+          {/* Кнопка полной проверки */}
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <button
+              onClick={runFullScan}
+              disabled={checking || !!fullScanProgress || !stats?.mobileWithoutTelegram}
+              className="w-full px-4 py-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl font-bold text-lg transition-all disabled:opacity-50"
+            >
+              {fullScanProgress ? (
+                <span className="flex items-center justify-center gap-3">
+                  <span className="animate-spin">⏳</span>
+                  Сканирование... {fullScanProgress.current} / {fullScanProgress.total}
+                </span>
+              ) : (
+                `🔥 ПРОВЕРИТЬ ВСЮ БАЗУ (${stats?.mobileWithoutTelegram || 0} номеров)`
+              )}
+            </button>
+            
+            {fullScanProgress && (
+              <div className="mt-3">
+                <div className="flex justify-between text-sm text-white/60 mb-2">
+                  <span>Прогресс: {Math.round((fullScanProgress.current / fullScanProgress.total) * 100)}%</span>
+                  <span className="text-green-400">Найдено TG: {fullScanProgress.found}</span>
+                </div>
+                <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all"
+                    style={{ width: `${(fullScanProgress.current / fullScanProgress.total) * 100}%` }}
+                  />
+                </div>
+                <button
+                  onClick={stopFullScan}
+                  className="mt-2 w-full py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm"
+                >
+                  ⏹️ Остановить
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
