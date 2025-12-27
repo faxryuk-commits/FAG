@@ -4794,7 +4794,7 @@ export default function AdminPage() {
   const [activeSource, setActiveSource] = useState<string>('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'parsing'>('parsing');
+  const [activeTab, setActiveTab] = useState<'parsing' | 'management'>('parsing');
   
   // Проверка сессии при загрузке
   useEffect(() => {
@@ -5079,7 +5079,31 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Контент */}
+        {/* Вкладки навигации */}
+        <div className="mb-6 flex gap-2">
+          <button
+            onClick={() => setActiveTab('parsing')}
+            className={`px-6 py-3 rounded-xl font-medium text-sm transition-all ${
+              activeTab === 'parsing'
+                ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30'
+                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            🔍 Парсинг данных
+          </button>
+          <button
+            onClick={() => setActiveTab('management')}
+            className={`px-6 py-3 rounded-xl font-medium text-sm transition-all ${
+              activeTab === 'management'
+                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            🎯 Управление ресторанами
+          </button>
+        </div>
+
+        {/* Контент вкладки Парсинг */}
         {activeTab === 'parsing' && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           
@@ -5976,6 +6000,31 @@ export default function AdminPage() {
             </div>
           </div>
         </div>
+        )}
+
+        {/* Контент вкладки Управление ресторанами */}
+        {activeTab === 'management' && (
+          <div className="space-y-6">
+            {/* Заголовок */}
+            <div className="bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-cyan-500/20 backdrop-blur-xl rounded-2xl border border-emerald-500/30 p-6">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-emerald-500/20 rounded-2xl flex items-center justify-center text-3xl">
+                  🎯
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Управление ресторанами</h2>
+                  <p className="text-white/60">
+                    Поиск, редактирование и обновление данных ресторанов
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Основной блок управления */}
+            <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
+              <RestaurantManagementPanel />
+            </div>
+          </div>
         )}
 
       </div>
