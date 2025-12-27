@@ -3986,7 +3986,7 @@ function RestaurantManagementPanel() {
     phone: string | null;
   }>>([]);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'active' | 'archived' | 'noPhotos' | 'noRating' | 'unverified'>('all');
+  const [filter, setFilter] = useState<'all' | 'active' | 'archived' | 'noPhotos' | 'noRating' | 'unverified'>('active');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRestaurant, setSelectedRestaurant] = useState<string | null>(null);
   const [page, setPage] = useState(0);
