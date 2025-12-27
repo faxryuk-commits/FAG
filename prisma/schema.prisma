@@ -1215,6 +1215,7 @@ model Lead {
   
   // Контакты
   phone           String?
+  phoneType       String?  // mobile, landline, unknown
   email           String?
   telegram        String?  // @username или chat_id
   whatsapp        String?

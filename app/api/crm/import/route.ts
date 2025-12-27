@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import * as XLSX from 'xlsx';
 import path from 'path';
 import fs from 'fs';
+import { detectPhoneType, normalizePhone, analyzePhone } from '@/lib/crm/phone-utils';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // 60 секунд для импорта
@@ -14,6 +15,8 @@ export async function POST(request: NextRequest) {
   try {
     const { source } = await request.json();
     
+    console.log(`[Import] Starting import from: ${source}`);
+    
     if (source === 'amocrm') {
       return await importAmoCRM();
     } else if (source === 'google_maps') {
@@ -23,10 +26,11 @@ export async function POST(request: NextRequest) {
     }
     
   } catch (error) {
-    console.error('Import error:', error);
+    console.error('[Import] Fatal error:', error);
     return NextResponse.json({ 
       error: 'Import failed',
-      details: String(error),
+      details: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
     }, { status: 500 });
   }
 }
@@ -38,55 +42,90 @@ async function importAmoCRM() {
   // Читаем Excel файл
   const filePath = path.join(process.cwd(), 'public', 'amocrm_export_contacts_2025-12-27.xlsx');
   
+  console.log(`[Import] Looking for file: ${filePath}`);
+  
   if (!fs.existsSync(filePath)) {
-    return NextResponse.json({ error: 'AmoCRM file not found' }, { status: 404 });
+    console.error(`[Import] File not found: ${filePath}`);
+    return NextResponse.json({ 
+      error: 'AmoCRM file not found',
+      path: filePath,
+    }, { status: 404 });
   }
   
-  const workbook = XLSX.readFile(filePath);
+  console.log(`[Import] File found, reading...`);
+  
+  let workbook;
+  try {
+    workbook = XLSX.readFile(filePath);
+  } catch (xlsxError) {
+    console.error(`[Import] Error reading Excel:`, xlsxError);
+    return NextResponse.json({ 
+      error: 'Failed to read Excel file',
+      details: String(xlsxError),
+    }, { status: 500 });
+  }
+  
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const contacts = XLSX.utils.sheet_to_json(sheet);
   
-  let imported = 0;
-  let skipped = 0;
-  let errors = 0;
+  console.log(`[Import] Found ${contacts.length} contacts in sheet "${sheetName}"`);
+  
+  // Статистика по типам телефонов
+  let stats = {
+    imported: 0,
+    skipped: 0,
+    errors: 0,
+    mobilePhones: 0,
+    landlinePhones: 0,
+    unknownPhones: 0,
+    noContact: 0,
+  };
+  
+  const errorDetails: string[] = [];
   
   for (const contact of contacts as any[]) {
     try {
       // Извлекаем данные
-      const phone = getPhone(contact);
+      const phoneData = getPhoneWithType(contact);
       const email = getEmail(contact);
       
       // Пропускаем если нет контактов
-      if (!phone && !email) {
-        skipped++;
+      if (!phoneData.phone && !email) {
+        stats.skipped++;
+        stats.noContact++;
         continue;
       }
       
+      // Статистика по типам телефонов
+      if (phoneData.type === 'mobile') stats.mobilePhones++;
+      else if (phoneData.type === 'landline') stats.landlinePhones++;
+      else if (phoneData.phone) stats.unknownPhones++;
+      
       const segment = determineSegment(contact);
-      const score = calculateScore(contact, phone, email);
+      const score = calculateScore(contact, phoneData.phone, email, phoneData.type);
       
       // Создаём или обновляем лида
       await prisma.lead.upsert({
         where: {
           source_sourceId: {
             source: 'amocrm',
-            sourceId: String(contact.ID),
+            sourceId: String(contact.ID || contact['ID'] || Date.now()),
           },
         },
         create: {
-          name: contact['Наименование'] || `${contact['Имя'] || ''} ${contact['Фамилия'] || ''}`.trim() || null,
+          name: contact['Наименование'] || contact['Название'] || 
+                `${contact['Имя'] || ''} ${contact['Фамилия'] || ''}`.trim() || null,
           firstName: contact['Имя'] || null,
           lastName: contact['Фамилия'] || null,
-          company: contact['Компания'] || null,
-          position: contact['Должность (контакт)'] || null,
-          phone,
+          company: contact['Компания'] || contact['Организация'] || null,
+          position: contact['Должность (контакт)'] || contact['Должность'] || null,
+          phone: phoneData.phone,
+          phoneType: phoneData.type,
           email,
-          telegram: contact['Whatsgroup_WZ (контакт)']?.startsWith('@') 
-            ? contact['Whatsgroup_WZ (контакт)'] 
-            : null,
+          telegram: extractTelegram(contact),
           source: 'amocrm',
-          sourceId: String(contact.ID),
+          sourceId: String(contact.ID || contact['ID'] || Date.now()),
           score,
           segment,
           tags: extractTags(contact),
@@ -94,33 +133,44 @@ async function importAmoCRM() {
           amoCrmData: contact,
         },
         update: {
-          name: contact['Наименование'] || `${contact['Имя'] || ''} ${contact['Фамилия'] || ''}`.trim() || null,
-          phone,
+          name: contact['Наименование'] || contact['Название'] || 
+                `${contact['Имя'] || ''} ${contact['Фамилия'] || ''}`.trim() || null,
+          phone: phoneData.phone,
+          phoneType: phoneData.type,
           email,
-          company: contact['Компания'] || null,
+          company: contact['Компания'] || contact['Организация'] || null,
           score,
           segment,
         },
       });
       
-      imported++;
+      stats.imported++;
       
     } catch (error) {
-      console.error(`Error importing contact ${contact.ID}:`, error);
-      errors++;
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[Import] Error importing contact:`, error);
+      errorDetails.push(errMsg);
+      stats.errors++;
+      
+      // Прекращаем если слишком много ошибок
+      if (stats.errors > 50) {
+        console.error(`[Import] Too many errors, stopping`);
+        break;
+      }
     }
   }
   
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
   
+  console.log(`[Import] Complete:`, stats);
+  
   return NextResponse.json({
-    success: true,
+    success: stats.errors < stats.imported,
     source: 'amocrm',
-    imported,
-    skipped,
-    errors,
+    ...stats,
     total: contacts.length,
     duration,
+    errorSamples: errorDetails.slice(0, 5),
   });
 }
 
@@ -219,23 +269,49 @@ async function importGoogleMaps() {
 }
 
 // Вспомогательные функции
-function getPhone(contact: any): string | null {
-  const phones = [
-    contact['Мобильный телефон'],
-    contact['Рабочий телефон'],
-    contact['Рабочий прямой телефон'],
-    contact['Домашний телефон'],
-    contact['Другой телефон'],
+
+// Получить телефон с определением типа
+function getPhoneWithType(contact: any): { phone: string | null; type: string | null } {
+  // Приоритет: мобильный > рабочий > другой
+  const phoneFields = [
+    { field: 'Мобильный телефон', expectedType: 'mobile' },
+    { field: 'Рабочий телефон', expectedType: null },
+    { field: 'Рабочий прямой телефон', expectedType: null },
+    { field: 'Телефон', expectedType: null },
+    { field: 'Phone', expectedType: null },
+    { field: 'Домашний телефон', expectedType: 'landline' },
+    { field: 'Другой телефон', expectedType: null },
   ];
   
-  for (const phone of phones) {
+  for (const { field, expectedType } of phoneFields) {
+    const phone = contact[field];
     if (phone) {
-      const cleaned = String(phone).replace(/[^\d+]/g, '').replace(/'/g, '');
-      if (cleaned.length >= 7) return cleaned;
+      const normalized = normalizePhone(String(phone));
+      if (normalized.length >= 10) {
+        const detectedType = expectedType || detectPhoneType(normalized);
+        return { phone: normalized, type: detectedType };
+      }
     }
   }
   
-  return null;
+  // Поиск по всем полям которые могут содержать телефон
+  for (const [key, value] of Object.entries(contact)) {
+    if (key.toLowerCase().includes('телефон') || key.toLowerCase().includes('phone')) {
+      if (value && typeof value === 'string' || typeof value === 'number') {
+        const normalized = normalizePhone(String(value));
+        if (normalized.length >= 10) {
+          return { phone: normalized, type: detectPhoneType(normalized) };
+        }
+      }
+    }
+  }
+  
+  return { phone: null, type: null };
+}
+
+// Старая функция для обратной совместимости
+function getPhone(contact: any): string | null {
+  return getPhoneWithType(contact).phone;
 }
 
 function getEmail(contact: any): string | null {
@@ -255,14 +331,47 @@ function determineSegment(contact: any): string {
   return 'cold';
 }
 
-function calculateScore(contact: any, phone: string | null, email: string | null): number {
+function calculateScore(contact: any, phone: string | null, email: string | null, phoneType?: string | null): number {
   let score = 0;
-  if (phone) score += 20;
+  
+  // Телефон: мобильный важнее стационарного
+  if (phone) {
+    if (phoneType === 'mobile') {
+      score += 25; // Мобильный - можно SMS/WhatsApp/Telegram
+    } else if (phoneType === 'landline') {
+      score += 10; // Стационарный - только звонок
+    } else {
+      score += 15; // Неизвестный
+    }
+  }
+  
   if (email) score += 15;
-  if (contact['Компания']) score += 25;
+  if (contact['Компания'] || contact['Организация']) score += 25;
   if (contact['Сделки']) score += 20;
-  if (contact['Whatsgroup_WZ (контакт)']) score += 10;
+  if (contact['Whatsgroup_WZ (контакт)'] || contact['Telegram']) score += 10;
+  
   return Math.min(score, 100);
+}
+
+function extractTelegram(contact: any): string | null {
+  // Ищем telegram в разных полях
+  const telegramFields = [
+    'Whatsgroup_WZ (контакт)',
+    'Telegram',
+    'telegram',
+    'Телеграм',
+  ];
+  
+  for (const field of telegramFields) {
+    const value = contact[field];
+    if (value && typeof value === 'string') {
+      if (value.startsWith('@')) return value;
+      if (value.startsWith('t.me/')) return '@' + value.replace('t.me/', '');
+      if (value.match(/^[a-zA-Z0-9_]{5,}$/)) return '@' + value;
+    }
+  }
+  
+  return null;
 }
 
 function extractTags(contact: any): string[] {

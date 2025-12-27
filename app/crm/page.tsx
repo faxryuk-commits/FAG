@@ -11,6 +11,7 @@ interface Lead {
   lastName: string | null;
   company: string | null;
   phone: string | null;
+  phoneType: string | null; // mobile, landline, unknown
   email: string | null;
   telegram: string | null;
   source: string;
@@ -27,6 +28,19 @@ interface Lead {
     aiConversations: number;
   };
 }
+
+// Хелперы для отображения типа телефона
+const getPhoneIcon = (phoneType: string | null) => {
+  switch (phoneType) {
+    case 'mobile': return '📱';
+    case 'landline': return '☎️';
+    default: return '📞';
+  }
+};
+
+const canSendSMS = (lead: Lead) => {
+  return lead.phone && lead.phoneType === 'mobile';
+};
 
 interface PipelineStats {
   new: number;
@@ -541,7 +555,14 @@ export default function CRMDashboard() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {lead.phone && <span title={lead.phone}>📱</span>}
+                        {lead.phone && (
+                          <span 
+                            title={`${lead.phone} (${lead.phoneType === 'mobile' ? 'мобильный' : lead.phoneType === 'landline' ? 'стационарный' : 'неизвестно'})`}
+                            className={lead.phoneType === 'landline' ? 'opacity-50' : ''}
+                          >
+                            {getPhoneIcon(lead.phoneType)}
+                          </span>
+                        )}
                         {lead.email && <span title={lead.email}>📧</span>}
                         {lead.telegram && <span title={lead.telegram}>✈️</span>}
                       </div>
@@ -681,7 +702,14 @@ function LeadCard({ lead, statusConfig, onSelect, onStartAI }: {
       )}
       
       <div className="flex items-center gap-2 mb-3">
-        {lead.phone && <span className="text-xs text-white/50" title={lead.phone}>📱</span>}
+        {lead.phone && (
+          <span 
+            className={`text-xs ${lead.phoneType === 'landline' ? 'text-yellow-500/70' : 'text-white/50'}`}
+            title={`${lead.phone} (${lead.phoneType === 'mobile' ? 'мобильный - можно SMS' : lead.phoneType === 'landline' ? 'стационарный - только звонок' : 'тип неизвестен'})`}
+          >
+            {getPhoneIcon(lead.phoneType)}
+          </span>
+        )}
         {lead.email && <span className="text-xs text-white/50" title={lead.email}>📧</span>}
         {lead.telegram && <span className="text-xs text-white/50" title={lead.telegram}>✈️</span>}
         
@@ -899,7 +927,11 @@ function LeadDetailModal({ lead, statusConfig, segmentConfig, onClose, onUpdateS
         <div className="p-6 space-y-6">
           {/* Info Grid */}
           <div className="grid grid-cols-2 gap-4">
-            <InfoItem label="Телефон" value={lead.phone} />
+            <InfoItem 
+              label={`Телефон ${lead.phoneType === 'mobile' ? '📱' : lead.phoneType === 'landline' ? '☎️' : '📞'}`} 
+              value={lead.phone}
+              hint={lead.phoneType === 'landline' ? '⚠️ Стационарный - только звонок' : undefined}
+            />
             <InfoItem label="Email" value={lead.email} />
             <InfoItem label="Telegram" value={lead.telegram} />
             <InfoItem label="Источник" value={lead.source} />
@@ -959,11 +991,12 @@ function LeadDetailModal({ lead, statusConfig, segmentConfig, onClose, onUpdateS
   );
 }
 
-function InfoItem({ label, value }: { label: string; value: string | null | undefined }) {
+function InfoItem({ label, value, hint }: { label: string; value: string | null | undefined; hint?: string }) {
   return (
     <div>
       <div className="text-white/50 text-sm">{label}</div>
       <div className="text-white font-medium">{value || '-'}</div>
+      {hint && <div className="text-yellow-500/70 text-xs mt-1">{hint}</div>}
     </div>
   );
 }
