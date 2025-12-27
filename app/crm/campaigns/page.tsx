@@ -82,6 +82,17 @@ export default function CampaignsPage() {
   
   // AI генерация
   const [generating, setGenerating] = useState(false);
+  
+  // Запуск кампании
+  const [sendingCampaign, setSendingCampaign] = useState<string | null>(null);
+  const [sendResult, setSendResult] = useState<{
+    campaignId: string;
+    success: boolean;
+    sent: number;
+    failed: number;
+    details: Array<{ lead: string; status: string; error?: string }>;
+    hasMore: boolean;
+  } | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -176,14 +187,41 @@ export default function CampaignsPage() {
     }
   };
 
-  const startCampaign = async (campaignId: string) => {
+  const startCampaign = async (campaignId: string, dryRun = false, limit = 10) => {
     try {
-      await fetch(`/api/crm/campaigns/${campaignId}/start`, {
+      setSendingCampaign(campaignId);
+      setSendResult(null);
+      
+      const res = await fetch(`/api/crm/campaigns/${campaignId}/start`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun, limit }),
       });
+      
+      const data = await res.json();
+      
+      setSendResult({
+        campaignId,
+        success: data.success,
+        sent: data.sent || 0,
+        failed: data.failed || 0,
+        details: data.details || [],
+        hasMore: data.hasMore || false,
+      });
+      
       fetchData();
     } catch (error) {
       console.error('Error starting campaign:', error);
+      setSendResult({
+        campaignId,
+        success: false,
+        sent: 0,
+        failed: 0,
+        details: [{ lead: 'Error', status: 'error', error: String(error) }],
+        hasMore: false,
+      });
+    } finally {
+      setSendingCampaign(null);
     }
   };
 
@@ -308,23 +346,63 @@ export default function CampaignsPage() {
                     </div>
                     
                     <div className="flex gap-2">
-                      {campaign.status === 'draft' && (
-                        <button
-                          onClick={() => startCampaign(campaign.id)}
-                          className="px-4 py-2 bg-green-500/20 hover:bg-green-500/40 text-green-400 rounded-lg text-sm font-medium transition-all"
-                        >
-                          ▶️ Запустить
-                        </button>
-                      )}
-                      {campaign.status === 'running' && (
-                        <button className="px-4 py-2 bg-yellow-500/20 text-yellow-400 rounded-lg text-sm font-medium">
-                          ⏸️ Пауза
-                        </button>
-                      )}
-                      <button className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-medium transition-all">
-                        📊 Статистика
+                      {/* Кнопки действий */}
+                      <button
+                        onClick={() => startCampaign(campaign.id, true, 5)}
+                        disabled={sendingCampaign === campaign.id}
+                        className="px-3 py-2 bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                        title="Предпросмотр - показать что отправится"
+                      >
+                        👁️ Тест (5)
+                      </button>
+                      <button
+                        onClick={() => startCampaign(campaign.id, false, 10)}
+                        disabled={sendingCampaign === campaign.id}
+                        className="px-3 py-2 bg-green-500/20 hover:bg-green-500/40 text-green-400 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                      >
+                        {sendingCampaign === campaign.id ? '⏳' : '▶️'} Отправить (10)
+                      </button>
+                      <button
+                        onClick={() => startCampaign(campaign.id, false, 50)}
+                        disabled={sendingCampaign === campaign.id}
+                        className="px-3 py-2 bg-orange-500/20 hover:bg-orange-500/40 text-orange-400 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                      >
+                        🚀 50 лидов
                       </button>
                     </div>
+                    
+                    {/* Результаты отправки */}
+                    {sendResult?.campaignId === campaign.id && (
+                      <div className={`mt-4 p-4 rounded-lg ${sendResult.success ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`font-medium ${sendResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                            {sendResult.success ? '✅ Отправка завершена' : '❌ Ошибка'}
+                          </span>
+                          <span className="text-white/50 text-sm">
+                            Отправлено: {sendResult.sent} | Ошибок: {sendResult.failed}
+                          </span>
+                        </div>
+                        {sendResult.details.length > 0 && (
+                          <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                            {sendResult.details.map((d, i) => (
+                              <div key={i} className="text-sm flex items-center gap-2">
+                                <span>{d.status === 'sent' ? '✅' : d.status === 'preview' ? '👁️' : '❌'}</span>
+                                <span className="text-white/70">{d.lead}</span>
+                                {d.error && <span className="text-white/40 text-xs truncate">{d.error}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {sendResult.hasMore && (
+                          <button
+                            onClick={() => startCampaign(campaign.id, false, 50)}
+                            className="mt-2 text-sm text-purple-400 hover:text-purple-300"
+                          >
+                            Продолжить отправку →
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))

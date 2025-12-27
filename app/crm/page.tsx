@@ -180,12 +180,17 @@ export default function CRMDashboard() {
   const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalLeads, setTotalLeads] = useState(0);
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedSegment, setSelectedSegment] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [view, setView] = useState<'pipeline' | 'list'>('pipeline');
   const [showHelp, setShowHelp] = useState(false);
+  
+  const LEADS_PER_PAGE = 200; // Увеличили с 100 до 200
   
   // AI Modal State
   const [aiModal, setAiModal] = useState<AIModalState>({
@@ -205,7 +210,7 @@ export default function CRMDashboard() {
       setLoading(true);
       
       const [leadsRes, statsRes] = await Promise.all([
-        fetch(`/api/crm/leads?status=${selectedStatus}&segment=${selectedSegment}&search=${searchQuery}`),
+        fetch(`/api/crm/leads?status=${selectedStatus}&segment=${selectedSegment}&search=${searchQuery}&limit=${LEADS_PER_PAGE}&offset=0`),
         fetch('/api/crm/stats'),
       ]);
       
@@ -213,12 +218,35 @@ export default function CRMDashboard() {
       const statsData = await statsRes.json();
       
       setLeads(leadsData.leads || []);
+      setHasMore(leadsData.hasMore || false);
+      setTotalLeads(leadsData.total || 0);
       setPipelineStats(statsData.pipeline || null);
       setDashboardStats(statsData.dashboard || null);
     } catch (error) {
       console.error('Error fetching CRM data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Загрузить ещё лидов
+  const loadMoreLeads = async () => {
+    if (loadingMore || !hasMore) return;
+    
+    try {
+      setLoadingMore(true);
+      
+      const res = await fetch(
+        `/api/crm/leads?status=${selectedStatus}&segment=${selectedSegment}&search=${searchQuery}&limit=${LEADS_PER_PAGE}&offset=${leads.length}`
+      );
+      const data = await res.json();
+      
+      setLeads(prev => [...prev, ...(data.leads || [])]);
+      setHasMore(data.hasMore || false);
+    } catch (error) {
+      console.error('Error loading more leads:', error);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -617,6 +645,34 @@ export default function CRMDashboard() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        
+        {/* Загрузить ещё / Статус загрузки */}
+        {!loading && (
+          <div className="mt-6 flex items-center justify-center gap-4">
+            <div className="text-white/50 text-sm">
+              Показано {leads.length} из {totalLeads} лидов
+            </div>
+            {hasMore && (
+              <button
+                onClick={loadMoreLeads}
+                disabled={loadingMore}
+                className="px-6 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg font-medium transition-all disabled:opacity-50"
+              >
+                {loadingMore ? (
+                  <span className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-400 border-t-transparent"></div>
+                    Загружаем...
+                  </span>
+                ) : (
+                  `Загрузить ещё ${Math.min(LEADS_PER_PAGE, totalLeads - leads.length)}`
+                )}
+              </button>
+            )}
+            {!hasMore && totalLeads > 0 && (
+              <span className="text-green-400 text-sm">✓ Все лиды загружены</span>
+            )}
           </div>
         )}
       </main>
