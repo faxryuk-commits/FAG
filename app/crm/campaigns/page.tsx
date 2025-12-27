@@ -79,6 +79,9 @@ export default function CampaignsPage() {
     subject: '',
     body: '',
   });
+  
+  // AI генерация
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -137,6 +140,39 @@ export default function CampaignsPage() {
       }
     } catch (error) {
       console.error('Error creating template:', error);
+    }
+  };
+
+  // Генерация шаблона через AI
+  const generateAITemplate = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch('/api/crm/templates/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: newTemplate.type === 'outreach' ? 'cold_outreach' : newTemplate.type,
+          channel: newTemplate.channel,
+          targetAudience: 'рестораны и кафе',
+        }),
+      });
+      
+      const data = await res.json();
+      
+      if (data.success && data.template) {
+        setNewTemplate(prev => ({
+          ...prev,
+          body: data.template,
+          name: prev.name || `AI шаблон ${newTemplate.type} ${new Date().toLocaleDateString('ru-RU')}`,
+        }));
+      } else {
+        alert(data.error || 'Ошибка генерации. Проверьте настройки OpenAI.');
+      }
+    } catch (error) {
+      console.error('Error generating template:', error);
+      alert('Ошибка генерации шаблона');
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -509,10 +545,19 @@ export default function CampaignsPage() {
               )}
               
               <div>
-                <label className="block text-white/60 text-sm mb-2">
-                  Текст сообщения
-                  <span className="ml-2 text-white/40">(переменные: {'{{name}}'}, {'{{company}}'})</span>
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-white/60 text-sm">
+                    Текст сообщения
+                    <span className="ml-2 text-white/40">(переменные: {'{{name}}'}, {'{{company}}'})</span>
+                  </label>
+                  <button
+                    onClick={generateAITemplate}
+                    disabled={generating}
+                    className="px-3 py-1 bg-purple-500/20 hover:bg-purple-500/40 text-purple-400 rounded text-sm transition-all disabled:opacity-50"
+                  >
+                    {generating ? '⏳ Генерация...' : '✨ AI генерация'}
+                  </button>
+                </div>
                 <textarea
                   value={newTemplate.body}
                   onChange={(e) => setNewTemplate({ ...newTemplate, body: e.target.value })}
@@ -520,6 +565,9 @@ export default function CampaignsPage() {
                   placeholder="Привет, {{name}}! 👋&#10;&#10;Увидел {{company}} в каталоге..."
                   className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-purple-500 resize-none"
                 />
+                <p className="text-white/40 text-xs mt-1">
+                  💡 Нажмите "AI генерация" чтобы создать персонализированный шаблон
+                </p>
               </div>
             </div>
             

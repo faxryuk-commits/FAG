@@ -1,0 +1,344 @@
+/**
+ * OpenAI Service для CRM
+ * Генерация персонализированных сообщений для продаж
+ */
+
+import { prisma } from '@/lib/prisma';
+
+interface Lead {
+  id: string;
+  name: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  company: string | null;
+  segment: string | null;
+  score: number;
+  tags: string[];
+  source: string;
+}
+
+interface GenerateMessageOptions {
+  lead: Lead;
+  stage: 'introduction' | 'follow_up' | 'demo_pitch' | 'objection_handling' | 'closing';
+  channel: 'telegram' | 'sms' | 'email';
+  previousMessages?: Array<{ role: string; content: string }>;
+  customInstructions?: string;
+}
+
+interface GenerateResponseOptions {
+  lead: Lead;
+  incomingMessage: string;
+  conversationHistory: Array<{ role: string; content: string }>;
+  channel: 'telegram' | 'sms' | 'email';
+}
+
+interface GenerationResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  tokensUsed?: number;
+  intent?: string;
+  suggestedNextAction?: string;
+}
+
+// Получить API ключ из настроек
+async function getOpenAIConfig() {
+  const settings = await prisma.cRMSettings.findFirst();
+  return {
+    apiKey: settings?.openaiKey || process.env.OPENAI_API_KEY || null,
+    model: settings?.openaiModel || 'gpt-4o-mini',
+  };
+}
+
+// Системный промпт для холодного outreach
+const COLD_OUTREACH_PROMPT = `Ты - AI помощник менеджера по продажам в компании Delever.io.
+Delever.io - это SaaS платформа для ресторанов и кафе, которая помогает:
+- Принимать онлайн-заказы через сайт и приложение
+- Управлять доставкой и самовывозом
+- Интегрироваться с POS системами (iiko, R-Keeper)
+- Принимать оплату (Click, Payme)
+- Анализировать продажи и клиентов
+
+Твоя задача - написать персонализированное сообщение потенциальному клиенту.
+
+Правила:
+1. Будь кратким и конкретным (2-3 предложения для Telegram/SMS)
+2. Персонализируй сообщение под компанию и контекст
+3. Используй дружеский, но профессиональный тон
+4. НЕ используй официальный язык типа "Добрый день", "С уважением"
+5. Добавь конкретную выгоду или кейс
+6. Закончи вопросом или призывом к действию
+7. Пиши на русском языке
+
+Примеры хороших сообщений:
+- "Привет! Видел ваш ресторан на картах — отличные отзывы 🔥 Хотел предложить попробовать Delever — многие рестораны в Ташкенте уже используют для онлайн-заказов. Интересно было бы глянуть?"
+- "Привет! Мы помогаем ресторанам принимать заказы онлайн и увеличивать выручку на 20-30%. Видел что у вас нет доставки — это же упущенная выручка. Можем обсудить?"`;
+
+// Системный промпт для обработки ответов
+const RESPONSE_HANDLER_PROMPT = `Ты - AI помощник менеджера по продажам в Delever.io.
+
+Твоя задача - ответить на сообщение потенциального клиента.
+
+Правила:
+1. Определи намерение клиента (интерес, возражение, вопрос, отказ)
+2. Если интерес - продвигай к демо
+3. Если возражение - обработай мягко, не давя
+4. Если вопрос - ответь кратко и верни к теме
+5. Если отказ - поблагодари и предложи вернуться позже
+6. Будь человечным, не роботизированным
+7. Используй технику SPIN если нужно узнать больше о клиенте
+
+Техники обработки возражений:
+- "Дорого" → Покажи ROI, предложи расчёт окупаемости
+- "Нет времени" → Предложи короткий 15-мин звонок, покажи что экономит время
+- "Уже есть решение" → Уточни какое, покажи отличия
+- "Не нужно" → Уточни почему, возможно не понял ценность
+
+Ответь коротко, 1-3 предложения.`;
+
+/**
+ * Генерация холодного сообщения
+ */
+export async function generateOutreachMessage(options: GenerateMessageOptions): Promise<GenerationResult> {
+  const { apiKey, model } = await getOpenAIConfig();
+  
+  if (!apiKey) {
+    return { 
+      success: false, 
+      error: 'OpenAI API ключ не настроен. Перейдите в Настройки CRM.',
+    };
+  }
+
+  const { lead, stage, channel } = options;
+
+  // Формируем контекст о лиде
+  const leadContext = `
+Информация о лиде:
+- Имя: ${lead.firstName || lead.name || 'Неизвестно'}
+- Компания: ${lead.company || 'Не указана'}
+- Сегмент: ${lead.segment || 'Не определён'}
+- Скоринг: ${lead.score}/100
+- Источник: ${lead.source}
+- Теги: ${lead.tags.join(', ') || 'Нет'}
+- Канал отправки: ${channel}
+`;
+
+  const stageInstructions: Record<string, string> = {
+    introduction: 'Напиши первое холодное сообщение. Цель - заинтересовать и получить ответ.',
+    follow_up: 'Напиши follow-up сообщение. Клиент не ответил на первое сообщение.',
+    demo_pitch: 'Напиши приглашение на демо. Клиент проявил интерес.',
+    objection_handling: 'Клиент высказал возражение. Обработай его мягко.',
+    closing: 'Напиши сообщение для закрытия сделки.',
+  };
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: COLD_OUTREACH_PROMPT },
+          { role: 'user', content: `${leadContext}\n\n${stageInstructions[stage] || stageInstructions.introduction}` },
+        ],
+        max_tokens: 300,
+        temperature: 0.8,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return { 
+        success: false, 
+        error: `OpenAI ошибка: ${error.error?.message || 'Неизвестная ошибка'}`,
+      };
+    }
+
+    const data = await response.json();
+    const generatedMessage = data.choices[0]?.message?.content;
+
+    if (!generatedMessage) {
+      return { success: false, error: 'OpenAI не вернул сообщение' };
+    }
+
+    return {
+      success: true,
+      message: generatedMessage.trim(),
+      tokensUsed: data.usage?.total_tokens,
+      suggestedNextAction: 'Ожидание ответа',
+    };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: `Ошибка генерации: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`,
+    };
+  }
+}
+
+/**
+ * Генерация ответа на сообщение клиента
+ */
+export async function generateResponse(options: GenerateResponseOptions): Promise<GenerationResult> {
+  const { apiKey, model } = await getOpenAIConfig();
+  
+  if (!apiKey) {
+    return { 
+      success: false, 
+      error: 'OpenAI API ключ не настроен',
+    };
+  }
+
+  const { lead, incomingMessage, conversationHistory, channel } = options;
+
+  // Формируем контекст
+  const leadContext = `
+Информация о лиде:
+- Имя: ${lead.firstName || lead.name || 'Неизвестно'}
+- Компания: ${lead.company || 'Не указана'}
+- Сегмент: ${lead.segment || 'Не определён'}
+- Канал: ${channel}
+`;
+
+  try {
+    // Сначала определяем намерение
+    const intentResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { 
+            role: 'system', 
+            content: 'Определи намерение клиента. Ответь ОДНИМ словом: interested, objection, question, rejection, positive, neutral' 
+          },
+          { role: 'user', content: `Сообщение клиента: "${incomingMessage}"` },
+        ],
+        max_tokens: 10,
+        temperature: 0,
+      }),
+    });
+
+    const intentData = await intentResponse.json();
+    const intent = intentData.choices[0]?.message?.content?.trim().toLowerCase() || 'neutral';
+
+    // Теперь генерируем ответ
+    const messages = [
+      { role: 'system', content: RESPONSE_HANDLER_PROMPT },
+      { role: 'user', content: leadContext },
+      ...conversationHistory.slice(-6), // Последние 6 сообщений для контекста
+      { role: 'user', content: `Клиент написал: "${incomingMessage}"\n\nНамерение: ${intent}. Напиши ответ.` },
+    ];
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        max_tokens: 300,
+        temperature: 0.7,
+      }),
+    });
+
+    const data = await response.json();
+    const generatedMessage = data.choices[0]?.message?.content;
+
+    // Определяем следующее действие
+    const nextActions: Record<string, string> = {
+      interested: 'Назначить демо',
+      positive: 'Назначить демо',
+      objection: 'Обработать возражение',
+      question: 'Ответить на вопрос',
+      rejection: 'Отложить на 30 дней',
+      neutral: 'Продолжить диалог',
+    };
+
+    return {
+      success: true,
+      message: generatedMessage?.trim(),
+      tokensUsed: data.usage?.total_tokens,
+      intent,
+      suggestedNextAction: nextActions[intent] || 'Продолжить диалог',
+    };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: `Ошибка генерации: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`,
+    };
+  }
+}
+
+/**
+ * Автогенерация шаблона сообщения
+ */
+export async function generateTemplate(options: {
+  type: 'cold_outreach' | 'follow_up' | 'demo_invite' | 'proposal';
+  channel: 'telegram' | 'sms' | 'email';
+  targetAudience?: string;
+}): Promise<GenerationResult> {
+  const { apiKey, model } = await getOpenAIConfig();
+  
+  if (!apiKey) {
+    return { success: false, error: 'OpenAI API ключ не настроен' };
+  }
+
+  const { type, channel, targetAudience = 'рестораны и кафе' } = options;
+
+  const typeInstructions: Record<string, string> = {
+    cold_outreach: 'Холодное первое сообщение. Цель - заинтересовать.',
+    follow_up: 'Follow-up после первого сообщения без ответа.',
+    demo_invite: 'Приглашение на демонстрацию продукта.',
+    proposal: 'Отправка коммерческого предложения.',
+  };
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: COLD_OUTREACH_PROMPT },
+          { 
+            role: 'user', 
+            content: `Создай шаблон сообщения.
+
+Тип: ${typeInstructions[type]}
+Канал: ${channel}
+Целевая аудитория: ${targetAudience}
+
+Используй переменные:
+- {{name}} - имя контакта
+- {{company}} - название компании
+
+Напиши только текст шаблона, без пояснений.` 
+          },
+        ],
+        max_tokens: 400,
+        temperature: 0.9,
+      }),
+    });
+
+    const data = await response.json();
+    return {
+      success: true,
+      message: data.choices[0]?.message?.content?.trim(),
+      tokensUsed: data.usage?.total_tokens,
+    };
+  } catch (error) {
+    return { success: false, error: 'Ошибка генерации шаблона' };
+  }
+}
+

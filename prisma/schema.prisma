@@ -1648,3 +1648,31 @@ model SalesStats {
   @@map("sales_stats")
 }
 
+// =============================================
+// CRM - НАСТРОЙКИ ИНТЕГРАЦИЙ
+// =============================================
+
+model CRMSettings {
+  id              String   @id @default(cuid())
+  
+  // OpenAI
+  openaiKey       String?
+  openaiModel     String   @default("gpt-4o-mini")
+  
+  // Eskiz SMS
+  eskizEmail      String?
+  eskizPassword   String?
+  eskizSender     String   @default("4546")
+  
+  // Telegram MTProto
+  telegramApiId   String?
+  telegramApiHash String?
+  telegramPhone   String?
+  telegramSession String?  @db.Text
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("crm_settings")
+}
+
