@@ -373,92 +373,94 @@ export default function CRMDashboard() {
         ) : viewMode === 'table' ? (
           /* Табличный вид */
           <div className="bg-white/[0.02] border border-white/5 rounded-xl overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-white/10 bg-white/[0.03]">
-                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Компания</th>
-                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Контакт</th>
-                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Телефон</th>
-                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Telegram</th>
-                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Сегмент</th>
-                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Скор</th>
-                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Статус</th>
-                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leads.map((lead, idx) => {
-                  const segment = lead.segment ? SEGMENTS[lead.segment as keyof typeof SEGMENTS] : null;
-                  const stage = PIPELINE.find(p => p.id === lead.status);
-                  return (
-                    <tr 
-                      key={lead.id}
-                      onClick={() => setSelectedLead(lead)}
-                      className={`border-b border-white/5 hover:bg-white/[0.03] cursor-pointer transition-colors ${idx % 2 === 0 ? '' : 'bg-white/[0.01]'}`}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="text-white font-medium text-sm truncate max-w-[200px]">
-                          {lead.company || '—'}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-white/70 text-sm truncate max-w-[150px]">
-                          {lead.name || lead.firstName || '—'}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1 text-sm">
-                          <span className={lead.phoneType === 'mobile' ? 'text-green-400' : 'text-white/40'}>
-                            {lead.phoneType === 'mobile' ? '📱' : '☎️'}
-                          </span>
-                          <span className="text-white/60">{lead.phone || '—'}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {lead.telegram ? (
-                          <span className="text-sky-400 text-sm">{lead.telegram}</span>
-                        ) : (
-                          <span className="text-white/30 text-sm">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {segment ? (
-                          <span className={`px-2 py-0.5 rounded text-xs ${segment.bg} ${segment.text}`}>
-                            {segment.icon}
-                          </span>
-                        ) : <span className="text-white/30">—</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <div className="w-8 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${lead.score >= 70 ? 'bg-green-500' : lead.score >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                              style={{ width: `${lead.score}%` }}
-                            />
+            <div className="overflow-auto max-h-[70vh]">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/10 bg-white/[0.03]">
+                    <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Компания</th>
+                    <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Контакт</th>
+                    <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Телефон</th>
+                    <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Telegram</th>
+                    <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Сегмент</th>
+                    <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Скор</th>
+                    <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Статус</th>
+                    <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leads.map((lead, idx) => {
+                    const segment = lead.segment ? SEGMENTS[lead.segment as keyof typeof SEGMENTS] : null;
+                    const stage = PIPELINE.find(p => p.id === lead.status);
+                    return (
+                      <tr 
+                        key={lead.id}
+                        onClick={() => setSelectedLead(lead)}
+                        className={`border-b border-white/5 hover:bg-white/[0.03] cursor-pointer transition-colors ${idx % 2 === 0 ? '' : 'bg-white/[0.01]'}`}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="text-white font-medium text-sm truncate max-w-[200px]">
+                            {lead.company || '—'}
                           </div>
-                          <span className="text-white/50 text-xs">{lead.score}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {stage && (
-                          <span className={`px-2 py-1 rounded text-xs bg-gradient-to-r ${stage.color} text-white`}>
-                            {stage.icon}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); startAI(lead); }}
-                          className="px-2 py-1 bg-purple-500/20 hover:bg-purple-500/40 text-purple-400 rounded text-xs transition-all"
-                        >
-                          🤖
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-white/70 text-sm truncate max-w-[150px]">
+                            {lead.name || lead.firstName || '—'}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1 text-sm">
+                            <span className={lead.phoneType === 'mobile' ? 'text-green-400' : 'text-white/40'}>
+                              {lead.phoneType === 'mobile' ? '📱' : '☎️'}
+                            </span>
+                            <span className="text-white/60">{lead.phone || '—'}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {lead.telegram ? (
+                            <span className="text-sky-400 text-sm">{lead.telegram}</span>
+                          ) : (
+                            <span className="text-white/30 text-sm">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {segment ? (
+                            <span className={`px-2 py-0.5 rounded text-xs ${segment.bg} ${segment.text}`}>
+                              {segment.icon}
+                            </span>
+                          ) : <span className="text-white/30">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            <div className="w-8 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full ${lead.score >= 70 ? 'bg-green-500' : lead.score >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                                style={{ width: `${lead.score}%` }}
+                              />
+                            </div>
+                            <span className="text-white/50 text-xs">{lead.score}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {stage && (
+                            <span className={`px-2 py-1 rounded text-xs bg-gradient-to-r ${stage.color} text-white`}>
+                              {stage.icon}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); startAI(lead); }}
+                            className="px-2 py-1 bg-purple-500/20 hover:bg-purple-500/40 text-purple-400 rounded text-xs transition-all"
+                          >
+                            🤖
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
             
             {leads.length === 0 && (
               <div className="text-center py-12 text-white/30">
@@ -468,7 +470,7 @@ export default function CRMDashboard() {
           </div>
         ) : (
           /* Канбан вид */
-          <div className="grid grid-cols-6 gap-4">
+          <div className="grid grid-cols-6 gap-4 overflow-x-auto pb-2">
             {PIPELINE.map((stage) => {
               const stageLeads = leadsByStatus[stage.id] || [];
               const count = pipelineStats?.[stage.id as keyof PipelineStats] || stageLeads.length;
@@ -487,7 +489,7 @@ export default function CRMDashboard() {
                     </div>
                   </div>
                   
-                  <div className="flex-1 space-y-2 min-h-[200px] max-h-[calc(100vh-380px)] overflow-y-auto pr-1">
+                  <div className="flex-1 space-y-2 min-h-[200px] max-h-[65vh] overflow-y-auto pr-1">
                     {stageLeads.length === 0 ? (
                       <div className="h-24 border border-dashed border-white/10 rounded-xl flex items-center justify-center text-white/20 text-sm">
                         Пусто
