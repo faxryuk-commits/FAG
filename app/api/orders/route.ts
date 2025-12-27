@@ -87,10 +87,16 @@ export async function POST(request: NextRequest) {
     const deliveryFee = body.orderType === 'delivery' ? 15000 : 0; // 15,000 сум за доставку
     const total = subtotal + deliveryFee;
     
+    // Генерируем номер заказа
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const random = Math.random().toString(36).substring(2, 5).toUpperCase();
+    const orderNumber = `${restaurant.name.substring(0, 3).toUpperCase()}-${timestamp.slice(-4)}${random}`;
+
     // Создаём заказ
     const order = await prisma.order.create({
       data: {
         restaurantId: body.restaurantId,
+        orderNumber,
         orderType: body.orderType,
         status: 'pending',
         
@@ -133,15 +139,12 @@ export async function POST(request: NextRequest) {
       },
     });
     
-    // Генерируем номер заказа
-    const orderNumber = `${restaurant.name.substring(0, 3).toUpperCase()}-${order.id.substring(0, 6).toUpperCase()}`;
-    
     return NextResponse.json({
       success: true,
       message: getOrderMessage(body.orderType),
       order: {
         id: order.id,
-        orderNumber,
+        orderNumber: order.orderNumber,
         status: order.status,
         total: order.total,
         items: order.items,
