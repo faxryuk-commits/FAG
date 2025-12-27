@@ -45,11 +45,10 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    // Получаем лидов с номерами телефонов БЕЗ telegram
+    // Получаем лидов с номерами телефонов БЕЗ telegram (ВСЕ типы)
     const leads = await prisma.lead.findMany({
       where: {
         phone: { not: null },
-        phoneType: 'mobile', // Только мобильные
         telegram: null, // Только те, у кого ещё нет telegram
       },
       select: {
@@ -135,11 +134,32 @@ export async function POST(request: NextRequest) {
 // GET - Получить статистику по Telegram контактам
 export async function GET() {
   try {
-    // Всего лидов с мобильными номерами
+    // Всего лидов
+    const totalLeads = await prisma.lead.count();
+    
+    // Всего с телефонами
+    const totalWithPhone = await prisma.lead.count({
+      where: {
+        phone: { not: null },
+      },
+    });
+    
+    // Мобильных номеров
     const totalMobile = await prisma.lead.count({
       where: {
         phone: { not: null },
         phoneType: 'mobile',
+      },
+    });
+    
+    // Без определённого типа (можно проверить)
+    const unknownType = await prisma.lead.count({
+      where: {
+        phone: { not: null },
+        OR: [
+          { phoneType: null },
+          { phoneType: 'unknown' },
+        ],
       },
     });
     
@@ -150,7 +170,15 @@ export async function GET() {
       },
     });
     
-    // Лидов с мобильным БЕЗ Telegram (потенциальные для проверки)
+    // Лидов с телефоном БЕЗ Telegram (потенциальные для проверки)
+    const phoneWithoutTelegram = await prisma.lead.count({
+      where: {
+        phone: { not: null },
+        telegram: null,
+      },
+    });
+    
+    // Лидов с мобильным БЕЗ Telegram
     const mobileWithoutTelegram = await prisma.lead.count({
       where: {
         phone: { not: null },
@@ -164,11 +192,14 @@ export async function GET() {
     
     return NextResponse.json({
       totalLeads,
+      totalWithPhone,
       totalMobile,
+      unknownType,
       withTelegram,
+      phoneWithoutTelegram,
       mobileWithoutTelegram,
-      telegramCoverage: totalMobile > 0 ? ((withTelegram / totalMobile) * 100).toFixed(1) : 0,
-      canCheckMore: mobileWithoutTelegram,
+      telegramCoverage: totalWithPhone > 0 ? ((withTelegram / totalWithPhone) * 100).toFixed(1) : 0,
+      canCheckMore: phoneWithoutTelegram, // Все с телефонами без TG
     });
     
   } catch (error) {

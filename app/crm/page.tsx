@@ -76,22 +76,27 @@ export default function CRMDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [hasMore, setHasMore] = useState(false);
   const [totalLeads, setTotalLeads] = useState(0);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [aiModal, setAiModal] = useState<{ open: boolean; lead: Lead | null; loading: boolean; result: any }>({
     open: false, lead: null, loading: false, result: null
   });
+  
+  // Пагинация и вид
+  const [viewMode, setViewMode] = useState<'kanban' | 'table'>('table');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const ITEMS_PER_PAGE = 50;
 
   useEffect(() => {
     fetchData();
-  }, [searchQuery]);
+  }, [searchQuery, currentPage, statusFilter]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
+      const offset = (currentPage - 1) * ITEMS_PER_PAGE;
       const [leadsRes, statsRes, tgRes] = await Promise.all([
-        fetch(`/api/crm/leads?search=${searchQuery}&limit=300`),
+        fetch(`/api/crm/leads?search=${searchQuery}&status=${statusFilter}&limit=${ITEMS_PER_PAGE}&offset=${offset}`),
         fetch('/api/crm/stats'),
         fetch('/api/crm/telegram/check-contacts'),
       ]);
@@ -101,7 +106,6 @@ export default function CRMDashboard() {
       const tgData = await tgRes.json().catch(() => null);
       
       setLeads(leadsData.leads || []);
-      setHasMore(leadsData.hasMore || false);
       setTotalLeads(leadsData.total || 0);
       setPipelineStats(statsData.pipeline || null);
       setDashboardStats(statsData.dashboard || null);
@@ -112,17 +116,12 @@ export default function CRMDashboard() {
       setLoading(false);
     }
   };
+  
+  const totalPages = Math.ceil(totalLeads / ITEMS_PER_PAGE);
 
-  const loadMore = async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      const res = await fetch(`/api/crm/leads?search=${searchQuery}&limit=300&offset=${leads.length}`);
-      const data = await res.json();
-      setLeads(prev => [...prev, ...(data.leads || [])]);
-      setHasMore(data.hasMore || false);
-    } finally {
-      setLoadingMore(false);
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
     }
   };
 
@@ -150,6 +149,41 @@ export default function CRMDashboard() {
     });
     fetchData();
     setSelectedLead(null);
+  };
+  
+  // Отправка сообщения из AI модалки
+  const [sending, setSending] = useState(false);
+  
+  const sendAIMessage = async () => {
+    if (!aiModal.lead || !aiModal.result?.message) return;
+    
+    setSending(true);
+    try {
+      const channel = aiModal.lead.telegram ? 'telegram' : 'sms';
+      const res = await fetch('/api/crm/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId: aiModal.lead.id,
+          channel,
+          message: aiModal.result.message,
+        }),
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+        alert('✅ Сообщение отправлено!');
+        setAiModal({ open: false, lead: null, loading: false, result: null });
+        fetchData();
+      } else {
+        alert(`❌ Ошибка: ${data.error || 'Не удалось отправить'}`);
+      }
+    } catch (e) {
+      alert('❌ Ошибка сети');
+    } finally {
+      setSending(false);
+    }
   };
 
   // Группируем лиды по статусу
@@ -232,31 +266,198 @@ export default function CRMDashboard() {
           </div>
         )}
 
-        {/* Pipeline Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-white/80 font-medium flex items-center gap-2">
-            <span>Воронка продаж</span>
-            <span className="px-2 py-0.5 bg-white/10 rounded text-xs text-white/50">
-              {leads.length} из {totalLeads}
-            </span>
-          </h2>
-          {hasMore && (
-            <button
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg text-sm transition-all disabled:opacity-50"
+        {/* Controls */}
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            {/* Вид */}
+            <div className="flex bg-white/5 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('table')}
+                className={`px-3 py-1.5 rounded text-sm transition-all ${viewMode === 'table' ? 'bg-purple-500 text-white' : 'text-white/50 hover:text-white'}`}
+              >
+                📋 Таблица
+              </button>
+              <button
+                onClick={() => setViewMode('kanban')}
+                className={`px-3 py-1.5 rounded text-sm transition-all ${viewMode === 'kanban' ? 'bg-purple-500 text-white' : 'text-white/50 hover:text-white'}`}
+              >
+                📊 Канбан
+              </button>
+            </div>
+            
+            {/* Фильтр по статусу */}
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+              className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
             >
-              {loadingMore ? '⏳' : '+ Загрузить ещё'}
-            </button>
+              <option value="all">Все статусы</option>
+              {PIPELINE.map(s => (
+                <option key={s.id} value={s.id}>{s.icon} {s.label}</option>
+              ))}
+            </select>
+            
+            <span className="text-white/50 text-sm">
+              {totalLeads} лидов
+            </span>
+          </div>
+          
+          {/* Пагинация */}
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded text-white/70 text-sm disabled:opacity-30"
+              >
+                ←
+              </button>
+              
+              {/* Номера страниц */}
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let page;
+                if (totalPages <= 5) {
+                  page = i + 1;
+                } else if (currentPage <= 3) {
+                  page = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  page = totalPages - 4 + i;
+                } else {
+                  page = currentPage - 2 + i;
+                }
+                return (
+                  <button
+                    key={page}
+                    onClick={() => goToPage(page)}
+                    className={`px-3 py-1.5 rounded text-sm transition-all ${
+                      currentPage === page 
+                        ? 'bg-purple-500 text-white' 
+                        : 'bg-white/5 hover:bg-white/10 text-white/70'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+              
+              <button
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded text-white/70 text-sm disabled:opacity-30"
+              >
+                →
+              </button>
+              
+              <span className="text-white/40 text-xs ml-2">
+                {currentPage} / {totalPages}
+              </span>
+            </div>
           )}
         </div>
 
-        {/* Pipeline Kanban */}
+        {/* Content */}
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
           </div>
+        ) : viewMode === 'table' ? (
+          /* Табличный вид */
+          <div className="bg-white/[0.02] border border-white/5 rounded-xl overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/[0.03]">
+                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Компания</th>
+                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Контакт</th>
+                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Телефон</th>
+                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Telegram</th>
+                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Сегмент</th>
+                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Скор</th>
+                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Статус</th>
+                  <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map((lead, idx) => {
+                  const segment = lead.segment ? SEGMENTS[lead.segment as keyof typeof SEGMENTS] : null;
+                  const stage = PIPELINE.find(p => p.id === lead.status);
+                  return (
+                    <tr 
+                      key={lead.id}
+                      onClick={() => setSelectedLead(lead)}
+                      className={`border-b border-white/5 hover:bg-white/[0.03] cursor-pointer transition-colors ${idx % 2 === 0 ? '' : 'bg-white/[0.01]'}`}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="text-white font-medium text-sm truncate max-w-[200px]">
+                          {lead.company || '—'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-white/70 text-sm truncate max-w-[150px]">
+                          {lead.name || lead.firstName || '—'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 text-sm">
+                          <span className={lead.phoneType === 'mobile' ? 'text-green-400' : 'text-white/40'}>
+                            {lead.phoneType === 'mobile' ? '📱' : '☎️'}
+                          </span>
+                          <span className="text-white/60">{lead.phone || '—'}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {lead.telegram ? (
+                          <span className="text-sky-400 text-sm">{lead.telegram}</span>
+                        ) : (
+                          <span className="text-white/30 text-sm">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {segment ? (
+                          <span className={`px-2 py-0.5 rounded text-xs ${segment.bg} ${segment.text}`}>
+                            {segment.icon}
+                          </span>
+                        ) : <span className="text-white/30">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <div className="w-8 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full ${lead.score >= 70 ? 'bg-green-500' : lead.score >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                              style={{ width: `${lead.score}%` }}
+                            />
+                          </div>
+                          <span className="text-white/50 text-xs">{lead.score}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {stage && (
+                          <span className={`px-2 py-1 rounded text-xs bg-gradient-to-r ${stage.color} text-white`}>
+                            {stage.icon}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); startAI(lead); }}
+                          className="px-2 py-1 bg-purple-500/20 hover:bg-purple-500/40 text-purple-400 rounded text-xs transition-all"
+                        >
+                          🤖
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            
+            {leads.length === 0 && (
+              <div className="text-center py-12 text-white/30">
+                Нет лидов
+              </div>
+            )}
+          </div>
         ) : (
+          /* Канбан вид */
           <div className="grid grid-cols-6 gap-4">
             {PIPELINE.map((stage) => {
               const stageLeads = leadsByStatus[stage.id] || [];
@@ -264,7 +465,6 @@ export default function CRMDashboard() {
               
               return (
                 <div key={stage.id} className="flex flex-col">
-                  {/* Column Header */}
                   <div className={`mb-3 p-3 rounded-xl bg-gradient-to-r ${stage.color} bg-opacity-20`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -277,14 +477,13 @@ export default function CRMDashboard() {
                     </div>
                   </div>
                   
-                  {/* Cards Container */}
-                  <div className="flex-1 space-y-2 min-h-[200px] max-h-[calc(100vh-380px)] overflow-y-auto pr-1 scrollbar-thin">
+                  <div className="flex-1 space-y-2 min-h-[200px] max-h-[calc(100vh-380px)] overflow-y-auto pr-1">
                     {stageLeads.length === 0 ? (
                       <div className="h-24 border border-dashed border-white/10 rounded-xl flex items-center justify-center text-white/20 text-sm">
                         Пусто
                       </div>
                     ) : (
-                      stageLeads.slice(0, 50).map((lead) => (
+                      stageLeads.slice(0, 30).map((lead) => (
                         <LeadCard 
                           key={lead.id}
                           lead={lead}
@@ -293,9 +492,9 @@ export default function CRMDashboard() {
                         />
                       ))
                     )}
-                    {stageLeads.length > 50 && (
+                    {stageLeads.length > 30 && (
                       <div className="text-center text-white/30 text-xs py-2">
-                        +{stageLeads.length - 50} ещё
+                        +{stageLeads.length - 30} ещё
                       </div>
                     )}
                   </div>
@@ -655,12 +854,30 @@ function AIModal({ lead, loading, result, onClose }: {
                   </div>
                   
                   <div className="flex gap-2">
-                    <button className="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl transition-all">
-                      Отправить
+                    <button 
+                      onClick={sendAIMessage}
+                      disabled={sending}
+                      className="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white rounded-xl transition-all flex items-center justify-center gap-2"
+                    >
+                      {sending ? (
+                        <>
+                          <span className="animate-spin">⏳</span>
+                          Отправка...
+                        </>
+                      ) : (
+                        <>
+                          {aiModal.lead?.telegram ? '✈️ Telegram' : '📱 SMS'}
+                          <span>Отправить</span>
+                        </>
+                      )}
                     </button>
                     <button 
-                      onClick={() => navigator.clipboard.writeText(result.message)}
+                      onClick={() => {
+                        navigator.clipboard.writeText(result.message);
+                        alert('Скопировано!');
+                      }}
                       className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-all"
+                      title="Скопировать"
                     >
                       📋
                     </button>

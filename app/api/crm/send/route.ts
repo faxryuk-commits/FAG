@@ -250,13 +250,45 @@ async function sendTelegram(
     }
   }
 
-  // Вариант 2: MTProto (user account)
-  if (settings?.telegramSession) {
-    // TODO: Реализовать отправку через gramjs/telegram MTProto
-    return { 
-      success: false, 
-      error: 'MTProto отправка требует дополнительной настройки.',
-    };
+  // Вариант 2: MTProto (user account) - может писать первым!
+  if (settings?.telegramSession && settings?.telegramApiId && settings?.telegramApiHash) {
+    try {
+      const { TelegramClient, Api } = await import('telegram');
+      const { StringSession } = await import('telegram/sessions');
+      
+      const client = new TelegramClient(
+        new StringSession(settings.telegramSession),
+        settings.telegramApiId,
+        settings.telegramApiHash,
+        { connectionRetries: 3 }
+      );
+      
+      await client.connect();
+      
+      // telegram может быть @username или phone number
+      let peer;
+      if (telegram.startsWith('@')) {
+        peer = telegram;
+      } else {
+        // Это chat_id или phone
+        peer = telegram.replace(/[^\d]/g, '');
+      }
+      
+      const result = await client.sendMessage(peer, { message });
+      
+      await client.disconnect();
+      
+      return {
+        success: true,
+        messageId: result.id?.toString(),
+      };
+    } catch (error) {
+      console.error('MTProto send error:', error);
+      return {
+        success: false,
+        error: `MTProto: ${error instanceof Error ? error.message : 'Ошибка отправки'}`,
+      };
+    }
   }
 
   return { 

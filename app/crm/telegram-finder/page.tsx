@@ -5,8 +5,11 @@ import Link from 'next/link';
 
 interface TelegramStats {
   totalLeads: number;
+  totalWithPhone: number;
   totalMobile: number;
+  unknownType: number;
   withTelegram: number;
+  phoneWithoutTelegram: number;
   mobileWithoutTelegram: number;
   telegramCoverage: string;
   canCheckMore: number;
@@ -120,12 +123,12 @@ export default function TelegramFinderPage() {
 
   // Проверка ВСЕЙ базы
   const runFullScan = async () => {
-    if (!stats?.mobileWithoutTelegram) {
+    if (!stats?.canCheckMore) {
       alert('Нет номеров для проверки');
       return;
     }
     
-    if (!confirm(`Проверить ВСЮ базу (${stats.mobileWithoutTelegram} номеров)?\n\nЭто займёт около ${Math.ceil(stats.mobileWithoutTelegram / 100) * 3} секунд.\n\nПроцесс можно будет остановить.`)) {
+    if (!confirm(`Проверить ВСЮ базу (${stats.canCheckMore} номеров)?\n\nЭто займёт около ${Math.ceil(stats.canCheckMore / 100) * 3} секунд.\n\nПроцесс можно будет остановить.`)) {
       return;
     }
     
@@ -134,7 +137,7 @@ export default function TelegramFinderPage() {
     setFullScanProgress({
       running: true,
       current: 0,
-      total: stats.mobileWithoutTelegram,
+      total: stats.canCheckMore,
       found: 0,
     });
     
@@ -144,7 +147,7 @@ export default function TelegramFinderPage() {
     let allDetails: CheckResult['details'] = [];
     
     try {
-      while (offset < stats.mobileWithoutTelegram) {
+      while (offset < stats.canCheckMore) {
         const res = await fetch('/api/crm/telegram/check-contacts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -171,7 +174,7 @@ export default function TelegramFinderPage() {
         
         setFullScanProgress(prev => prev ? {
           ...prev,
-          current: Math.min(offset, stats.mobileWithoutTelegram),
+          current: Math.min(offset, stats.canCheckMore),
           found: totalFound,
         } : null);
         
@@ -240,16 +243,16 @@ export default function TelegramFinderPage() {
             <div className="w-10 h-10 border-4 border-sky-500/30 border-t-sky-500 rounded-full animate-spin" />
           </div>
         ) : stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
             <StatCard 
               icon="📊" 
               value={stats.totalLeads} 
               label="Всего лидов" 
             />
             <StatCard 
-              icon="📱" 
-              value={stats.totalMobile} 
-              label="Мобильных" 
+              icon="📞" 
+              value={stats.totalWithPhone} 
+              label="С телефоном" 
               color="blue"
             />
             <StatCard 
@@ -260,15 +263,21 @@ export default function TelegramFinderPage() {
             />
             <StatCard 
               icon="🔍" 
-              value={stats.mobileWithoutTelegram} 
+              value={stats.canCheckMore} 
               label="Можно проверить" 
               color="purple"
+            />
+            <StatCard 
+              icon="📈" 
+              value={`${stats.telegramCoverage}%`} 
+              label="Покрытие" 
+              color="green"
             />
           </div>
         )}
 
         {/* Прогресс бар */}
-        {stats && stats.totalMobile > 0 && (
+        {stats && stats.totalWithPhone > 0 && (
           <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-6 mb-8">
             <div className="flex items-center justify-between mb-3">
               <span className="text-white/60 text-sm">Покрытие Telegram</span>
@@ -281,8 +290,8 @@ export default function TelegramFinderPage() {
               />
             </div>
             <div className="flex justify-between mt-2 text-xs text-white/40">
-              <span>{stats.withTelegram} найдено</span>
-              <span>{stats.mobileWithoutTelegram} можно проверить</span>
+              <span>✈️ {stats.withTelegram} с Telegram</span>
+              <span>🔍 {stats.canCheckMore} можно проверить</span>
             </div>
           </div>
         )}
@@ -355,7 +364,7 @@ export default function TelegramFinderPage() {
           <div className="mt-4 pt-4 border-t border-white/10">
             <button
               onClick={runFullScan}
-              disabled={checking || !!fullScanProgress || !stats?.mobileWithoutTelegram}
+              disabled={checking || !!fullScanProgress || !stats?.canCheckMore}
               className="w-full px-4 py-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl font-bold text-lg transition-all disabled:opacity-50"
             >
               {fullScanProgress ? (
@@ -364,7 +373,7 @@ export default function TelegramFinderPage() {
                   Сканирование... {fullScanProgress.current} / {fullScanProgress.total}
                 </span>
               ) : (
-                `🔥 ПРОВЕРИТЬ ВСЮ БАЗУ (${stats?.mobileWithoutTelegram || 0} номеров)`
+                `🔥 ПРОВЕРИТЬ ВСЮ БАЗУ (${stats?.canCheckMore || 0} номеров)`
               )}
             </button>
             
@@ -494,7 +503,7 @@ export default function TelegramFinderPage() {
 
 function StatCard({ icon, value, label, color }: { 
   icon: string; 
-  value: number; 
+  value: number | string; 
   label: string; 
   color?: string;
 }) {
