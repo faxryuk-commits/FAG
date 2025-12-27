@@ -80,6 +80,8 @@ export default function CRMDashboard() {
   const [aiModal, setAiModal] = useState<{ open: boolean; lead: Lead | null; loading: boolean; result: any }>({
     open: false, lead: null, loading: false, result: null
   });
+  const [leadDetails, setLeadDetails] = useState<Record<string, any>>({});
+  const [leadDetailsLoading, setLeadDetailsLoading] = useState(false);
   
   // Пагинация и вид
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('table');
@@ -122,6 +124,27 @@ export default function CRMDashboard() {
   const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
+    }
+  };
+
+  const openLead = (lead: Lead) => {
+    setSelectedLead(lead);
+    loadLeadDetails(lead.id);
+  };
+
+  const loadLeadDetails = async (id: string) => {
+    if (leadDetails[id]) return;
+    setLeadDetailsLoading(true);
+    try {
+      const res = await fetch(`/api/crm/leads/${id}`);
+      const data = await res.json();
+      if (data.lead) {
+        setLeadDetails(prev => ({ ...prev, [id]: data.lead }));
+      }
+    } catch (e) {
+      console.error('Lead detail error', e);
+    } finally {
+      setLeadDetailsLoading(false);
     }
   };
 
@@ -394,7 +417,7 @@ export default function CRMDashboard() {
                     return (
                       <tr 
                         key={lead.id}
-                        onClick={() => setSelectedLead(lead)}
+                        onClick={() => openLead(lead)}
                         className={`border-b border-white/5 hover:bg-white/[0.03] cursor-pointer transition-colors ${idx % 2 === 0 ? '' : 'bg-white/[0.01]'}`}
                       >
                         <td className="px-4 py-3">
@@ -499,7 +522,7 @@ export default function CRMDashboard() {
                         <LeadCard 
                           key={lead.id}
                           lead={lead}
-                          onClick={() => setSelectedLead(lead)}
+                        onClick={() => openLead(lead)}
                           onAI={() => startAI(lead)}
                         />
                       ))
@@ -521,6 +544,8 @@ export default function CRMDashboard() {
       {selectedLead && (
         <LeadDrawer
           lead={selectedLead}
+          detail={leadDetails[selectedLead.id]}
+          loadingDetail={leadDetailsLoading && !leadDetails[selectedLead.id]}
           onClose={() => setSelectedLead(null)}
           onStatusChange={updateStatus}
           onStartAI={startAI}
@@ -670,13 +695,16 @@ function LeadCard({ lead, onClick, onAI }: {
 }
 
 // Lead Drawer
-function LeadDrawer({ lead, onClose, onStatusChange, onStartAI }: {
+function LeadDrawer({ lead, detail, loadingDetail, onClose, onStatusChange, onStartAI }: {
   lead: Lead;
+  detail?: any;
+  loadingDetail?: boolean;
   onClose: () => void;
   onStatusChange: (leadId: string, status: string) => void;
   onStartAI: (lead: Lead) => void;
 }) {
-  const segment = lead.segment ? SEGMENTS[lead.segment as keyof typeof SEGMENTS] : null;
+  const fullLead = detail || lead;
+  const segment = fullLead.segment ? SEGMENTS[fullLead.segment as keyof typeof SEGMENTS] : null;
   
   return (
     <>
@@ -723,7 +751,7 @@ function LeadDrawer({ lead, onClose, onStatusChange, onStartAI }: {
         <div className="p-6 space-y-6">
           {/* Segment & Score */}
           <div className="flex items-center gap-4">
-            {segment && (
+                {segment && (
               <div className={`px-3 py-1.5 rounded-lg border ${segment.bg} ${segment.text} ${segment.border}`}>
                 {segment.icon} {segment.label}
               </div>
@@ -743,10 +771,10 @@ function LeadDrawer({ lead, onClose, onStatusChange, onStartAI }: {
           
           {/* Info */}
           <div className="grid grid-cols-2 gap-4">
-            <InfoBlock label="Телефон" value={lead.phone} icon={lead.phoneType === 'mobile' ? '📱' : '☎️'} />
-            <InfoBlock label="Email" value={lead.email} icon="📧" />
-            <InfoBlock label="Telegram" value={lead.telegram} icon="✈️" />
-            <InfoBlock label="Источник" value={lead.source} icon="📍" />
+            <InfoBlock label="Телефон" value={fullLead.phone} icon={fullLead.phoneType === 'mobile' ? '📱' : '☎️'} />
+            <InfoBlock label="Email" value={fullLead.email} icon="📧" />
+            <InfoBlock label="Telegram" value={fullLead.telegram} icon="✈️" />
+            <InfoBlock label="Источник" value={fullLead.source} icon="📍" />
           </div>
           
           {/* Status */}
@@ -756,9 +784,9 @@ function LeadDrawer({ lead, onClose, onStatusChange, onStartAI }: {
               {PIPELINE.map((stage) => (
                 <button
                   key={stage.id}
-                  onClick={() => onStatusChange(lead.id, stage.id)}
+                  onClick={() => onStatusChange(fullLead.id, stage.id)}
                   className={`p-2 rounded-lg text-xs font-medium transition-all ${
-                    lead.status === stage.id
+                    fullLead.status === stage.id
                       ? `bg-gradient-to-r ${stage.color} text-white`
                       : 'bg-white/5 text-white/50 hover:bg-white/10'
                   }`}
@@ -770,11 +798,11 @@ function LeadDrawer({ lead, onClose, onStatusChange, onStartAI }: {
           </div>
           
           {/* Tags */}
-          {lead.tags.length > 0 && (
+          {fullLead.tags?.length > 0 && (
             <div>
               <label className="text-white/50 text-sm mb-2 block">Теги</label>
               <div className="flex flex-wrap gap-2">
-                {lead.tags.map((tag, i) => (
+                {fullLead.tags.map((tag: string, i: number) => (
                   <span key={i} className="px-2 py-1 bg-white/5 rounded text-sm text-white/60">
                     {tag}
                   </span>
@@ -787,14 +815,86 @@ function LeadDrawer({ lead, onClose, onStatusChange, onStartAI }: {
           <div className="pt-4 border-t border-white/10 grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-white/40">Создан:</span>
-              <span className="text-white/70 ml-2">{new Date(lead.createdAt).toLocaleDateString('ru')}</span>
+              <span className="text-white/70 ml-2">{new Date(fullLead.createdAt).toLocaleDateString('ru')}</span>
             </div>
-            {lead.lastContactAt && (
+            {fullLead.lastContactAt && (
               <div>
                 <span className="text-white/40">Контакт:</span>
-                <span className="text-white/70 ml-2">{new Date(lead.lastContactAt).toLocaleDateString('ru')}</span>
+                <span className="text-white/70 ml-2">{new Date(fullLead.lastContactAt).toLocaleDateString('ru')}</span>
               </div>
             )}
+          </div>
+
+          {/* Next actions & recommendations */}
+          <div className="pt-4 border-t border-white/10 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-white/70 font-medium">Следующее действие</span>
+              {fullLead.nextActionAt && (
+                <span className="text-xs px-2 py-1 bg-white/5 rounded text-white/50">
+                  к {new Date(fullLead.nextActionAt).toLocaleDateString('ru')}
+                </span>
+              )}
+            </div>
+            <div className="bg-white/[0.03] rounded-lg p-3 text-white/80 text-sm min-h-[60px]">
+              {fullLead.nextAction || 'Не запланировано'}
+            </div>
+            <div className="text-white/50 text-xs">Рекомендуем:</div>
+            <div className="flex flex-wrap gap-2">
+              {getRecommendations(fullLead.status || 'new').map((rec, i) => (
+                <span key={i} className="px-2 py-1 bg-purple-500/10 text-purple-200 rounded text-xs">
+                  {rec}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Комментарии / заметки */}
+          <div className="pt-4 border-t border-white/10 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-white/70 font-medium">Комментарии</span>
+              {loadingDetail && <span className="text-white/40 text-xs">Загрузка...</span>}
+            </div>
+            <div className="space-y-2">
+              {(fullLead.notes || []).length === 0 && (
+                <div className="text-white/40 text-sm">Нет комментариев</div>
+              )}
+              {(fullLead.notes || []).map((note: any) => (
+                <div key={note.id} className="bg-white/[0.03] border border-white/5 rounded-lg p-3 text-sm text-white/80">
+                  <div className="flex justify-between text-xs text-white/40 mb-1">
+                    <span>{note.author || 'Менеджер'}</span>
+                    <span>{new Date(note.createdAt).toLocaleString('ru-RU')}</span>
+                  </div>
+                  <div>{note.content}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* История коммуникаций */}
+          <div className="pt-4 border-t border-white/10 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-white/70 font-medium">История коммуникаций</span>
+              {loadingDetail && <span className="text-white/40 text-xs">Загрузка...</span>}
+            </div>
+            <div className="space-y-2">
+              {(fullLead.touches || []).length === 0 && (
+                <div className="text-white/40 text-sm">Нет касаний</div>
+              )}
+              {(fullLead.touches || []).map((t: any) => (
+                <div key={t.id} className="bg-white/[0.03] border border-white/5 rounded-lg p-3">
+                  <div className="flex items-center justify-between text-xs text-white/50 mb-1">
+                    <div className="flex items-center gap-2">
+                      <span>{channelIcon(t.channel)} {t.channel}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] ${t.status === 'sent' ? 'bg-green-500/20 text-green-300' : 'bg-white/10 text-white/60'}`}>
+                        {t.status}
+                      </span>
+                    </div>
+                    <span>{new Date(t.createdAt).toLocaleString('ru-RU')}</span>
+                  </div>
+                  <div className="text-white/80 text-sm whitespace-pre-wrap">{t.content || '—'}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -812,6 +912,40 @@ function InfoBlock({ label, value, icon }: { label: string; value: string | null
       </div>
     </div>
   );
+}
+
+function getRecommendations(status: string) {
+  switch (status) {
+    case 'new':
+      return ['Связаться в течение 1 часа', 'Уточнить текущий способ приема заказов', 'Предложить демо без оплаты'];
+    case 'contact':
+      return ['Отправить кейсы схожих заведений', 'Записать на короткий звонок 10 мин', 'Выслать PDF с тарифами'];
+    case 'qualification':
+      return ['Проверить кол-во заказов/доставок в день', 'Уточнить используемые кассы/эквайринг', 'Подготовить кастомное предложение'];
+    case 'demo':
+      return ['Назначить дату демо', 'Собрать список интеграций', 'Подготовить сценарий под их меню'];
+    case 'negotiation':
+      return ['Согласовать SLA и оплату', 'Предложить пилот 14 дней', 'Уточнить ответственных со стороны клиента'];
+    case 'won':
+      return ['Запустить онбординг', 'Подключить интеграции', 'Настроить уведомления и авто-касания'];
+    default:
+      return ['Запланировать следующее касание', 'Обновить статус и комментарий', 'Проверить, есть ли Telegram/телефон для контакта'];
+  }
+}
+
+function channelIcon(channel?: string) {
+  switch (channel) {
+    case 'sms':
+      return '📱';
+    case 'telegram':
+      return '✈️';
+    case 'email':
+      return '📧';
+    case 'call':
+      return '📞';
+    default:
+      return '💬';
+  }
 }
 
 // AI Modal
