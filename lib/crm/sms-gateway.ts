@@ -15,8 +15,8 @@ export interface SMSDevice {
   name: string;          // "Корпоративный Beeline", "Личный Ucell"
   phone: string;         // +998901234567
   operator: string;      // beeline, ucell, mobiuz, uztelecom, humans
-  gatewayType: 'sms_gateway_app' | 'http_api' | 'tasker';
-  apiUrl: string;        // http://192.168.1.100:8080/send
+  gatewayType: 'mac_sms' | 'sms_gateway_app' | 'http_api' | 'tasker';
+  apiUrl: string;        // http://192.168.1.100:8765/send
   apiKey?: string;       // Если нужен
   isActive: boolean;
   dailyLimit: number;    // Лимит SMS в день
@@ -128,6 +128,60 @@ function selectDevice(devices: SMSDevice[], recipientPhone: string): SMSDevice |
   
   // Иначе - наименее использованный
   return available.sort((a, b) => a.sentToday - b.sentToday)[0];
+}
+
+/**
+ * Отправить SMS через Mac SMS Server
+ * Использует Messages.app на Mac с подключённым iPhone
+ */
+async function sendViaMacSMS(
+  device: SMSDevice,
+  phone: string,
+  message: string
+): Promise<SendSMSResult> {
+  try {
+    // Mac SMS Server использует простой POST на /send
+    const url = device.apiUrl.endsWith('/send') 
+      ? device.apiUrl 
+      : `${device.apiUrl.replace(/\/$/, '')}/send`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(device.apiKey && { 'Authorization': device.apiKey }),
+      },
+      body: JSON.stringify({
+        phone,
+        message,
+      }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.text();
+      return { success: false, error: `HTTP ${response.status}: ${error}` };
+    }
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      return {
+        success: true,
+        messageId: data.messageId || Date.now().toString(),
+        device: device.name,
+      };
+    }
+    
+    return {
+      success: false,
+      error: data.error || 'Ошибка отправки через Mac',
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Network error',
+    };
+  }
 }
 
 /**
@@ -265,6 +319,9 @@ export async function sendSMSViaGateway(
   let result: SendSMSResult;
   
   switch (device.gatewayType) {
+    case 'mac_sms':
+      result = await sendViaMacSMS(device, phone, message);
+      break;
     case 'sms_gateway_app':
       result = await sendViaSMSGatewayApp(device, phone, message);
       break;
@@ -327,6 +384,19 @@ export async function testSMSDevice(device: SMSDevice): Promise<{
  * Инструкция по настройке
  */
 export const SMS_GATEWAY_INSTRUCTIONS = {
+  mac_sms: {
+    name: 'Mac + iPhone',
+    url: '',
+    steps: [
+      '1. Откройте Terminal на Mac',
+      '2. Перейдите в папку проекта: cd /path/to/project',
+      '3. Запустите: node scripts/mac-sms-server.js',
+      '4. Скопируйте IP адрес из консоли',
+      '5. Добавьте устройство в CRM с этим IP',
+      '6. Убедитесь что iPhone подключён к тому же iCloud',
+    ],
+    apiUrlExample: 'http://192.168.1.100:8765',
+  },
   sms_gateway_app: {
     name: 'SMS Gateway (Android)',
     url: 'https://play.google.com/store/apps/details?id=eu.apksoft.android.smsgateway',

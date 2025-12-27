@@ -8,7 +8,7 @@ interface SMSDevice {
   name: string;
   phone: string;
   operator: string;
-  gatewayType: 'sms_gateway_app' | 'http_api' | 'tasker';
+  gatewayType: 'mac_sms' | 'sms_gateway_app' | 'http_api' | 'tasker';
   apiUrl: string;
   apiKey?: string;
   isActive: boolean;
@@ -26,10 +26,16 @@ const OPERATORS = [
 
 const GATEWAY_TYPES = [
   { 
+    id: 'mac_sms', 
+    name: 'Mac + iPhone', 
+    description: 'Через Messages.app (рекомендуется)',
+    icon: '🍎',
+  },
+  { 
     id: 'sms_gateway_app', 
     name: 'SMS Gateway App', 
-    description: 'Популярное Android приложение',
-    icon: '📱',
+    description: 'Android приложение',
+    icon: '🤖',
   },
   { 
     id: 'http_api', 
@@ -339,7 +345,7 @@ function DeviceModal({
     name: '',
     phone: '+998',
     operator: 'beeline',
-    gatewayType: 'sms_gateway_app',
+    gatewayType: 'mac_sms',
     apiUrl: 'http://192.168.1.',
     apiKey: '',
     isActive: true,
