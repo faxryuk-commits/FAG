@@ -1677,6 +1677,20 @@ model CRMSettings {
   // SMS Gateway (устройства для прямой отправки SMS)
   smsDevices      String?  @db.Text  // JSON массив устройств
   
+  // Instagram / Meta
+  instagramAccessToken  String?  @db.Text  // Page Access Token
+  instagramPageId       String?            // Facebook Page ID
+  instagramAccountId    String?            // Instagram Business Account ID
+  instagramVerifyToken  String?            // Webhook verify token
+  
+  // Google Analytics
+  gaPropertyId          String?            // GA4 Property ID (например: 123456789)
+  gaCredentials         String?  @db.Text  // Service Account JSON
+  
+  // Яндекс.Метрика
+  ymCounterId           String?            // ID счётчика
+  ymOAuthToken          String?            // OAuth токен
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   

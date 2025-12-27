@@ -50,6 +50,16 @@ export async function GET() {
           connected: !!(settings.telegramBotToken || settings.telegramSession),
           mode: settings.telegramBotToken ? 'bot' : 'user',
         },
+        // Instagram / Meta
+        instagramAccessToken: settings.instagramAccessToken ? '••••' + settings.instagramAccessToken.slice(-8) : '',
+        instagramPageId: settings.instagramPageId || '',
+        instagramAccountId: settings.instagramAccountId || '',
+        instagramVerifyToken: settings.instagramVerifyToken || '',
+        // Analytics
+        gaPropertyId: settings.gaPropertyId || '',
+        gaCredentials: settings.gaCredentials ? '••••credentials••••' : '',
+        ymCounterId: settings.ymCounterId || '',
+        ymOAuthToken: settings.ymOAuthToken ? '••••' + settings.ymOAuthToken.slice(-4) : '',
       },
     });
   } catch (error) {
@@ -109,6 +119,34 @@ export async function POST(request: NextRequest) {
       if (telegram.sessionString && !telegram.sessionString.includes('••••')) {
         updateData.telegramSession = telegram.sessionString;
       }
+    }
+
+    // Instagram / Meta (прямые поля из body)
+    if (body.instagramAccessToken && !body.instagramAccessToken.includes('••••')) {
+      updateData.instagramAccessToken = body.instagramAccessToken;
+    }
+    if (body.instagramPageId) {
+      updateData.instagramPageId = body.instagramPageId;
+    }
+    if (body.instagramAccountId) {
+      updateData.instagramAccountId = body.instagramAccountId;
+    }
+    if (body.instagramVerifyToken) {
+      updateData.instagramVerifyToken = body.instagramVerifyToken;
+    }
+
+    // Analytics
+    if (body.gaPropertyId) {
+      updateData.gaPropertyId = body.gaPropertyId;
+    }
+    if (body.gaCredentials && !body.gaCredentials.includes('••••')) {
+      updateData.gaCredentials = body.gaCredentials;
+    }
+    if (body.ymCounterId) {
+      updateData.ymCounterId = body.ymCounterId;
+    }
+    if (body.ymOAuthToken && !body.ymOAuthToken.includes('••••')) {
+      updateData.ymOAuthToken = body.ymOAuthToken;
     }
 
     if (settings) {
