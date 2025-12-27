@@ -747,20 +747,18 @@ export default function Home() {
                     }`}>
                       📦 Мои заказы
                     </Link>
-                    {(session.user as any)?.role === 'merchant' && (
+                    {((session.user as any)?.role === 'merchant' || (session.user as any)?.role === 'admin') && (
                       <Link href="/merchant" className={`block px-3 py-2 text-sm hover:bg-white/5 ${
                         theme === 'dark' ? 'text-white' : 'text-gray-700 hover:bg-gray-50'
                       }`}>
-                        🏪 Мой ресторан
+                        🏪 Кабинет мерчанта
                       </Link>
                     )}
-                    {(session.user as any)?.role === 'admin' && (
-                      <Link href="/admin" className={`block px-3 py-2 text-sm hover:bg-white/5 ${
-                        theme === 'dark' ? 'text-white' : 'text-gray-700 hover:bg-gray-50'
-                      }`}>
-                        ⚙️ Админка
-                      </Link>
-                    )}
+                    <Link href="/admin" className={`block px-3 py-2 text-sm hover:bg-white/5 ${
+                      theme === 'dark' ? 'text-white' : 'text-gray-700 hover:bg-gray-50'
+                    }`}>
+                      ⚙️ Админка
+                    </Link>
                     <button 
                       onClick={() => signOut()}
                       className={`w-full text-left px-3 py-2 text-sm border-t ${
