@@ -72,11 +72,14 @@ export async function POST(
         success: true,
         message: 'Нет подходящих лидов для рассылки',
         processed: 0,
-        total: 0,
+        sent: 0,
+        failed: 0,
+        details: [],
         skipped: {
           alreadySent: sentLeadIds.length,
           reason: campaign.channel === 'sms' ? 'Нет лидов с мобильными телефонами' : 'Нет лидов с нужными контактами'
-        }
+        },
+        hasMore: false,
       });
     }
     
@@ -93,7 +96,7 @@ export async function POST(
       sent: 0,
       failed: 0,
       skipped: 0,
-      details: [] as Array<{ lead: string; status: string; error?: string }>,
+      details: [] as Array<{ lead: string; status: string; message?: string; error?: string }>,
     };
     
     for (const lead of leads) {
@@ -108,7 +111,9 @@ export async function POST(
             .replace(/\{\{company\}\}/g, lead.company || '')
             .replace(/\{\{first_name\}\}/g, lead.firstName || '');
         } else {
-          // Генерируем через AI
+          // Генерируем через AI с умными стратегиями
+          console.log(`[Campaign] Generating AI message for ${lead.name || lead.id}`);
+          
           const aiResult = await generateSmartFirstContact({
             id: lead.id,
             name: lead.name,
@@ -123,7 +128,11 @@ export async function POST(
           
           if (!aiResult.success || !aiResult.message) {
             results.skipped++;
-            results.details.push({ lead: lead.name || lead.id, status: 'skipped', error: aiResult.error });
+            results.details.push({ 
+              lead: lead.name || lead.company || lead.id, 
+              status: 'skipped', 
+              error: aiResult.error || 'AI не смог сгенерировать сообщение'
+            });
             continue;
           }
           
@@ -135,20 +144,62 @@ export async function POST(
           results.details.push({ 
             lead: lead.name || lead.company || lead.id, 
             status: 'preview',
-            error: message.substring(0, 100) + '...'
+            message: message, // Полное сообщение для предпросмотра
           });
           results.sent++;
           continue;
         }
         
         // Реальная отправка
-        let sendResult: { success: boolean; error?: string; messageId?: string } = { success: false, error: 'Unknown channel' };
+        let sendResult: { success: boolean; error?: string; messageId?: string } = { 
+          success: false, 
+          error: 'Канал не поддерживается' 
+        };
         
         if (campaign.channel === 'sms' && lead.phone) {
           sendResult = await sendSMSViaGateway(lead.phone, message);
         } else if (campaign.channel === 'telegram' && lead.telegram) {
-          // TODO: Telegram отправка
-          sendResult = { success: false, error: 'Telegram sending not implemented yet' };
+          // Telegram Bot отправка
+          const settings = await prisma.cRMSettings.findFirst();
+          const botToken = settings?.telegramBotToken;
+          
+          if (botToken && lead.telegram) {
+            try {
+              // Telegram username может быть @username или chat_id
+              let chatId = lead.telegram;
+              if (chatId.startsWith('@')) {
+                // Бот может отвечать только тем, кто писал первым
+                // Для username нужен chat_id который сохраняется при первом контакте
+                sendResult = { 
+                  success: false, 
+                  error: 'Telegram: нужен chat_id (лид должен сначала написать боту)' 
+                };
+              } else {
+                const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    chat_id: chatId,
+                    text: message,
+                  }),
+                });
+                
+                const tgData = await tgRes.json();
+                if (tgData.ok) {
+                  sendResult = { success: true, messageId: String(tgData.result.message_id) };
+                } else {
+                  sendResult = { success: false, error: tgData.description || 'Telegram error' };
+                }
+              }
+            } catch (e) {
+              sendResult = { success: false, error: `Telegram error: ${e}` };
+            }
+          } else {
+            sendResult = { success: false, error: 'Telegram Bot не настроен' };
+          }
+        } else if (campaign.channel === 'email' && lead.email) {
+          // TODO: Email отправка
+          sendResult = { success: false, error: 'Email отправка не реализована' };
         }
         
         // Создаём касание
@@ -178,17 +229,26 @@ export async function POST(
             },
           });
           results.sent++;
-          results.details.push({ lead: lead.name || lead.id, status: 'sent' });
+          results.details.push({ 
+            lead: lead.name || lead.company || lead.id, 
+            status: 'sent',
+            message: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+          });
         } else {
           results.failed++;
-          results.details.push({ lead: lead.name || lead.id, status: 'failed', error: sendResult.error });
+          results.details.push({ 
+            lead: lead.name || lead.company || lead.id, 
+            status: 'failed', 
+            error: sendResult.error,
+            message: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+          });
         }
         
       } catch (error) {
         console.error(`[Campaign] Error processing lead ${lead.id}:`, error);
         results.failed++;
         results.details.push({ 
-          lead: lead.name || lead.id, 
+          lead: lead.name || lead.company || lead.id, 
           status: 'error', 
           error: error instanceof Error ? error.message : 'Unknown error' 
         });
@@ -196,21 +256,23 @@ export async function POST(
     }
     
     // Обновляем статистику кампании
-    const currentStats = (campaign.stats as any) || {};
-    await prisma.campaign.update({
-      where: { id: campaignId },
-      data: {
-        status: results.sent > 0 ? 'running' : 'paused',
-        stats: {
-          sent: (currentStats.sent || 0) + results.sent,
-          failed: (currentStats.failed || 0) + results.failed,
-          delivered: currentStats.delivered || 0,
-          opened: currentStats.opened || 0,
-          replied: currentStats.replied || 0,
-          total: (currentStats.total || 0) + leads.length,
+    if (!dryRun) {
+      const currentStats = (campaign.stats as any) || {};
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: {
+          status: results.sent > 0 ? 'running' : 'paused',
+          stats: {
+            sent: (currentStats.sent || 0) + results.sent,
+            failed: (currentStats.failed || 0) + results.failed,
+            delivered: currentStats.delivered || 0,
+            opened: currentStats.opened || 0,
+            replied: currentStats.replied || 0,
+            total: (currentStats.total || 0) + leads.length,
+          },
         },
-      },
-    });
+      });
+    }
     
     return NextResponse.json({
       success: true,
@@ -219,7 +281,7 @@ export async function POST(
       sent: results.sent,
       failed: results.failed,
       skipped: results.skipped,
-      details: results.details.slice(0, 10), // Первые 10 для UI
+      details: results.details, // Все результаты
       hasMore: leads.length === limit,
     });
     
@@ -231,4 +293,3 @@ export async function POST(
     }, { status: 500 });
   }
 }
-
