@@ -175,6 +175,15 @@ export default function CRMSettings() {
             onClick={() => setActiveTab('eskiz')}
             active={activeTab === 'eskiz'}
           />
+          <Link href="/crm/settings/integrations">
+            <StatusCard
+              title="🔌 Интеграции"
+              icon="📸"
+              status="connected"
+              description="Instagram, Сайт, Аналитика"
+              onClick={() => {}}
+            />
+          </Link>
           <Link href="/crm/settings/sms-devices">
             <StatusCard
               title="SMS Gateway"
