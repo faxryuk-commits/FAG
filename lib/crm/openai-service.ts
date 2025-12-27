@@ -12,6 +12,13 @@ import {
   COMMUNICATION_MODELS,
   MESSAGE_TEMPLATES_BY_MODEL,
 } from './communication-models';
+import {
+  selectEntryStrategy,
+  ENTRY_STRATEGIES,
+  FIRST_CONTACT_RULES,
+  FIRST_CONTACT_AI_PROMPT,
+  EntryStrategy,
+} from './entry-strategies';
 
 interface Lead {
   id: string;
@@ -51,6 +58,8 @@ interface GenerationResult {
   metadata?: {
     communicationModel?: string;
     communicationModelName?: string;
+    entryStrategy?: string;
+    entryStrategyName?: string;
   };
 }
 
@@ -63,7 +72,7 @@ async function getOpenAIConfig() {
   };
 }
 
-// Системный промпт для холодного outreach
+// Системный промпт для холодного outreach (СТАРЫЙ - для follow-up)
 const COLD_OUTREACH_PROMPT = `Ты - AI помощник менеджера по продажам в компании Delever.io.
 Delever.io - это SaaS платформа для ресторанов и кафе, которая помогает:
 - Принимать онлайн-заказы через сайт и приложение
@@ -86,6 +95,28 @@ Delever.io - это SaaS платформа для ресторанов и ка�
 Примеры хороших сообщений:
 - "Привет! Видел ваш ресторан на картах — отличные отзывы 🔥 Хотел предложить попробовать Delever — многие рестораны в Ташкенте уже используют для онлайн-заказов. Интересно было бы глянуть?"
 - "Привет! Мы помогаем ресторанам принимать заказы онлайн и увеличивать выручку на 20-30%. Видел что у вас нет доставки — это же упущенная выручка. Можем обсудить?"`;
+
+// ⚡ НОВЫЙ промпт для умного первого контакта
+const SMART_FIRST_CONTACT_PROMPT = `Ты опытный менеджер по продажам из Узбекистана. 
+Твоя задача — написать ПЕРВОЕ сообщение новому лиду.
+
+⚠️ КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА:
+
+❌ НИКОГДА:
+${FIRST_CONTACT_RULES.never.map(r => `- ${r}`).join('\n')}
+
+✅ ВСЕГДА:
+${FIRST_CONTACT_RULES.always.map(r => `- ${r}`).join('\n')}
+
+🎯 ТВОЯ ЦЕЛЬ В ПЕРВОМ КАСАНИИ:
+${FIRST_CONTACT_RULES.goals.map(r => `- ${r}`).join('\n')}
+
+КОНТЕКСТ:
+Ты продаёшь Delever.io — платформу для онлайн-заказов ресторанов.
+Но в ПЕРВОМ сообщении ты НЕ продаёшь! Ты устанавливаешь контакт.
+
+Пиши на русском с узбекскими словами (Салом, Ассалому алайкум, рахмат, ака, опа).
+Максимум 2-3 предложения. Разговорный стиль.`;
 
 // Системный промпт для обработки ответов
 const RESPONSE_HANDLER_PROMPT = `Ты - AI помощник менеджера по продажам в Delever.io.
@@ -110,7 +141,131 @@ const RESPONSE_HANDLER_PROMPT = `Ты - AI помощник менеджера �
 Ответь коротко, 1-3 предложения.`;
 
 /**
- * Генерация холодного сообщения с учётом культурной модели
+ * 🎯 УМНАЯ генерация первого контакта
+ * Использует стратегии входа и культурные модели
+ */
+export async function generateSmartFirstContact(lead: Lead): Promise<GenerationResult> {
+  const { apiKey, model } = await getOpenAIConfig();
+  
+  if (!apiKey) {
+    return { 
+      success: false, 
+      error: 'OpenAI API ключ не настроен. Перейдите в Настройки CRM.',
+    };
+  }
+
+  // 1. Выбираем стратегию входа
+  const strategy = selectEntryStrategy({
+    source: lead.source,
+    tags: lead.tags,
+    segment: lead.segment || undefined,
+    company: lead.company || undefined,
+    score: lead.score,
+  });
+
+  // 2. Выбираем модель коммуникации
+  const commModel = selectCommunicationModel(lead);
+
+  // 3. Формируем примеры из стратегии
+  const examples = strategy.openingTypes
+    .map(o => `- ${o.example}\n  (Психология: ${o.psychology})`)
+    .join('\n\n');
+
+  // 4. Формируем промпт
+  const userPrompt = `
+СТРАТЕГИЯ ВХОДА: ${strategy.name}
+${strategy.description}
+Методология: ${strategy.methodology}
+
+МОДЕЛЬ КОММУНИКАЦИИ: ${commModel.nameRu}
+Тональность: ${commModel.tone}
+Культурный стиль: ${commModel.cultureStyle}
+
+ДАННЫЕ О ЛИДЕ:
+- Имя: ${lead.firstName || 'Неизвестно'}
+- Компания: ${lead.company || 'Не указана'}
+- Сегмент: ${lead.segment || 'Не определён'}
+- Теги: ${lead.tags?.join(', ') || 'Нет'}
+- Источник: ${lead.source}
+- Скоринг: ${lead.score}/100
+
+ПРИМЕРЫ ХОРОШИХ ОТКРЫТИЙ ДЛЯ ЭТОЙ СТРАТЕГИИ:
+${examples}
+
+ДОПОЛНИТЕЛЬНЫЕ ПРАВИЛА ДЛЯ МОДЕЛИ "${commModel.nameRu}":
+${commModel.promptModifier}
+
+Напиши ОДНО сообщение для первого контакта. Только текст сообщения, без пояснений.
+`;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: SMART_FIRST_CONTACT_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 200,
+        temperature: 0.9, // Больше креативности
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return { 
+        success: false, 
+        error: `OpenAI ошибка: ${error.error?.message || 'Неизвестная ошибка'}`,
+      };
+    }
+
+    const data = await response.json();
+    const generatedMessage = data.choices[0]?.message?.content;
+
+    if (!generatedMessage) {
+      return { success: false, error: 'OpenAI не вернул сообщение' };
+    }
+
+    return {
+      success: true,
+      message: generatedMessage.trim(),
+      tokensUsed: data.usage?.total_tokens,
+      suggestedNextAction: `Ожидание ответа (follow-up через ${strategy.followUpDelay}ч)`,
+      metadata: {
+        communicationModel: commModel.id,
+        communicationModelName: commModel.nameRu,
+        entryStrategy: strategy.id,
+        entryStrategyName: strategy.name,
+      } as GenerationResult['metadata'],
+    };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: `Ошибка генерации: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`,
+    };
+  }
+}
+
+/**
+ * Получить список стратегий входа
+ */
+export function getEntryStrategies() {
+  return ENTRY_STRATEGIES.map(s => ({
+    id: s.id,
+    name: s.name,
+    description: s.description,
+    methodology: s.methodology,
+    successRate: s.successRate,
+  }));
+}
+
+/**
+ * Генерация холодного сообщения с учётом культурной модели (для follow-up и других этапов)
  */
 export async function generateOutreachMessage(options: GenerateMessageOptions): Promise<GenerationResult> {
   const { apiKey, model } = await getOpenAIConfig();

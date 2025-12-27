@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { generateOutreachMessage } from '@/lib/crm/openai-service';
+import { generateOutreachMessage, generateSmartFirstContact } from '@/lib/crm/openai-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,21 +48,32 @@ export async function POST(request: NextRequest) {
     }
     
     // Генерируем сообщение через OpenAI
-    const generation = await generateOutreachMessage({
-      lead: {
-        id: lead.id,
-        name: lead.name,
-        firstName: lead.firstName,
-        lastName: lead.lastName,
-        company: lead.company,
-        segment: lead.segment,
-        score: lead.score,
-        tags: lead.tags,
-        source: lead.source,
-      },
-      stage: stage as any,
-      channel: channel as any,
-    });
+    // Для первого контакта используем УМНУЮ стратегию
+    const leadData = {
+      id: lead.id,
+      name: lead.name,
+      firstName: lead.firstName,
+      lastName: lead.lastName,
+      company: lead.company,
+      segment: lead.segment,
+      score: lead.score,
+      tags: lead.tags,
+      source: lead.source,
+    };
+
+    let generation;
+    
+    if (stage === 'introduction') {
+      // 🎯 Умный первый контакт - НЕ продаём в лоб
+      generation = await generateSmartFirstContact(leadData);
+    } else {
+      // Для других стадий используем стандартный outreach
+      generation = await generateOutreachMessage({
+        lead: leadData,
+        stage: stage as any,
+        channel: channel as any,
+      });
+    }
 
     if (!generation.success) {
       return NextResponse.json({ 
@@ -89,6 +100,11 @@ export async function POST(request: NextRequest) {
             tags: lead.tags,
           },
           tokensUsed: generation.tokensUsed || 0,
+          // Сохраняем использованные стратегии
+          entryStrategy: generation.metadata?.entryStrategy,
+          entryStrategyName: generation.metadata?.entryStrategyName,
+          communicationModel: generation.metadata?.communicationModel,
+          communicationModelName: generation.metadata?.communicationModelName,
         },
       },
     });
@@ -118,6 +134,9 @@ export async function POST(request: NextRequest) {
           conversationId: conversation.id,
           generatedAt: new Date().toISOString(),
           suggestedNextAction: generation.suggestedNextAction,
+          // Стратегия и модель
+          entryStrategy: generation.metadata?.entryStrategy,
+          communicationModel: generation.metadata?.communicationModel,
         },
       },
     });
@@ -142,6 +161,8 @@ export async function POST(request: NextRequest) {
       // Флаг что сообщение готово к отправке
       readyToSend: true,
       channel,
+      // Метаданные о стратегии и модели
+      metadata: generation.metadata,
     });
     
   } catch (error) {

@@ -62,6 +62,12 @@ interface AIModalState {
     suggestedNextAction?: string;
     channel?: string;
     needsConfiguration?: boolean;
+    metadata?: {
+      entryStrategy?: string;
+      entryStrategyName?: string;
+      communicationModel?: string;
+      communicationModelName?: string;
+    };
   } | null;
 }
 
@@ -755,6 +761,22 @@ function AIRobotModal({ aiModal, onClose }: {
                   <span className="text-2xl">✅</span>
                   <span className="font-medium">Сообщение сгенерировано!</span>
                 </div>
+                
+                {/* Использованные стратегии */}
+                {aiModal.result.metadata && (
+                  <div className="flex flex-wrap gap-2">
+                    {aiModal.result.metadata.entryStrategyName && (
+                      <span className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded text-xs">
+                        🎯 {aiModal.result.metadata.entryStrategyName}
+                      </span>
+                    )}
+                    {aiModal.result.metadata.communicationModelName && (
+                      <span className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs">
+                        🎭 {aiModal.result.metadata.communicationModelName}
+                      </span>
+                    )}
+                  </div>
+                )}
                 
                 <div className="bg-white/5 rounded-lg p-4 border border-white/10">
                   <div className="text-white/60 text-sm mb-2">
