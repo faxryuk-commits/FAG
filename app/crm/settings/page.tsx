@@ -17,11 +17,13 @@ interface Settings {
     connected: boolean;
   };
   telegram: {
+    botToken: string;  // Telegram Bot API (простой вариант)
     sessionString: string;
     apiId: string;
     apiHash: string;
     phone: string;
     connected: boolean;
+    mode: 'bot' | 'user';  // Режим работы
   };
 }
 
@@ -35,7 +37,7 @@ export default function CRMSettings() {
   const [settings, setSettings] = useState<Settings>({
     openai: { apiKey: '', model: 'gpt-4o-mini', connected: false },
     eskiz: { email: '', password: '', sender: '4546', balance: 0, connected: false },
-    telegram: { sessionString: '', apiId: '', apiHash: '', phone: '', connected: false },
+    telegram: { botToken: '', sessionString: '', apiId: '', apiHash: '', phone: '', connected: false, mode: 'bot' },
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -308,77 +310,126 @@ export default function CRMSettings() {
           {activeTab === 'telegram' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-bold text-white mb-2">✈️ Telegram User Account</h2>
-                <p className="text-white/60 text-sm mb-6">
-                  Для рассылки сообщений от имени вашего Telegram аккаунта 
-                  (не бота!) требуется авторизация через MTProto.
+                <h2 className="text-xl font-bold text-white mb-2">✈️ Telegram Configuration</h2>
+                <p className="text-white/60 text-sm mb-4">
+                  Выберите способ отправки сообщений через Telegram
                 </p>
               </div>
               
-              <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-4 mb-6">
-                <h3 className="text-sky-400 font-medium mb-2">💡 Как настроить Telegram:</h3>
-                <ol className="text-white/70 text-sm space-y-1 list-decimal list-inside">
-                  <li>Зайдите на <a href="https://my.telegram.org" target="_blank" className="text-sky-400 underline">my.telegram.org</a></li>
-                  <li>Авторизуйтесь с вашим номером телефона</li>
-                  <li>Перейдите в "API development tools"</li>
-                  <li>Создайте приложение и получите API ID и API Hash</li>
-                  <li>Нажмите "Авторизовать Telegram" ниже для генерации session string</li>
-                </ol>
-                <p className="text-yellow-400 text-sm mt-3">⚠️ Лимит: ~50 сообщений в день новым контактам</p>
+              {/* Mode Switcher */}
+              <div className="flex bg-white/10 rounded-lg p-1 mb-6">
+                <button
+                  onClick={() => setSettings(s => ({ ...s, telegram: { ...s.telegram, mode: 'bot' } }))}
+                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    settings.telegram.mode === 'bot' 
+                      ? 'bg-sky-500 text-white' 
+                      : 'text-white/60 hover:text-white'
+                  }`}
+                >
+                  🤖 Bot API (проще)
+                </button>
+                <button
+                  onClick={() => setSettings(s => ({ ...s, telegram: { ...s.telegram, mode: 'user' } }))}
+                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    settings.telegram.mode === 'user' 
+                      ? 'bg-sky-500 text-white' 
+                      : 'text-white/60 hover:text-white'
+                  }`}
+                >
+                  👤 User Account (мощнее)
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-white/60 text-sm mb-2">API ID</label>
-                  <input
-                    type="text"
-                    value={settings.telegram.apiId}
-                    onChange={(e) => setSettings(s => ({ ...s, telegram: { ...s.telegram, apiId: e.target.value } }))}
-                    placeholder="12345678"
-                    className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-white/60 text-sm mb-2">API Hash</label>
-                  <input
-                    type="password"
-                    value={settings.telegram.apiHash}
-                    onChange={(e) => setSettings(s => ({ ...s, telegram: { ...s.telegram, apiHash: e.target.value } }))}
-                    placeholder="abcdef1234567890..."
-                    className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-              </div>
+              {/* Bot API Mode */}
+              {settings.telegram.mode === 'bot' && (
+                <>
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 mb-6">
+                    <h3 className="text-green-400 font-medium mb-2">💡 Telegram Bot API (рекомендуется):</h3>
+                    <ol className="text-white/70 text-sm space-y-1 list-decimal list-inside">
+                      <li>Откройте <a href="https://t.me/BotFather" target="_blank" className="text-green-400 underline">@BotFather</a> в Telegram</li>
+                      <li>Отправьте команду /newbot</li>
+                      <li>Придумайте имя и username для бота</li>
+                      <li>Скопируйте токен (вида 123456:ABC-DEF...)</li>
+                    </ol>
+                    <p className="text-green-400 text-sm mt-3">✅ Работает сразу, без лимитов на отправку</p>
+                    <p className="text-yellow-400 text-sm mt-1">⚠️ Бот может писать только тем, кто ему написал первым</p>
+                  </div>
 
-              <div>
-                <label className="block text-white/60 text-sm mb-2">Номер телефона</label>
-                <input
-                  type="tel"
-                  value={settings.telegram.phone}
-                  onChange={(e) => setSettings(s => ({ ...s, telegram: { ...s.telegram, phone: e.target.value } }))}
-                  placeholder="+998901234567"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500"
-                />
-              </div>
+                  <div>
+                    <label className="block text-white/60 text-sm mb-2">Bot Token от @BotFather</label>
+                    <input
+                      type="password"
+                      value={settings.telegram.botToken}
+                      onChange={(e) => setSettings(s => ({ ...s, telegram: { ...s.telegram, botToken: e.target.value } }))}
+                      placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+                      className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500 font-mono"
+                    />
+                  </div>
+                </>
+              )}
 
-              <div>
-                <label className="block text-white/60 text-sm mb-2">Session String (автогенерация)</label>
-                <textarea
-                  value={settings.telegram.sessionString}
-                  onChange={(e) => setSettings(s => ({ ...s, telegram: { ...s.telegram, sessionString: e.target.value } }))}
-                  placeholder="Будет сгенерирована после авторизации..."
-                  rows={3}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500 font-mono text-xs"
-                />
-              </div>
+              {/* User Account Mode */}
+              {settings.telegram.mode === 'user' && (
+                <>
+                  <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-4 mb-6">
+                    <h3 className="text-sky-400 font-medium mb-2">💡 User Account (MTProto):</h3>
+                    <ol className="text-white/70 text-sm space-y-1 list-decimal list-inside">
+                      <li>Зайдите на <a href="https://my.telegram.org" target="_blank" className="text-sky-400 underline">my.telegram.org</a></li>
+                      <li>Авторизуйтесь с вашим номером телефона</li>
+                      <li>Перейдите в "API development tools"</li>
+                      <li>Создайте приложение и получите API ID и API Hash</li>
+                    </ol>
+                    <p className="text-yellow-400 text-sm mt-3">⚠️ Лимит: ~50 сообщений в день новым контактам</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-white/60 text-sm mb-2">API ID</label>
+                      <input
+                        type="text"
+                        value={settings.telegram.apiId}
+                        onChange={(e) => setSettings(s => ({ ...s, telegram: { ...s.telegram, apiId: e.target.value } }))}
+                        placeholder="12345678"
+                        className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-white/60 text-sm mb-2">API Hash</label>
+                      <input
+                        type="password"
+                        value={settings.telegram.apiHash}
+                        onChange={(e) => setSettings(s => ({ ...s, telegram: { ...s.telegram, apiHash: e.target.value } }))}
+                        placeholder="abcdef1234567890..."
+                        className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-white/60 text-sm mb-2">Номер телефона</label>
+                    <input
+                      type="tel"
+                      value={settings.telegram.phone}
+                      onChange={(e) => setSettings(s => ({ ...s, telegram: { ...s.telegram, phone: e.target.value } }))}
+                      placeholder="+998901234567"
+                      className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-white/60 text-sm mb-2">Session String</label>
+                    <textarea
+                      value={settings.telegram.sessionString}
+                      onChange={(e) => setSettings(s => ({ ...s, telegram: { ...s.telegram, sessionString: e.target.value } }))}
+                      placeholder="Будет сгенерирована после авторизации..."
+                      rows={3}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500 font-mono text-xs"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="flex gap-2">
-                <button
-                  onClick={() => window.open('/crm/settings/telegram-auth', '_blank')}
-                  className="px-4 py-2 bg-sky-500/20 text-sky-400 rounded-lg hover:bg-sky-500/30 transition-all"
-                >
-                  🔐 Авторизовать Telegram
-                </button>
                 <button
                   onClick={() => testService('telegram')}
                   className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-all"

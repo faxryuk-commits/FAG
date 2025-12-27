@@ -176,18 +176,71 @@ async function sendTelegram(
     return { success: false, error: 'Telegram не указан' };
   }
 
-  if (!settings?.telegramSession) {
+  // Вариант 1: Bot API (если есть токен бота)
+  if (settings?.telegramBotToken) {
+    try {
+      // Определяем chat_id - если это username, нужно сначала получить id
+      let chatId = telegram;
+      
+      // Если это username (@username), используем его напрямую
+      // Но бот может писать только тем, кто ему написал первым!
+      if (telegram.startsWith('@')) {
+        chatId = telegram;
+      }
+
+      const response = await fetch(
+        `https://api.telegram.org/bot${settings.telegramBotToken}/sendMessage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: message,
+            parse_mode: 'HTML',
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.ok) {
+        return {
+          success: true,
+          messageId: data.result.message_id?.toString(),
+        };
+      } else {
+        // Типичная ошибка - бот не может писать первым
+        if (data.error_code === 403) {
+          return {
+            success: false,
+            error: 'Бот не может писать этому пользователю. Пользователь должен сначала написать боту.',
+          };
+        }
+        return {
+          success: false,
+          error: `Telegram: ${data.description || 'Ошибка отправки'}`,
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: `Ошибка: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`,
+      };
+    }
+  }
+
+  // Вариант 2: MTProto (user account)
+  if (settings?.telegramSession) {
+    // TODO: Реализовать отправку через gramjs/telegram MTProto
     return { 
       success: false, 
-      error: 'Telegram не авторизован. Перейдите в настройки для авторизации.',
+      error: 'MTProto отправка требует дополнительной настройки.',
     };
   }
 
-  // TODO: Реализовать отправку через gramjs/telegram MTProto
-  // Пока возвращаем ошибку что не реализовано
   return { 
     success: false, 
-    error: 'Telegram рассылка через user account требует дополнительной настройки. Свяжитесь с разработчиком.',
+    error: 'Telegram не настроен. Добавьте Bot Token или Session в настройках.',
   };
 }
 

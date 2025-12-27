@@ -42,11 +42,13 @@ export async function GET() {
           connected: !!(settings.eskizEmail && settings.eskizPassword),
         },
         telegram: {
+          botToken: settings.telegramBotToken ? '••••' + settings.telegramBotToken.slice(-4) : '',
           sessionString: settings.telegramSession ? '••••session••••' : '',
           apiId: settings.telegramApiId,
           apiHash: settings.telegramApiHash ? '••••' + settings.telegramApiHash.slice(-4) : '',
           phone: settings.telegramPhone,
-          connected: !!settings.telegramSession,
+          connected: !!(settings.telegramBotToken || settings.telegramSession),
+          mode: settings.telegramBotToken ? 'bot' : 'user',
         },
       },
     });
@@ -92,6 +94,9 @@ export async function POST(request: NextRequest) {
 
     // Telegram
     if (telegram) {
+      if (telegram.botToken && !telegram.botToken.includes('••••')) {
+        updateData.telegramBotToken = telegram.botToken;
+      }
       if (telegram.apiId) {
         updateData.telegramApiId = telegram.apiId;
       }

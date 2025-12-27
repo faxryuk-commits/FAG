@@ -29,7 +29,7 @@ export async function POST(
         return await testEskiz(settings.eskizEmail, settings.eskizPassword);
       
       case 'telegram':
-        return await testTelegram(settings.telegramSession);
+        return await testTelegram(settings);
       
       default:
         return NextResponse.json({ 
@@ -141,19 +141,44 @@ async function testEskiz(email: string | null, password: string | null) {
 }
 
 // Тест Telegram
-async function testTelegram(sessionString: string | null) {
-  if (!sessionString) {
+async function testTelegram(settings: any) {
+  // Проверяем Bot Token
+  if (settings?.telegramBotToken) {
+    try {
+      const response = await fetch(`https://api.telegram.org/bot${settings.telegramBotToken}/getMe`);
+      const data = await response.json();
+      
+      if (data.ok && data.result) {
+        return NextResponse.json({ 
+          success: true, 
+          message: `✅ Бот подключен: @${data.result.username}`,
+          botInfo: data.result,
+        });
+      } else {
+        return NextResponse.json({ 
+          success: false, 
+          message: `Ошибка: ${data.description || 'Неверный токен'}`,
+        });
+      }
+    } catch (error) {
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Ошибка подключения к Telegram API',
+      });
+    }
+  }
+  
+  // Проверяем Session String
+  if (settings?.telegramSession) {
     return NextResponse.json({ 
-      success: false, 
-      message: 'Session string не указан. Требуется авторизация.' 
+      success: true, 
+      message: '✅ Session найден. Авторизация активна.',
     });
   }
 
-  // TODO: Реализовать проверку через gramjs/telegram
-  // Пока возвращаем что сессия есть
   return NextResponse.json({ 
-    success: true, 
-    message: '✅ Session найден. Авторизация активна.',
+    success: false, 
+    message: 'Не настроен ни Bot Token, ни Session String',
   });
 }
 

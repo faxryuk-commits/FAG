@@ -1664,7 +1664,10 @@ model CRMSettings {
   eskizPassword   String?
   eskizSender     String   @default("4546")
   
-  // Telegram MTProto
+  // Telegram Bot API (простой вариант)
+  telegramBotToken String?  // Токен от @BotFather
+  
+  // Telegram MTProto (user account - сложный вариант)
   telegramApiId   String?
   telegramApiHash String?
   telegramPhone   String?
