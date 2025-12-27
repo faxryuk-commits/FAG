@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 
 interface Lead {
@@ -88,6 +88,8 @@ export default function CRMDashboard() {
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const ITEMS_PER_PAGE = 50;
+  const [sortKey, setSortKey] = useState<'company' | 'contact' | 'score' | 'status'>('company');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
     fetchData();
@@ -120,6 +122,44 @@ export default function CRMDashboard() {
   };
   
   const totalPages = Math.ceil(totalLeads / ITEMS_PER_PAGE);
+  const tableLeads = useMemo(() => {
+    const arr = [...leads];
+    arr.sort((a, b) => {
+      let va: any = '';
+      let vb: any = '';
+      switch (sortKey) {
+        case 'company':
+          va = a.company || a.name || '';
+          vb = b.company || b.name || '';
+          break;
+        case 'contact':
+          va = a.name || a.firstName || '';
+          vb = b.name || b.firstName || '';
+          break;
+        case 'score':
+          va = a.score || 0;
+          vb = b.score || 0;
+          break;
+        case 'status':
+          va = a.status || '';
+          vb = b.status || '';
+          break;
+      }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [leads, sortKey, sortDir]);
+
+  const toggleSort = (key: 'company' | 'contact' | 'score' | 'status') => {
+    if (sortKey === key) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
 
   const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {
@@ -400,18 +440,18 @@ export default function CRMDashboard() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/10 bg-white/[0.03]">
-                    <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Компания</th>
-                    <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Контакт</th>
+                    <HeaderButton label="Компания" active={sortKey === 'company'} dir={sortDir} onClick={() => toggleSort('company')} />
+                    <HeaderButton label="Контакт" active={sortKey === 'contact'} dir={sortDir} onClick={() => toggleSort('contact')} />
                     <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Телефон</th>
                     <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Telegram</th>
                     <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Сегмент</th>
-                    <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Скор</th>
-                    <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Статус</th>
+                    <HeaderButton label="Скор" active={sortKey === 'score'} dir={sortDir} onClick={() => toggleSort('score')} className="text-right" />
+                    <HeaderButton label="Статус" active={sortKey === 'status'} dir={sortDir} onClick={() => toggleSort('status')} />
                     <th className="px-4 py-3 text-left text-white/50 text-xs font-medium">Действия</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {leads.map((lead, idx) => {
+                  {tableLeads.map((lead, idx) => {
                     const segment = lead.segment ? SEGMENTS[lead.segment as keyof typeof SEGMENTS] : null;
                     const stage = PIPELINE.find(p => p.id === lead.status);
                     return (
@@ -946,6 +986,30 @@ function channelIcon(channel?: string) {
     default:
       return '💬';
   }
+}
+
+function HeaderButton({ label, active, dir, onClick, className }: { 
+  label: string; 
+  active: boolean; 
+  dir: 'asc' | 'desc'; 
+  onClick: () => void; 
+  className?: string;
+}) {
+  return (
+    <th 
+      className={`px-4 py-3 text-left text-white/50 text-xs font-medium ${className || ''}`}
+    >
+      <button
+        onClick={onClick}
+        className="flex items-center gap-1 text-white/80 hover:text-white transition-colors"
+      >
+        <span>{label}</span>
+        <span className="text-[10px] text-white/40">
+          {active ? (dir === 'asc' ? '▲' : '▼') : '△'}
+        </span>
+      </button>
+    </th>
+  );
 }
 
 // AI Modal
