@@ -91,21 +91,25 @@ async function handleDirectMessage(event: any) {
   
   if (!senderId || !message) return;
 
-  // Ищем или создаём лида
-  let lead = await prisma.lead.findFirst({
+  // Ищем лида по всем полям (instagramId хранится в telegram поле временно)
+  const allLeads = await prisma.lead.findMany({
     where: {
       OR: [
-        { metadata: { path: ['instagramId'], equals: senderId } },
-        { telegram: senderId }, // временно используем поле telegram для IG id
+        { telegram: senderId },
+        { telegram: { contains: senderId } },
       ],
     },
+    take: 1,
   });
+  
+  let lead = allLeads[0] || null;
 
   if (!lead) {
     // Создаём нового лида из Instagram
     lead = await prisma.lead.create({
       data: {
         name: event.sender?.name || `Instagram User ${senderId.slice(-6)}`,
+        telegram: `ig_${senderId}`, // Храним IG ID с префиксом
         source: 'instagram_dm',
         status: 'new',
         segment: 'warm',
@@ -152,17 +156,24 @@ async function handleComment(data: any) {
   
   if (!from?.id) return;
 
-  // Ищем или создаём лида
-  let lead = await prisma.lead.findFirst({
+  // Ищем лида по telegram полю (где храним IG ID)
+  const allLeads = await prisma.lead.findMany({
     where: {
-      metadata: { path: ['instagramId'], equals: from.id },
+      OR: [
+        { telegram: from.id },
+        { telegram: `ig_${from.id}` },
+      ],
     },
+    take: 1,
   });
+  
+  let lead = allLeads[0] || null;
 
   if (!lead) {
     lead = await prisma.lead.create({
       data: {
         name: from.username || `IG User ${from.id.slice(-6)}`,
+        telegram: `ig_${from.id}`,
         source: 'instagram_comment',
         status: 'new',
         segment: 'cold',
