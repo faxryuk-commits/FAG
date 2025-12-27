@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
+import { useSession, signOut } from 'next-auth/react';
 
 // Динамический импорт карты (отключаем SSR)
 const RestaurantMap = dynamic(() => import('@/components/RestaurantMap'), {
@@ -208,6 +209,7 @@ function getTimeGreeting() {
 }
 
 export default function Home() {
+  const { data: session } = useSession();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -655,17 +657,74 @@ export default function Home() {
                 {theme === 'dark' ? '☀️' : '🌙'}
               </button>
               
-              {/* Админка */}
-              <Link 
-                href="/admin" 
-                className={`p-1.5 rounded-lg text-sm transition-all ${
-                  theme === 'dark'
-                    ? 'bg-white/5 text-white/50 hover:bg-white/10'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                }`}
-              >
-                ⚙️
-              </Link>
+              {/* Аккаунт / Вход */}
+              {session ? (
+                <div className="relative group">
+                  <button className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-all ${
+                    theme === 'dark'
+                      ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30'
+                      : 'bg-purple-100 text-purple-600 hover:bg-purple-200'
+                  }`}>
+                    <span>👤</span>
+                    <span className="hidden sm:inline max-w-[80px] truncate">
+                      {session.user?.name || session.user?.email?.split('@')[0]}
+                    </span>
+                  </button>
+                  {/* Выпадающее меню */}
+                  <div className={`absolute right-0 top-full mt-1 w-48 rounded-xl border shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all ${
+                    theme === 'dark' 
+                      ? 'bg-slate-800 border-white/10' 
+                      : 'bg-white border-gray-200'
+                  }`}>
+                    <div className={`px-3 py-2 border-b text-xs ${
+                      theme === 'dark' ? 'border-white/10 text-white/60' : 'border-gray-100 text-gray-500'
+                    }`}>
+                      {session.user?.email}
+                    </div>
+                    <Link href="/account" className={`block px-3 py-2 text-sm hover:bg-white/5 ${
+                      theme === 'dark' ? 'text-white' : 'text-gray-700 hover:bg-gray-50'
+                    }`}>
+                      📦 Мои заказы
+                    </Link>
+                    {(session.user as any)?.role === 'merchant' && (
+                      <Link href="/merchant" className={`block px-3 py-2 text-sm hover:bg-white/5 ${
+                        theme === 'dark' ? 'text-white' : 'text-gray-700 hover:bg-gray-50'
+                      }`}>
+                        🏪 Мой ресторан
+                      </Link>
+                    )}
+                    {(session.user as any)?.role === 'admin' && (
+                      <Link href="/admin" className={`block px-3 py-2 text-sm hover:bg-white/5 ${
+                        theme === 'dark' ? 'text-white' : 'text-gray-700 hover:bg-gray-50'
+                      }`}>
+                        ⚙️ Админка
+                      </Link>
+                    )}
+                    <button 
+                      onClick={() => signOut()}
+                      className={`w-full text-left px-3 py-2 text-sm border-t ${
+                        theme === 'dark' 
+                          ? 'border-white/10 text-red-400 hover:bg-red-500/10' 
+                          : 'border-gray-100 text-red-500 hover:bg-red-50'
+                      }`}
+                    >
+                      🚪 Выйти
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <Link 
+                  href="/auth/login"
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    theme === 'dark'
+                      ? 'bg-purple-600 text-white hover:bg-purple-500'
+                      : 'bg-purple-500 text-white hover:bg-purple-600'
+                  }`}
+                >
+                  <span>👤</span>
+                  <span className="hidden sm:inline">Войти</span>
+                </Link>
+              )}
             </div>
           </div>
           
