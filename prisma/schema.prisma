@@ -586,7 +586,7 @@ model Order {
   user            User?    @relation(fields: [userId], references: [id])
   
   // Номер заказа для отображения
-  orderNumber     String?  @unique
+  orderNumber     String?
   
   // Тип заказа
   orderType       String   // delivery, pickup, reservation

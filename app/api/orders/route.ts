@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { createConnector } from '@/lib/integrations/connector';
 
 /**
  * API для управления заказами
@@ -139,6 +140,19 @@ export async function POST(request: NextRequest) {
       },
     });
     
+    // 🔌 Интеграции: уведомления и отправка в POS
+    try {
+      const connector = createConnector(body.restaurantId);
+      await connector.processNewOrder({
+        ...order,
+        orderNumber,
+        restaurantName: restaurant.name,
+      });
+    } catch (integrationError) {
+      // Не блокируем создание заказа из-за ошибки интеграций
+      console.error('Integration error:', integrationError);
+    }
+
     return NextResponse.json({
       success: true,
       message: getOrderMessage(body.orderType),

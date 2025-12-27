@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions, checkMerchantAccess } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { createConnector } from '@/lib/integrations/connector';
 
 export async function GET(request: NextRequest) {
   try {
@@ -91,7 +92,13 @@ export async function PATCH(request: NextRequest) {
       data: updateData,
     });
 
-    // TODO: Отправить уведомление клиенту
+    // 🔌 Отправляем уведомление клиенту через интеграции
+    try {
+      const connector = createConnector(order.restaurantId);
+      await connector.processOrderStatusChange(updatedOrder, status);
+    } catch (integrationError) {
+      console.error('Integration error:', integrationError);
+    }
 
     return NextResponse.json({ success: true, order: updatedOrder });
   } catch (error) {
