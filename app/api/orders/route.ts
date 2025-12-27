@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { createConnector } from '@/lib/integrations/connector';
 
@@ -54,6 +56,10 @@ interface CreateOrderInput {
 // POST - создать заказ
 export async function POST(request: NextRequest) {
   try {
+    // Получаем сессию (опционально - заказ можно создать и без авторизации)
+    const session = await getServerSession(authOptions);
+    const userId = session?.user ? (session.user as any).id : null;
+    
     const body: CreateOrderInput = await request.json();
     
     // Валидация
@@ -97,6 +103,7 @@ export async function POST(request: NextRequest) {
     const order = await prisma.order.create({
       data: {
         restaurantId: body.restaurantId,
+        userId, // Привязка к пользователю
         orderNumber,
         orderType: body.orderType,
         status: 'pending',

@@ -208,14 +208,30 @@ function getTimeGreeting() {
   return { text: 'Доброй ночи', meal: 'Перекус?', emoji: '🌙' };
 }
 
+// Интерфейс активного заказа
+interface ActiveOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  orderType: string;
+  total: number;
+  restaurant?: {
+    name: string;
+    slug: string;
+  };
+}
+
 export default function Home() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [selectedCuisine, setSelectedCuisine] = useState<string | null>(null);
+  
+  // Активные заказы пользователя
+  const [activeOrders, setActiveOrders] = useState<ActiveOrder[]>([]);
   
   // Поиск с подсказками
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -241,6 +257,26 @@ export default function Home() {
   
   // Режим отображения: список или карта
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  
+  // Загружаем активные заказы при авторизации
+  useEffect(() => {
+    if (sessionStatus === 'authenticated') {
+      fetchActiveOrders();
+      // Обновляем каждые 30 секунд
+      const interval = setInterval(fetchActiveOrders, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [sessionStatus]);
+  
+  const fetchActiveOrders = async () => {
+    try {
+      const res = await fetch('/api/orders/my?active=true');
+      const data = await res.json();
+      setActiveOrders(data.orders || []);
+    } catch (error) {
+      console.error('Error fetching active orders:', error);
+    }
+  };
   
   useEffect(() => {
     setGreeting(getTimeGreeting());
@@ -656,6 +692,31 @@ export default function Home() {
               >
                 {theme === 'dark' ? '☀️' : '🌙'}
               </button>
+              
+              {/* Активный заказ */}
+              {activeOrders.length > 0 && (
+                <Link
+                  href="/account"
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium animate-pulse transition-all ${
+                    theme === 'dark'
+                      ? 'bg-orange-500/20 text-orange-300 hover:bg-orange-500/30'
+                      : 'bg-orange-100 text-orange-600 hover:bg-orange-200'
+                  }`}
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                  </span>
+                  <span className="hidden sm:inline">
+                    {activeOrders[0].status === 'pending' && '⏳ Ожидает'}
+                    {activeOrders[0].status === 'confirmed' && '✅ Подтверждён'}
+                    {activeOrders[0].status === 'preparing' && '👨‍🍳 Готовится'}
+                    {activeOrders[0].status === 'ready' && '✨ Готов'}
+                    {activeOrders[0].status === 'on_the_way' && '🚗 В пути'}
+                  </span>
+                  <span className="sm:hidden">📦</span>
+                </Link>
+              )}
               
               {/* Аккаунт / Вход */}
               {session ? (
