@@ -183,6 +183,7 @@ async function checkPhonesTelegram(
   // Динамический импорт telegram библиотеки
   const { TelegramClient, Api } = await import('telegram');
   const { StringSession } = await import('telegram/sessions');
+  const bigInt = (await import('big-integer')).default;
   
   const result: CheckResult = {
     total: phones.length,
@@ -211,7 +212,7 @@ async function checkPhonesTelegram(
       try {
         // Формируем контакты для импорта используя Api класс
         const contacts = batch.map((p, idx) => new Api.InputPhoneContact({
-          clientId: BigInt(idx),
+          clientId: bigInt(idx),
           phone: p.phone.replace(/[^\d+]/g, ''), // Очищаем номер
           firstName: `Lead_${p.id.slice(0, 8)}`,
           lastName: '',
@@ -268,7 +269,7 @@ async function checkPhonesTelegram(
               .filter((u): u is Api.User => 'accessHash' in u)
               .map((u) => new Api.InputUser({
                 userId: u.id,
-                accessHash: u.accessHash || BigInt(0),
+                accessHash: u.accessHash || bigInt(0),
               }));
             
             if (userIds.length > 0) {
