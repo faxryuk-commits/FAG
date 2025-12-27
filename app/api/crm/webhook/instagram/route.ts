@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const challenge = searchParams.get('hub.challenge');
 
   // Получаем verify token из настроек (или используем дефолтный)
-  let verifyToken = 'delever_instagram_2024'; // Default token
+  let verifyToken = 'delever_instagram_2024';
   try {
     const settings = await prisma.cRMSettings.findFirst();
     if (settings?.instagramVerifyToken) {
@@ -22,14 +22,12 @@ export async function GET(request: NextRequest) {
     console.log('Using default verify token');
   }
 
-  console.log(`Instagram webhook verify: mode=${mode}, token=${token}, expected=${verifyToken}`);
-
   if (mode === 'subscribe' && token === verifyToken) {
     console.log('✅ Instagram webhook verified');
     return new NextResponse(challenge, { status: 200 });
   }
 
-  return NextResponse.json({ error: 'Forbidden', received: token, expected: verifyToken }, { status: 403 });
+  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
 // POST - Получение событий от Instagram
@@ -39,7 +37,6 @@ export async function POST(request: NextRequest) {
     
     console.log('📸 Instagram webhook received:', JSON.stringify(body, null, 2));
 
-    // Обрабатываем разные типы событий
     if (body.object === 'instagram') {
       for (const entry of body.entry || []) {
         // Direct Messages
@@ -49,21 +46,18 @@ export async function POST(request: NextRequest) {
           }
         }
         
-        // Comments
+        // Comments, mentions и т.д.
         if (entry.changes) {
           for (const change of entry.changes) {
             if (change.field === 'comments') {
               await handleComment(change.value);
-            }
-            if (change.field === 'mentions') {
-              await handleMention(change.value);
             }
           }
         }
       }
     }
 
-    // Lead Ads (реклама с формой)
+    // Lead Ads
     if (body.object === 'page') {
       for (const entry of body.entry || []) {
         if (entry.changes) {
@@ -84,79 +78,140 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Обработка Direct сообщений
+// Получить информацию о пользователе из Instagram API
+async function fetchInstagramUserInfo(userId: string): Promise<{ name?: string; username?: string; avatarUrl?: string }> {
+  try {
+    const settings = await prisma.cRMSettings.findFirst();
+    if (!settings?.instagramAccessToken) {
+      return {};
+    }
+
+    // Получаем информацию о пользователе
+    const response = await fetch(
+      `https://graph.facebook.com/v18.0/${userId}?fields=name,username,profile_pic&access_token=${settings.instagramAccessToken}`
+    );
+    const data = await response.json();
+
+    if (data.error) {
+      console.log('Could not fetch user info:', data.error.message);
+      return {};
+    }
+
+    return {
+      name: data.name,
+      username: data.username,
+      avatarUrl: data.profile_pic,
+    };
+  } catch (error) {
+    console.log('Error fetching Instagram user info:', error);
+    return {};
+  }
+}
+
+// Обработка Direct сообщений - создаём Conversation
 async function handleDirectMessage(event: any) {
-  console.log('📩 handleDirectMessage called:', JSON.stringify(event));
+  console.log('📩 handleDirectMessage:', JSON.stringify(event));
   
   const senderId = event.sender?.id;
   const message = event.message;
   
   if (!senderId || !message) {
-    console.log('❌ Missing senderId or message:', { senderId, message });
+    console.log('❌ Missing senderId or message');
     return;
   }
   
   try {
-
-  // Ищем лида по всем полям (instagramId хранится в telegram поле временно)
-  const allLeads = await prisma.lead.findMany({
-    where: {
-      OR: [
-        { telegram: senderId },
-        { telegram: { contains: senderId } },
-      ],
-    },
-    take: 1,
-  });
-  
-  let lead = allLeads[0] || null;
-
-  if (!lead) {
-    // Создаём нового лида из Instagram
-    lead = await prisma.lead.create({
-      data: {
-        name: event.sender?.name || `Instagram User ${senderId.slice(-6)}`,
-        telegram: `ig_${senderId}`, // Храним IG ID с префиксом
-        source: 'instagram_dm',
-        status: 'new',
-        segment: 'warm',
-        score: 55,
-        metadata: {
-          instagramId: senderId,
-          instagramUsername: event.sender?.username,
+    // Ищем или создаём диалог
+    let conversation = await prisma.conversation.findUnique({
+      where: {
+        channel_externalId: {
+          channel: 'instagram',
+          externalId: senderId,
         },
       },
     });
-  }
 
-  // Создаём touch
-  await prisma.touch.create({
-    data: {
-      leadId: lead.id,
-      channel: 'instagram',
-      direction: 'inbound',
-      content: message.text || '[медиа]',
-      status: 'completed',
-      performedBy: 'instagram',
-      metadata: {
-        messageId: message.mid,
-        attachments: message.attachments,
+    // Если диалога нет - создаём новый
+    if (!conversation) {
+      // Подтягиваем информацию о пользователе
+      const userInfo = await fetchInstagramUserInfo(senderId);
+      
+      conversation = await prisma.conversation.create({
+        data: {
+          channel: 'instagram',
+          externalId: senderId,
+          name: userInfo.name || `Instagram User ${senderId.slice(-6)}`,
+          username: userInfo.username,
+          avatarUrl: userInfo.avatarUrl,
+          status: 'new',
+          unreadCount: 1,
+          lastMessageAt: new Date(),
+          lastMessageText: message.text || '[медиа]',
+          lastMessageBy: 'user',
+          profileData: userInfo,
+        },
+      });
+      
+      console.log('✅ New conversation created:', conversation.id);
+    } else {
+      // Обновляем существующий диалог
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          unreadCount: { increment: 1 },
+          lastMessageAt: new Date(),
+          lastMessageText: message.text || '[медиа]',
+          lastMessageBy: 'user',
+          status: conversation.status === 'closed' ? 'active' : conversation.status,
+        },
+      });
+    }
+
+    // Добавляем сообщение в диалог
+    await prisma.chatMessage.create({
+      data: {
+        conversationId: conversation.id,
+        direction: 'inbound',
+        content: message.text || '[медиа]',
+        contentType: message.attachments ? 'media' : 'text',
+        mediaUrl: message.attachments?.[0]?.payload?.url,
+        status: 'received',
+        externalId: message.mid,
+        metadata: {
+          attachments: message.attachments,
+        },
       },
-    },
-  });
+    });
 
-  // Повышаем скор за активность
-  await prisma.lead.update({
-    where: { id: lead.id },
-    data: {
-      score: Math.min(100, lead.score + 5),
-      lastContactAt: new Date(),
-    },
-  });
+    // Если диалог привязан к лиду - создаём touch
+    if (conversation.leadId) {
+      await prisma.touch.create({
+        data: {
+          leadId: conversation.leadId,
+          channel: 'instagram',
+          direction: 'inbound',
+          content: message.text || '[медиа]',
+          status: 'completed',
+          performedBy: 'instagram',
+          metadata: {
+            messageId: message.mid,
+            conversationId: conversation.id,
+          },
+        },
+      });
+      
+      // Обновляем лида
+      await prisma.lead.update({
+        where: { id: conversation.leadId },
+        data: {
+          lastContactAt: new Date(),
+          score: { increment: 5 },
+        },
+      });
+    }
 
-  console.log(`📩 Instagram DM from ${senderId}: ${message.text?.slice(0, 50)}...`);
-  console.log('✅ Lead created/updated:', lead.id);
-  
+    console.log(`📩 Instagram DM saved: ${message.text?.slice(0, 50)}...`);
+
   } catch (error) {
     console.error('❌ Error in handleDirectMessage:', error);
   }
@@ -168,71 +223,71 @@ async function handleComment(data: any) {
   
   if (!from?.id) return;
 
-  // Ищем лида по telegram полю (где храним IG ID)
-  const allLeads = await prisma.lead.findMany({
-    where: {
-      OR: [
-        { telegram: from.id },
-        { telegram: `ig_${from.id}` },
-      ],
-    },
-    take: 1,
-  });
-  
-  let lead = allLeads[0] || null;
-
-  if (!lead) {
-    lead = await prisma.lead.create({
-      data: {
-        name: from.username || `IG User ${from.id.slice(-6)}`,
-        telegram: `ig_${from.id}`,
-        source: 'instagram_comment',
-        status: 'new',
-        segment: 'cold',
-        score: 35,
-        metadata: {
-          instagramId: from.id,
-          instagramUsername: from.username,
+  try {
+    // Ищем или создаём диалог для комментатора
+    let conversation = await prisma.conversation.findUnique({
+      where: {
+        channel_externalId: {
+          channel: 'instagram',
+          externalId: from.id,
         },
       },
     });
-  }
 
-  // Создаём touch
-  await prisma.touch.create({
-    data: {
-      leadId: lead.id,
-      channel: 'instagram',
-      direction: 'inbound',
-      content: `💬 Комментарий: ${text}`,
-      status: 'completed',
-      performedBy: 'instagram',
-      metadata: {
-        commentId: id,
-        mediaId: media?.id,
-        mediaUrl: media?.permalink,
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: {
+          channel: 'instagram',
+          externalId: from.id,
+          name: from.username || `IG User ${from.id.slice(-6)}`,
+          username: from.username,
+          status: 'new',
+          unreadCount: 1,
+          lastMessageAt: new Date(),
+          lastMessageText: `💬 ${text}`,
+          lastMessageBy: 'user',
+          tags: ['comment'],
+        },
+      });
+    } else {
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          unreadCount: { increment: 1 },
+          lastMessageAt: new Date(),
+          lastMessageText: `💬 ${text}`,
+          lastMessageBy: 'user',
+        },
+      });
+    }
+
+    // Добавляем сообщение
+    await prisma.chatMessage.create({
+      data: {
+        conversationId: conversation.id,
+        direction: 'inbound',
+        content: `💬 Комментарий к посту: ${text}`,
+        contentType: 'text',
+        status: 'received',
+        externalId: id,
+        metadata: {
+          type: 'comment',
+          mediaId: media?.id,
+          mediaUrl: media?.permalink,
+        },
       },
-    },
-  });
+    });
 
-  console.log(`💬 Instagram comment from ${from.username}: ${text?.slice(0, 50)}...`);
+    console.log(`💬 Instagram comment from ${from.username}: ${text?.slice(0, 50)}...`);
+
+  } catch (error) {
+    console.error('Error handling comment:', error);
+  }
 }
 
-// Обработка упоминаний
-async function handleMention(data: any) {
-  const { media_id, comment_id } = data;
-  
-  // Создаём touch с упоминанием
-  // Нужен дополнительный API-запрос для получения деталей
-  console.log(`🏷️ Instagram mention: media=${media_id}, comment=${comment_id}`);
-}
-
-// Обработка Lead Ads (реклама с формой)
+// Обработка Lead Ads (реклама с формой) - создаём сразу лида (горячий)
 async function handleLeadAd(data: any) {
   const { leadgen_id, page_id, form_id, created_time } = data;
-  
-  // Для получения данных лида нужен дополнительный API запрос
-  // GET /{leadgen_id}?access_token={page_access_token}
   
   const settings = await prisma.cRMSettings.findFirst();
   if (!settings?.instagramAccessToken) {
@@ -241,7 +296,6 @@ async function handleLeadAd(data: any) {
   }
 
   try {
-    // Получаем данные лида
     const response = await fetch(
       `https://graph.facebook.com/v18.0/${leadgen_id}?access_token=${settings.instagramAccessToken}`
     );
@@ -252,13 +306,12 @@ async function handleLeadAd(data: any) {
       return;
     }
 
-    // Парсим поля формы
     const fieldData: Record<string, string> = {};
     for (const field of leadData.field_data || []) {
       fieldData[field.name] = field.values?.[0] || '';
     }
 
-    // Создаём лида в CRM
+    // Lead Ads = горячий лид, создаём сразу в CRM
     const lead = await prisma.lead.create({
       data: {
         name: fieldData.full_name || fieldData.name || null,
@@ -269,8 +322,9 @@ async function handleLeadAd(data: any) {
         company: fieldData.company_name || fieldData.company || null,
         source: 'instagram_lead_ad',
         status: 'new',
-        segment: 'hot', // Lead Ads = горячий лид
-        score: 75,
+        segment: 'hot',
+        score: 80,
+        tags: ['instagram', 'lead_ad', 'hot'],
         metadata: {
           leadgenId: leadgen_id,
           formId: form_id,
@@ -281,7 +335,6 @@ async function handleLeadAd(data: any) {
       },
     });
 
-    // Создаём touch
     await prisma.touch.create({
       data: {
         leadId: lead.id,
@@ -297,10 +350,9 @@ async function handleLeadAd(data: any) {
       },
     });
 
-    console.log(`🎯 Instagram Lead Ad: ${fieldData.full_name || 'Unknown'} - ${fieldData.email || fieldData.phone}`);
+    console.log(`🎯 Instagram Lead Ad: ${fieldData.full_name || 'Unknown'}`);
 
   } catch (error) {
     console.error('Error processing lead ad:', error);
   }
 }
-

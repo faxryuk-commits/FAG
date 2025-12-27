@@ -1256,6 +1256,9 @@ model Lead {
   // Заметки
   notes           LeadNote[]
   
+  // Связанные диалоги (чаты)
+  conversations   Conversation[]
+  
   // Временные метки
   lastContactAt   DateTime?
   nextActionAt    DateTime?
@@ -1337,6 +1340,92 @@ model Touch {
   @@index([status])
   @@index([campaignId])
   @@map("touches")
+}
+
+// Входящий диалог (чат) - до квалификации в лида
+model Conversation {
+  id              String   @id @default(cuid())
+  
+  // Канал и идентификаторы
+  channel         String   // instagram, telegram, whatsapp, website_chat
+  externalId      String   // ID пользователя в канале (Instagram ID, Telegram ID, etc.)
+  
+  // Профиль собеседника
+  name            String?  // Имя (подтягиваем из API)
+  username        String?  // Username (@username)
+  avatarUrl       String?  // Фото профиля
+  profileData     Json?    // Дополнительные данные профиля
+  
+  // Статус диалога
+  status          String   @default("new") // new, active, qualified, spam, closed
+  
+  // Привязка к лиду (после квалификации)
+  leadId          String?
+  lead            Lead?    @relation(fields: [leadId], references: [id])
+  
+  // Ответственный менеджер
+  assignedTo      String?
+  
+  // Статистика
+  unreadCount     Int      @default(1)
+  lastMessageAt   DateTime @default(now())
+  lastMessageText String?  @db.Text
+  lastMessageBy   String?  // user, us
+  
+  // Теги
+  tags            String[]
+  
+  // Метаданные
+  metadata        Json?
+  
+  // Сообщения в диалоге
+  messages        ChatMessage[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([channel, externalId])
+  @@index([status])
+  @@index([channel])
+  @@index([lastMessageAt])
+  @@index([leadId])
+  @@map("conversations")
+}
+
+// Сообщение в диалоге
+model ChatMessage {
+  id              String   @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  // Направление
+  direction       String   // inbound (от клиента), outbound (от нас)
+  
+  // Содержимое
+  content         String   @db.Text
+  contentType     String   @default("text") // text, image, video, audio, file, sticker
+  
+  // Медиа
+  mediaUrl        String?
+  mediaType       String?
+  
+  // Статус доставки
+  status          String   @default("sent") // pending, sent, delivered, read, failed
+  
+  // Внешние ID
+  externalId      String?  // ID сообщения в Instagram/Telegram
+  
+  // Кто отправил (для outbound)
+  sentBy          String?  // userId или "ai"
+  
+  // Метаданные
+  metadata        Json?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("chat_messages")
 }
 
 // AI Диалог (история общения с AI-роботом)
