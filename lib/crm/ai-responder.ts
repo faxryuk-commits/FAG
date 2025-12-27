@@ -184,7 +184,7 @@ export async function generateAIResponse(context: ConversationContext): Promise<
           segment: context.leadData.segment,
           company: context.leadData.company,
         })
-      : COMMUNICATION_MODELS.friendly;
+      : COMMUNICATION_MODELS.find(m => m.id === 'friendly_modern') || COMMUNICATION_MODELS[0];
 
     // Формируем промпт
     const systemPrompt = `${AI_ASSISTANT_PROMPT}
