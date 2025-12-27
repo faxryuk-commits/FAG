@@ -1,26 +1,58 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
 
 export default function ImportPage() {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [source, setSource] = useState('amocrm');
+  const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      setResult(null);
+    }
+  };
 
   const handleImport = async () => {
     setImporting(true);
     setResult(null);
     
     try {
-      const res = await fetch('/api/crm/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source }),
-      });
-      
-      const data = await res.json();
-      setResult(data);
+      if (source === 'amocrm') {
+        if (!file) {
+          setResult({ error: 'Выберите файл Excel для импорта' });
+          setImporting(false);
+          return;
+        }
+        
+        // Загружаем файл через FormData
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('source', 'amocrm');
+        
+        const res = await fetch('/api/crm/import/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        const data = await res.json();
+        setResult(data);
+      } else {
+        // Для других источников - обычный JSON запрос
+        const res = await fetch('/api/crm/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source }),
+        });
+        
+        const data = await res.json();
+        setResult(data);
+      }
     } catch (error) {
       setResult({ error: 'Import failed' });
     } finally {
@@ -87,15 +119,51 @@ export default function ImportPage() {
           </div>
 
           {source === 'amocrm' && (
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-6">
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">📋</span>
-                <div>
-                  <div className="font-medium text-yellow-400">Файл AmoCRM готов к импорту</div>
-                  <div className="text-sm text-white/60 mt-1">
-                    Найден файл: <code className="bg-white/10 px-2 py-0.5 rounded">amocrm_export_contacts_2025-12-27.xlsx</code>
+            <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-6 mb-6">
+              <div className="flex items-start gap-4">
+                <span className="text-3xl">📊</span>
+                <div className="flex-1">
+                  <div className="font-medium text-purple-400 mb-3">Загрузите Excel файл из AmoCRM</div>
+                  
+                  {/* File Upload */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                  />
+                  
+                  <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
+                      file 
+                        ? 'border-green-500/50 bg-green-500/10' 
+                        : 'border-white/20 hover:border-purple-500/50 hover:bg-white/5'
+                    }`}
+                  >
+                    {file ? (
+                      <div>
+                        <div className="text-4xl mb-2">✅</div>
+                        <div className="text-white font-medium">{file.name}</div>
+                        <div className="text-white/50 text-sm mt-1">
+                          {(file.size / 1024).toFixed(1)} KB • Нажмите чтобы выбрать другой
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="text-4xl mb-2">📁</div>
+                        <div className="text-white">Нажмите или перетащите файл</div>
+                        <div className="text-white/50 text-sm mt-1">
+                          Поддерживаемые форматы: .xlsx, .xls, .csv
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-sm text-white/60">~887 контактов будут импортированы</div>
+                  
+                  <div className="mt-4 text-sm text-white/50">
+                    💡 <strong>Как получить файл:</strong> AmoCRM → Контакты → Экспорт → Excel
+                  </div>
                 </div>
               </div>
             </div>
@@ -141,34 +209,66 @@ export default function ImportPage() {
                 <div className="text-red-400">
                   <div className="text-lg font-bold mb-2">❌ Ошибка импорта</div>
                   <div>{result.error}</div>
+                  {result.details && (
+                    <div className="mt-2 text-sm text-white/50 bg-white/5 p-3 rounded font-mono">
+                      {result.details}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-green-400">
                   <div className="text-lg font-bold mb-4">✅ Импорт завершён!</div>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-white/60">Импортировано:</span>
-                      <span className="ml-2 font-bold">{result.imported}</span>
+                  
+                  {/* Основная статистика */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <div className="text-white/50 text-xs">Новых</div>
+                      <div className="text-2xl font-bold text-green-400">{result.imported}</div>
                     </div>
-                    <div>
-                      <span className="text-white/60">Пропущено:</span>
-                      <span className="ml-2 font-bold">{result.skipped}</span>
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <div className="text-white/50 text-xs">Обновлено</div>
+                      <div className="text-2xl font-bold text-blue-400">{result.updated || 0}</div>
                     </div>
-                    <div>
-                      <span className="text-white/60">Ошибок:</span>
-                      <span className="ml-2 font-bold">{result.errors}</span>
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <div className="text-white/50 text-xs">Пропущено</div>
+                      <div className="text-2xl font-bold text-yellow-400">{result.skipped}</div>
                     </div>
-                    <div>
-                      <span className="text-white/60">Время:</span>
-                      <span className="ml-2 font-bold">{result.duration}с</span>
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <div className="text-white/50 text-xs">Ошибок</div>
+                      <div className="text-2xl font-bold text-red-400">{result.errors}</div>
                     </div>
+                  </div>
+                  
+                  {/* Статистика по телефонам */}
+                  {(result.mobilePhones !== undefined || result.landlinePhones !== undefined) && (
+                    <div className="bg-white/5 rounded-lg p-4 mb-4">
+                      <div className="text-white/60 text-sm mb-2">📱 Статистика телефонов:</div>
+                      <div className="grid grid-cols-3 gap-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span>📱</span>
+                          <span className="text-white">Мобильных: <strong>{result.mobilePhones || 0}</strong></span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span>☎️</span>
+                          <span className="text-yellow-400">Стационарных: <strong>{result.landlinePhones || 0}</strong></span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span>❌</span>
+                          <span className="text-white/50">Без телефона: <strong>{result.noPhone || 0}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="text-white/50 text-sm mb-4">
+                    Время: {result.duration}с • Всего строк: {result.total}
                   </div>
                   
                   <Link 
                     href="/crm"
-                    className="mt-4 inline-block px-6 py-2 bg-white/10 hover:bg-white/20 rounded-lg font-medium text-white transition-all"
+                    className="inline-block px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-lg font-medium text-white transition-all"
                   >
-                    Перейти к лидам →
+                    🎯 Перейти к лидам →
                   </Link>
                 </div>
               )}
