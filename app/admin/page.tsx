@@ -5039,12 +5039,24 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              className="px-4 py-2 text-white/70 hover:text-white transition-colors"
-            >
-              ← На сайт
-            </Link>
+            {/* Навигация по страницам */}
+            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+              <Link href="/" className="px-3 py-1.5 text-white/60 hover:text-white hover:bg-white/10 rounded-md text-sm transition">
+                🏠 Главная
+              </Link>
+              <Link href="/account" className="px-3 py-1.5 text-white/60 hover:text-white hover:bg-white/10 rounded-md text-sm transition">
+                👤 Кабинет
+              </Link>
+              <Link href="/merchant" className="px-3 py-1.5 text-white/60 hover:text-white hover:bg-white/10 rounded-md text-sm transition">
+                🏪 Мерчант
+              </Link>
+              <Link href="/merchant/integrations" className="px-3 py-1.5 text-white/60 hover:text-white hover:bg-white/10 rounded-md text-sm transition">
+                🔌 Интеграции
+              </Link>
+              <Link href="/auth/login" className="px-3 py-1.5 text-white/60 hover:text-white hover:bg-white/10 rounded-md text-sm transition">
+                🔐 Вход
+              </Link>
+            </div>
             <button
               onClick={handleLogout}
               className="px-4 py-2 bg-red-500/20 text-red-300 hover:bg-red-500/30 rounded-lg transition-colors text-sm"
