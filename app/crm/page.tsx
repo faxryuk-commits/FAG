@@ -46,6 +46,12 @@ interface DashboardStats {
   coldLeads: number;
 }
 
+interface TelegramStats {
+  totalMobile: number;
+  withTelegram: number;
+  telegramCoverage: string;
+}
+
 const PIPELINE = [
   { id: 'new', label: 'Новые', icon: '🆕', color: 'from-blue-500 to-cyan-500', action: 'Написать первое сообщение' },
   { id: 'contacted', label: 'Контакт', icon: '💬', color: 'from-yellow-500 to-orange-500', action: 'Дождаться ответа' },
@@ -66,6 +72,7 @@ export default function CRMDashboard() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [pipelineStats, setPipelineStats] = useState<PipelineStats | null>(null);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+  const [telegramStats, setTelegramStats] = useState<TelegramStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -83,19 +90,22 @@ export default function CRMDashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [leadsRes, statsRes] = await Promise.all([
+      const [leadsRes, statsRes, tgRes] = await Promise.all([
         fetch(`/api/crm/leads?search=${searchQuery}&limit=300`),
         fetch('/api/crm/stats'),
+        fetch('/api/crm/telegram/check-contacts'),
       ]);
       
       const leadsData = await leadsRes.json();
       const statsData = await statsRes.json();
+      const tgData = await tgRes.json().catch(() => null);
       
       setLeads(leadsData.leads || []);
       setHasMore(leadsData.hasMore || false);
       setTotalLeads(leadsData.total || 0);
       setPipelineStats(statsData.pipeline || null);
       setDashboardStats(statsData.dashboard || null);
+      setTelegramStats(tgData);
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -193,7 +203,7 @@ export default function CRMDashboard() {
             <div className="flex items-center gap-2">
               <NavButton href="/crm/monitor" icon="📡" label="Монитор" pulse />
               <NavButton href="/crm/campaigns" icon="🚀" label="Рассылки" gradient />
-              <NavButton href="/crm/analytics" icon="📊" label="Аналитика" />
+              <NavButton href="/crm/telegram-finder" icon="✈️" label="TG Finder" />
               <NavButton href="/crm/import" icon="📥" label="Импорт" />
               <NavButton href="/crm/settings" icon="⚙️" label="Настройки" />
             </div>
@@ -210,7 +220,13 @@ export default function CRMDashboard() {
             <StatCard icon="🔥" value={dashboardStats.hotLeads} label="Hot" color="red" />
             <StatCard icon="☀️" value={dashboardStats.warmLeads} label="Warm" color="orange" />
             <StatCard icon="❄️" value={dashboardStats.coldLeads} label="Cold" color="blue" />
-            <StatCard icon="💬" value={dashboardStats.todayTouches} label="Касаний" />
+            <StatCard 
+              icon="✈️" 
+              value={telegramStats?.withTelegram || 0} 
+              label="Telegram" 
+              color="sky"
+              href="/crm/telegram-finder"
+            />
             <StatCard icon="⭐" value={Math.round(dashboardStats.avgScore)} label="Ср.балл" />
             <StatCard icon="📈" value={`${dashboardStats.conversionRate.toFixed(1)}%`} label="Конверсия" color="purple" />
           </div>
@@ -338,11 +354,12 @@ function NavButton({ href, icon, label, pulse, gradient }: {
 }
 
 // Stat Card
-function StatCard({ icon, value, label, color }: { 
+function StatCard({ icon, value, label, color, href }: { 
   icon: string; 
   value: string | number; 
   label: string; 
   color?: string;
+  href?: string;
 }) {
   const colorClasses = {
     green: 'text-green-400',
@@ -350,10 +367,11 @@ function StatCard({ icon, value, label, color }: {
     orange: 'text-orange-400',
     blue: 'text-blue-400',
     purple: 'text-purple-400',
+    sky: 'text-sky-400',
   };
   
-  return (
-    <div className="bg-white/[0.03] border border-white/5 rounded-xl p-3 hover:bg-white/[0.05] transition-all group">
+  const content = (
+    <div className={`bg-white/[0.03] border border-white/5 rounded-xl p-3 hover:bg-white/[0.05] transition-all group ${href ? 'cursor-pointer' : ''}`}>
       <div className="flex items-center gap-2 mb-1">
         <span className="text-lg group-hover:scale-110 transition-transform">{icon}</span>
         <span className={`text-xl font-bold ${color ? colorClasses[color as keyof typeof colorClasses] : 'text-white'}`}>
@@ -363,6 +381,11 @@ function StatCard({ icon, value, label, color }: {
       <div className="text-white/40 text-xs">{label}</div>
     </div>
   );
+  
+  if (href) {
+    return <Link href={href}>{content}</Link>;
+  }
+  return content;
 }
 
 // Lead Card
