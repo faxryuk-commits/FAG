@@ -179,8 +179,11 @@ export async function generateAIResponse(context: ConversationContext): Promise<
     }));
 
     // Выбираем модель коммуникации
-    const commModel = context.leadData?.segment 
-      ? selectCommunicationModel(context.leadData.segment, context.leadData.company ? ['restaurant'] : [])
+    const commModel = context.leadData 
+      ? selectCommunicationModel({
+          segment: context.leadData.segment,
+          company: context.leadData.company,
+        })
       : COMMUNICATION_MODELS.friendly;
 
     // Формируем промпт
