@@ -39,8 +39,8 @@ export async function POST(request: NextRequest) {
         type: data.type || 'cold_outreach',
         channel: data.channel || 'telegram',
         status: 'draft',
-        segment: data.segment ? { segment: data.segment } : null,
-        templateId: data.templateId || null,
+        segment: data.segment ? { segment: data.segment } : undefined,
+        templateId: data.templateId || undefined,
       },
     });
     
