@@ -273,7 +273,7 @@ async function sendTelegram(
       await client.connect();
       
       // telegram может быть @username или phone number / chat_id
-      let peer: string | Api.TypeInputPeer = telegram;
+      let peer: any = telegram;
       if (!telegram.startsWith('@')) {
         peer = telegram.replace(/[^\d]/g, '');
       }
