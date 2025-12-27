@@ -1263,6 +1263,7 @@ model Lead {
   
   // Дополнительные данные из AmoCRM
   amoCrmData      Json?     // Все поля из AmoCRM
+  metadata        Json?     // Произвольные метаданные (Instagram ID, etc.)
   
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
