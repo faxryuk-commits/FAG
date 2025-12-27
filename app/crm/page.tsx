@@ -531,6 +531,8 @@ export default function CRMDashboard() {
           lead={aiModal.lead}
           loading={aiModal.loading}
           result={aiModal.result}
+          sending={sending}
+          onSend={sendAIMessage}
           onClose={() => setAiModal({ open: false, lead: null, loading: false, result: null })}
         />
       )}
@@ -811,10 +813,12 @@ function InfoBlock({ label, value, icon }: { label: string; value: string | null
 }
 
 // AI Modal
-function AIModal({ lead, loading, result, onClose }: {
+function AIModal({ lead, loading, result, sending, onSend, onClose }: {
   lead: Lead | null;
   loading: boolean;
   result: any;
+  sending: boolean;
+  onSend: () => void;
   onClose: () => void;
 }) {
   return (
@@ -865,7 +869,7 @@ function AIModal({ lead, loading, result, onClose }: {
                   
                   <div className="flex gap-2">
                     <button 
-                      onClick={sendAIMessage}
+                      onClick={onSend}
                       disabled={sending}
                       className="flex-1 px-4 py-2 bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white rounded-xl transition-all flex items-center justify-center gap-2"
                     >
@@ -876,7 +880,7 @@ function AIModal({ lead, loading, result, onClose }: {
                         </>
                       ) : (
                         <>
-                          {aiModal.lead?.telegram ? '✈️ Telegram' : '📱 SMS'}
+                          {lead?.telegram ? '✈️ Telegram' : '📱 SMS'}
                           <span>Отправить</span>
                         </>
                       )}
