@@ -2254,6 +2254,309 @@ const REFRESH_OPTIONS = [
   { id: 'full', label: 'Всё сразу', desc: 'Полное обновление', cost: '$0.017' },
 ];
 
+// Компонент аналитики ресторана
+function RestaurantAnalytics({ restaurantId }: { restaurantId: string }) {
+  const [data, setData] = useState<{
+    totals?: {
+      views: number;
+      cardViews: number;
+      calls: number;
+      routeClicks: number;
+      shares: number;
+      menuViews: number;
+      websiteClicks: number;
+      favorites: number;
+    };
+    funnel?: {
+      listToCard: number;
+      cardToEngage: number;
+      engageToIntent: number;
+    };
+    chart?: Array<{
+      date: string;
+      views: number;
+      cardViews: number;
+      calls: number;
+      routes: number;
+    }>;
+    comparison?: {
+      competitorsCount: number;
+      yourViews: number;
+      avgCompetitorViews: number;
+      viewsVsAvg: number;
+      rank: number;
+    };
+    recommendations?: Array<{
+      type: string;
+      priority: string;
+      title: string;
+      description: string;
+      impact: string;
+    }>;
+    peakHours?: number[];
+    peakDays?: number[];
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
+
+  const DAYS_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
+  useEffect(() => {
+    fetchStats();
+  }, [restaurantId, period]);
+
+  const fetchStats = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/analytics/restaurant/${restaurantId}?period=${period}`);
+      if (res.ok) {
+        const result = await res.json();
+        setData(result);
+      } else {
+        const err = await res.json();
+        setError(err.message || 'Ошибка загрузки');
+      }
+    } catch (err) {
+      setError('Не удалось загрузить аналитику');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-8 text-white/40">
+        <div className="animate-spin text-2xl mb-2">⏳</div>
+        Загрузка аналитики...
+      </div>
+    );
+  }
+
+  if (error || !data?.totals) {
+    return (
+      <div className="text-center py-8 text-white/40">
+        <div className="text-3xl mb-2">📊</div>
+        {error || 'Нет данных аналитики'}
+        <div className="text-xs mt-2 text-white/30">
+          Данные появятся когда пользователи начнут просматривать этот ресторан
+        </div>
+      </div>
+    );
+  }
+
+  const { totals, funnel, chart, comparison, recommendations, peakHours, peakDays } = data;
+
+  return (
+    <div className="space-y-4">
+      {/* Период */}
+      <div className="flex gap-2">
+        {(['7d', '30d', '90d'] as const).map(p => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={`px-3 py-1.5 rounded-lg text-sm ${
+              period === p ? 'bg-blue-500 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'
+            }`}
+          >
+            {p === '7d' ? '7 дней' : p === '30d' ? '30 дней' : '90 дней'}
+          </button>
+        ))}
+      </div>
+
+      {/* Основные метрики */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">👁️</span>
+            <div>
+              <div className="text-xl font-bold text-blue-400">{totals.views.toLocaleString()}</div>
+              <div className="text-xs text-white/40">Показы в списке</div>
+            </div>
+          </div>
+        </div>
+        <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🖱️</span>
+            <div>
+              <div className="text-xl font-bold text-purple-400">{totals.cardViews.toLocaleString()}</div>
+              <div className="text-xs text-white/40">Открытия карточки</div>
+            </div>
+          </div>
+        </div>
+        <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">📞</span>
+            <div>
+              <div className="text-xl font-bold text-green-400">{totals.calls.toLocaleString()}</div>
+              <div className="text-xs text-white/40">Звонки</div>
+            </div>
+          </div>
+        </div>
+        <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🗺️</span>
+            <div>
+              <div className="text-xl font-bold text-orange-400">{totals.routeClicks.toLocaleString()}</div>
+              <div className="text-xs text-white/40">Маршруты</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Дополнительные метрики */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+          <div className="flex items-center gap-2">
+            <span>🍽️</span>
+            <div>
+              <div className="text-lg font-bold text-white">{totals.menuViews}</div>
+              <div className="text-xs text-white/40">Меню</div>
+            </div>
+          </div>
+        </div>
+        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+          <div className="flex items-center gap-2">
+            <span>🌐</span>
+            <div>
+              <div className="text-lg font-bold text-white">{totals.websiteClicks}</div>
+              <div className="text-xs text-white/40">Сайт</div>
+            </div>
+          </div>
+        </div>
+        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+          <div className="flex items-center gap-2">
+            <span>📤</span>
+            <div>
+              <div className="text-lg font-bold text-white">{totals.shares}</div>
+              <div className="text-xs text-white/40">Шеры</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Воронка конверсии */}
+      {funnel && (
+        <div className="p-4 rounded-lg bg-gradient-to-r from-blue-500/10 to-green-500/10 border border-white/10">
+          <h4 className="text-sm font-medium text-white/60 mb-3">📈 Воронка конверсии</h4>
+          <div className="flex items-center gap-4 text-sm">
+            <div className="text-center">
+              <div className="text-white/40 text-xs">Показ→Карточка</div>
+              <div className="text-xl font-bold text-blue-400">{funnel.listToCard}%</div>
+            </div>
+            <div className="text-white/20">→</div>
+            <div className="text-center">
+              <div className="text-white/40 text-xs">Карточка→Интерес</div>
+              <div className="text-xl font-bold text-purple-400">{funnel.cardToEngage}%</div>
+            </div>
+            <div className="text-white/20">→</div>
+            <div className="text-center">
+              <div className="text-white/40 text-xs">Интерес→Действие</div>
+              <div className="text-xl font-bold text-green-400">{funnel.engageToIntent}%</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Сравнение с конкурентами */}
+      {comparison && comparison.competitorsCount > 0 && (
+        <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+          <h4 className="text-sm font-medium text-white/60 mb-3">🏆 Сравнение с конкурентами</h4>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div className="text-2xl font-bold text-white">#{comparison.rank}</div>
+              <div className="text-xs text-white/40">Позиция из {comparison.competitorsCount}</div>
+            </div>
+            <div>
+              <div className={`text-2xl font-bold ${comparison.viewsVsAvg >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {comparison.viewsVsAvg >= 0 ? '+' : ''}{comparison.viewsVsAvg}%
+              </div>
+              <div className="text-xs text-white/40">vs среднее</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-white">{comparison.avgCompetitorViews}</div>
+              <div className="text-xs text-white/40">среднее у конкурентов</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Пиковое время */}
+      {((peakHours && peakHours.length > 0) || (peakDays && peakDays.length > 0)) && (
+        <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+          <h4 className="text-sm font-medium text-white/60 mb-2">⏰ Когда вас ищут</h4>
+          <div className="flex gap-4 text-sm">
+            {peakHours && peakHours.length > 0 && (
+              <div>
+                <span className="text-white/40">Часы: </span>
+                <span className="text-white">{peakHours.map(h => `${h}:00`).join(', ')}</span>
+              </div>
+            )}
+            {peakDays && peakDays.length > 0 && (
+              <div>
+                <span className="text-white/40">Дни: </span>
+                <span className="text-white">{peakDays.map(d => DAYS_RU[d]).join(', ')}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Рекомендации */}
+      {recommendations && recommendations.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-white/60">💡 Рекомендации</h4>
+          {recommendations.slice(0, 3).map((rec, i) => (
+            <div key={i} className={`p-3 rounded-lg border ${
+              rec.priority === 'high' ? 'bg-red-500/10 border-red-500/20' :
+              rec.priority === 'medium' ? 'bg-yellow-500/10 border-yellow-500/20' :
+              'bg-white/5 border-white/10'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-white text-sm">{rec.title}</span>
+                <span className="text-xs text-green-400">{rec.impact}</span>
+              </div>
+              <p className="text-xs text-white/50 mt-1">{rec.description}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* График по дням */}
+      {chart && chart.length > 0 && (
+        <div>
+          <h4 className="text-sm font-medium text-white/60 mb-2">📅 По дням</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-white/40 border-b border-white/10">
+                  <th className="text-left py-2 px-2">Дата</th>
+                  <th className="text-right py-2 px-2">👁️</th>
+                  <th className="text-right py-2 px-2">🖱️</th>
+                  <th className="text-right py-2 px-2">📞</th>
+                  <th className="text-right py-2 px-2">🗺️</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chart.slice(-7).reverse().map(day => (
+                  <tr key={day.date} className="border-b border-white/5 text-white/70">
+                    <td className="py-2 px-2">{new Date(day.date).toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' })}</td>
+                    <td className="text-right py-2 px-2">{day.views}</td>
+                    <td className="text-right py-2 px-2">{day.cardViews}</td>
+                    <td className="text-right py-2 px-2 text-green-400">{day.calls}</td>
+                    <td className="text-right py-2 px-2 text-orange-400">{day.routes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Компонент истории изменений
 function ChangeHistory({ restaurantId }: { restaurantId: string }) {
   const [logs, setLogs] = useState<Array<{
@@ -2416,7 +2719,7 @@ function RestaurantAccordionCard({
   const [editedData, setEditedData] = useState<Partial<RestaurantDetail>>({});
   const [editedHours, setEditedHours] = useState<RestaurantDetail['workingHours']>([]);
   const [refreshResult, setRefreshResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<'edit' | 'photos' | 'menu' | 'reviews' | 'history'>('edit');
+  const [activeTab, setActiveTab] = useState<'edit' | 'analytics' | 'photos' | 'menu' | 'reviews' | 'history'>('edit');
   const [newMenuItem, setNewMenuItem] = useState({ name: '', price: '', category: '' });
 
   const DAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
@@ -2627,6 +2930,7 @@ function RestaurantAccordionCard({
               <div className="flex border-b border-white/10 px-4">
                 {[
                   { id: 'edit', label: '✏️ Редактирование', count: null },
+                  { id: 'analytics', label: '📊 Аналитика', count: null },
                   { id: 'photos', label: '📷 Фото', count: detail.images?.length || 0 },
                   { id: 'menu', label: '🍽️ Меню', count: detail.menuItems?.length || 0 },
                   { id: 'reviews', label: '💬 Отзывы', count: detail.reviews?.length || 0 },
@@ -2747,6 +3051,11 @@ function RestaurantAccordionCard({
                       </div>
                     </div>
                   </div>
+                )}
+
+                {/* TAB: Аналитика */}
+                {activeTab === 'analytics' && (
+                  <RestaurantAnalytics restaurantId={detail.id} />
                 )}
 
                 {/* TAB: Фото */}
