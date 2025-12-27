@@ -142,7 +142,7 @@ export async function POST(
         }
         
         // Реальная отправка
-        let sendResult = { success: false, error: 'Unknown channel' };
+        let sendResult: { success: boolean; error?: string; messageId?: string } = { success: false, error: 'Unknown channel' };
         
         if (campaign.channel === 'sms' && lead.phone) {
           sendResult = await sendSMSViaGateway(lead.phone, message);
