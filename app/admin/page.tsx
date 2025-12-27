@@ -4794,20 +4794,7 @@ export default function AdminPage() {
   const [activeSource, setActiveSource] = useState<string>('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'parsing' | 'management'>('parsing');
-  const [googleApiUsage, setGoogleApiUsage] = useState<{
-    currentMonth: {
-      year: number;
-      month: number;
-      requests: number;
-      cost: number;
-      freeLimit: number;
-      remainingFree: number;
-      usagePercent: number;
-    };
-    previousMonth: { requests: number; cost: number };
-    allTime: { requests: number; cost: number };
-  } | null>(null);
+  const [activeTab, setActiveTab] = useState<'parsing'>('parsing');
   
   // Проверка сессии при загрузке
   useEffect(() => {
@@ -4848,19 +4835,6 @@ export default function AdminPage() {
     }
   };
 
-  // Загрузка использования Google Places API
-  const fetchGoogleApiUsage = async () => {
-    try {
-      const res = await fetch('/api/usage');
-      if (res.ok) {
-        const data = await res.json();
-        setGoogleApiUsage(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch Google API usage:', error);
-    }
-  };
-
   const fetchJobs = async () => {
     try {
       const res = await fetch('/api/sync');
@@ -4891,9 +4865,6 @@ export default function AdminPage() {
     
     // Загрузка использования Apify
     fetchApifyUsage();
-    
-    // Загрузка использования Google API
-    fetchGoogleApiUsage();
     
     // Начальная загрузка задач
     fetchJobs();
@@ -5108,114 +5079,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Google Places API Usage Banner */}
-        <div className="mb-6 bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-teal-500/20 backdrop-blur-xl rounded-2xl border border-green-500/30 p-4">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🌍</span>
-              <div>
-                <div className="text-white font-bold">Google Places API</div>
-                <div className="text-white/60 text-sm">Точечное обновление (в 60x дешевле!)</div>
-              </div>
-            </div>
-            
-            {googleApiUsage ? (
-              <>
-                <div className="flex-1 max-w-md mx-4">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-white/70">
-                      ${googleApiUsage.currentMonth.cost.toFixed(2)} / ${googleApiUsage.currentMonth.freeLimit}
-                    </span>
-                    <span className={`font-medium ${googleApiUsage.currentMonth.usagePercent > 80 ? 'text-red-400' : googleApiUsage.currentMonth.usagePercent > 50 ? 'text-yellow-400' : 'text-green-400'}`}>
-                      {googleApiUsage.currentMonth.usagePercent.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-500 ${
-                        googleApiUsage.currentMonth.usagePercent > 80 
-                          ? 'bg-gradient-to-r from-red-500 to-orange-500' 
-                          : googleApiUsage.currentMonth.usagePercent > 50 
-                            ? 'bg-gradient-to-r from-yellow-500 to-orange-500'
-                            : 'bg-gradient-to-r from-green-500 to-emerald-500'
-                      }`}
-                      style={{ width: `${Math.min(100, googleApiUsage.currentMonth.usagePercent)}%` }}
-                    />
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-6">
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-emerald-400">{googleApiUsage.currentMonth.requests}</div>
-                    <div className="text-xs text-white/50">Запросов</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-green-400">${googleApiUsage.currentMonth.remainingFree.toFixed(0)}</div>
-                    <div className="text-xs text-white/50">Осталось</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-teal-400">{Math.floor(googleApiUsage.currentMonth.remainingFree / 0.017).toLocaleString()}</div>
-                    <div className="text-xs text-white/50">Обновлений</div>
-                  </div>
-                  <button
-                    onClick={fetchGoogleApiUsage}
-                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-colors"
-                    title="Обновить"
-                  >
-                    🔄
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center gap-4 text-white/60">
-                <span>$0.017 за обновление</span>
-                <span>•</span>
-                <span>$200/мес бесплатно</span>
-                <span>•</span>
-                <span className="text-green-400">~11,700 обновлений</span>
-              </div>
-            )}
-          </div>
-          
-          {googleApiUsage && googleApiUsage.allTime.requests > 0 && (
-            <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-white/50">
-              <span>
-                Всего: {googleApiUsage.allTime.requests.toLocaleString()} запросов (${googleApiUsage.allTime.cost.toFixed(2)})
-              </span>
-              {googleApiUsage.previousMonth.requests > 0 && (
-                <span>
-                  Прошлый месяц: {googleApiUsage.previousMonth.requests} (${googleApiUsage.previousMonth.cost.toFixed(2)})
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Вкладки навигации */}
-        <div className="mb-6 flex gap-2">
-          <button
-            onClick={() => setActiveTab('parsing')}
-            className={`px-6 py-3 rounded-xl font-medium text-sm transition-all ${
-              activeTab === 'parsing'
-                ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30'
-                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-            }`}
-          >
-            🔍 Парсинг данных
-          </button>
-          <button
-            onClick={() => setActiveTab('management')}
-            className={`px-6 py-3 rounded-xl font-medium text-sm transition-all ${
-              activeTab === 'management'
-                ? 'bg-green-500 text-white shadow-lg shadow-green-500/30'
-                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-            }`}
-          >
-            🎯 Управление ресторанами
-          </button>
-        </div>
-
-        {/* Контент вкладки Парсинг */}
+        {/* Контент */}
         {activeTab === 'parsing' && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           
@@ -6114,77 +5978,6 @@ export default function AdminPage() {
         </div>
         )}
 
-        {/* Контент вкладки Управление ресторанами */}
-        {activeTab === 'management' && (
-          <div className="space-y-6">
-            {/* Заголовок */}
-            <div className="bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-teal-500/20 backdrop-blur-xl rounded-2xl border border-green-500/30 p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-14 h-14 bg-green-500/20 rounded-2xl flex items-center justify-center text-3xl">
-                  🎯
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white">Управление ресторанами</h2>
-                  <p className="text-white/60">
-                    Точечное обновление данных через Google Places API
-                  </p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white/5 rounded-xl p-4 text-center">
-                  <div className="text-3xl font-bold text-green-400">$0.017</div>
-                  <div className="text-xs text-white/50 mt-1">за обновление</div>
-                </div>
-                <div className="bg-white/5 rounded-xl p-4 text-center">
-                  <div className="text-3xl font-bold text-emerald-400">60x</div>
-                  <div className="text-xs text-white/50 mt-1">дешевле Apify</div>
-                </div>
-                <div className="bg-white/5 rounded-xl p-4 text-center">
-                  <div className="text-3xl font-bold text-teal-400">$200</div>
-                  <div className="text-xs text-white/50 mt-1">бесплатно/мес</div>
-                </div>
-                <div className="bg-white/5 rounded-xl p-4 text-center">
-                  <div className="text-3xl font-bold text-cyan-400">~11.7k</div>
-                  <div className="text-xs text-white/50 mt-1">обновлений</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Что обновляется */}
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-              <h3 className="text-lg font-bold text-white mb-4">📦 Что обновляется за $0.017:</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <div className="flex items-center gap-2 text-white/70">
-                  <span className="text-green-400">✅</span> Рейтинг
-                </div>
-                <div className="flex items-center gap-2 text-white/70">
-                  <span className="text-green-400">✅</span> Количество отзывов
-                </div>
-                <div className="flex items-center gap-2 text-white/70">
-                  <span className="text-green-400">✅</span> Телефон
-                </div>
-                <div className="flex items-center gap-2 text-white/70">
-                  <span className="text-green-400">✅</span> Сайт
-                </div>
-                <div className="flex items-center gap-2 text-white/70">
-                  <span className="text-green-400">✅</span> Время работы
-                </div>
-                <div className="flex items-center gap-2 text-white/70">
-                  <span className="text-green-400">✅</span> Ценовая категория
-                </div>
-              </div>
-              <div className="mt-4 pt-4 border-t border-white/10 text-sm text-white/50">
-                💡 Фото обновляются отдельно: $0.007 за каждое
-              </div>
-            </div>
-
-            {/* Основной блок управления */}
-            <div className="bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-6">
-              <RestaurantManagementPanel />
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Модальное окно мониторинга */}
