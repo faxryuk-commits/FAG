@@ -1,9 +1,17 @@
 /**
  * OpenAI Service для CRM
  * Генерация персонализированных сообщений для продаж
+ * Адаптировано под культуру Узбекистана
  */
 
 import { prisma } from '@/lib/prisma';
+import { 
+  selectCommunicationModel, 
+  applyModelToPrompt, 
+  CommunicationModel,
+  COMMUNICATION_MODELS,
+  MESSAGE_TEMPLATES_BY_MODEL,
+} from './communication-models';
 
 interface Lead {
   id: string;
@@ -23,6 +31,7 @@ interface GenerateMessageOptions {
   channel: 'telegram' | 'sms' | 'email';
   previousMessages?: Array<{ role: string; content: string }>;
   customInstructions?: string;
+  communicationModelId?: string;  // Явно указанная модель коммуникации
 }
 
 interface GenerateResponseOptions {
@@ -39,6 +48,10 @@ interface GenerationResult {
   tokensUsed?: number;
   intent?: string;
   suggestedNextAction?: string;
+  metadata?: {
+    communicationModel?: string;
+    communicationModelName?: string;
+  };
 }
 
 // Получить API ключ из настроек
@@ -97,7 +110,7 @@ const RESPONSE_HANDLER_PROMPT = `Ты - AI помощник менеджера �
 Ответь коротко, 1-3 предложения.`;
 
 /**
- * Генерация холодного сообщения
+ * Генерация холодного сообщения с учётом культурной модели
  */
 export async function generateOutreachMessage(options: GenerateMessageOptions): Promise<GenerationResult> {
   const { apiKey, model } = await getOpenAIConfig();
@@ -109,7 +122,15 @@ export async function generateOutreachMessage(options: GenerateMessageOptions): 
     };
   }
 
-  const { lead, stage, channel } = options;
+  const { lead, stage, channel, communicationModelId } = options;
+
+  // Выбираем модель коммуникации
+  let commModel: CommunicationModel;
+  if (communicationModelId) {
+    commModel = COMMUNICATION_MODELS.find(m => m.id === communicationModelId) || selectCommunicationModel(lead);
+  } else {
+    commModel = selectCommunicationModel(lead);
+  }
 
   // Формируем контекст о лиде
   const leadContext = `
@@ -121,6 +142,11 @@ export async function generateOutreachMessage(options: GenerateMessageOptions): 
 - Источник: ${lead.source}
 - Теги: ${lead.tags.join(', ') || 'Нет'}
 - Канал отправки: ${channel}
+
+ВЫБРАННАЯ МОДЕЛЬ КОММУНИКАЦИИ: ${commModel.nameRu}
+- Тональность: ${commModel.tone}
+- Уровень бизнеса: ${commModel.businessLevel}
+- Культурный стиль: ${commModel.cultureStyle}
 `;
 
   const stageInstructions: Record<string, string> = {
@@ -130,6 +156,9 @@ export async function generateOutreachMessage(options: GenerateMessageOptions): 
     objection_handling: 'Клиент высказал возражение. Обработай его мягко.',
     closing: 'Напиши сообщение для закрытия сделки.',
   };
+
+  // Применяем культурную модель к промпту
+  const enhancedPrompt = applyModelToPrompt(COLD_OUTREACH_PROMPT, commModel);
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -141,10 +170,10 @@ export async function generateOutreachMessage(options: GenerateMessageOptions): 
       body: JSON.stringify({
         model,
         messages: [
-          { role: 'system', content: COLD_OUTREACH_PROMPT },
+          { role: 'system', content: enhancedPrompt },
           { role: 'user', content: `${leadContext}\n\n${stageInstructions[stage] || stageInstructions.introduction}` },
         ],
-        max_tokens: 300,
+        max_tokens: 400,
         temperature: 0.8,
       }),
     });
@@ -169,6 +198,11 @@ export async function generateOutreachMessage(options: GenerateMessageOptions): 
       message: generatedMessage.trim(),
       tokensUsed: data.usage?.total_tokens,
       suggestedNextAction: 'Ожидание ответа',
+      // Добавляем информацию о использованной модели
+      metadata: {
+        communicationModel: commModel.id,
+        communicationModelName: commModel.nameRu,
+      },
     };
   } catch (error) {
     return { 
@@ -176,6 +210,28 @@ export async function generateOutreachMessage(options: GenerateMessageOptions): 
       error: `Ошибка генерации: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`,
     };
   }
+}
+
+/**
+ * Получить список доступных моделей коммуникации
+ */
+export function getCommunicationModels() {
+  return COMMUNICATION_MODELS.map(m => ({
+    id: m.id,
+    name: m.nameRu,
+    description: m.description,
+    tone: m.tone,
+    businessLevel: m.businessLevel,
+  }));
+}
+
+/**
+ * Получить готовый шаблон для модели
+ */
+export function getTemplateForModel(modelId: string, stage: 'cold_outreach' | 'follow_up' | 'demo_invite'): string | null {
+  const templates = MESSAGE_TEMPLATES_BY_MODEL[modelId];
+  if (!templates) return null;
+  return templates[stage] || null;
 }
 
 /**
