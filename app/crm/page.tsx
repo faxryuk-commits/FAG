@@ -325,6 +325,15 @@ export default function CRMDashboard() {
                 ❓
               </button>
               
+              {/* Монитор */}
+              <Link 
+                href="/crm/monitor"
+                className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 rounded-lg text-green-400 text-sm font-medium transition-all flex items-center gap-2"
+              >
+                <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                📡 Монитор
+              </Link>
+              
               {/* Настройки */}
               <Link 
                 href="/crm/settings"
