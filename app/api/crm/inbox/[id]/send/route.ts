@@ -82,9 +82,15 @@ async function sendInstagramMessage(recipientId: string, text: string): Promise<
       return { success: false, error: 'Instagram not configured' };
     }
 
-    // Instagram Messaging API
+    // Используем Instagram Account ID для отправки
+    const instagramAccountId = settings.instagramAccountId || settings.instagramPageId;
+    if (!instagramAccountId) {
+      return { success: false, error: 'Instagram Account ID not configured' };
+    }
+
+    // Instagram Messaging API - правильный endpoint
     const response = await fetch(
-      `https://graph.facebook.com/v18.0/me/messages`,
+      `https://graph.facebook.com/v18.0/${instagramAccountId}/messages`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -97,6 +103,8 @@ async function sendInstagramMessage(recipientId: string, text: string): Promise<
     );
 
     const data = await response.json();
+    
+    console.log('Instagram send response:', JSON.stringify(data));
 
     if (data.error) {
       return { success: false, error: data.error.message };
@@ -105,6 +113,7 @@ async function sendInstagramMessage(recipientId: string, text: string): Promise<
     return { success: true, externalId: data.message_id };
 
   } catch (error) {
+    console.error('Instagram send error:', error);
     return { success: false, error: String(error) };
   }
 }
