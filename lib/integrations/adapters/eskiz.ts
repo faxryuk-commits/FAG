@@ -45,7 +45,7 @@ export class EskizAdapter implements IntegrationAdapter {
   private async getToken(): Promise<string> {
     // Если токен валиден, возвращаем его
     if (this.token && Date.now() < this.tokenExpiry) {
-      return this.token;
+      return this.token as string;
     }
 
     const response = await fetch(`${this.baseUrl}/auth/login`, {
@@ -71,7 +71,7 @@ export class EskizAdapter implements IntegrationAdapter {
     // Токен действует 30 дней, обновляем за день до истечения
     this.tokenExpiry = Date.now() + 29 * 24 * 60 * 60 * 1000;
 
-    return this.token;
+    return this.token as string;
   }
 
   /**

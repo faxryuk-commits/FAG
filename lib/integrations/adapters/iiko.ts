@@ -45,7 +45,7 @@ export class IikoAdapter implements IntegrationAdapter {
    */
   private async getToken(): Promise<string> {
     if (this.token && Date.now() < this.tokenExpiry) {
-      return this.token;
+      return this.token as string;
     }
 
     const response = await fetch(`${this.baseUrl}/access_token`, {
@@ -68,7 +68,7 @@ export class IikoAdapter implements IntegrationAdapter {
     // Токен действует 1 час
     this.tokenExpiry = Date.now() + 55 * 60 * 1000;
 
-    return this.token;
+    return this.token as string;
   }
 
   /**
