@@ -26,7 +26,10 @@ export async function POST(
     }
 
     // Отправляем сообщение через соответствующий канал
-    let sendResult = { success: false, error: 'Channel not supported', externalId: '' };
+    let sendResult: { success: boolean; error?: string; externalId?: string } = { 
+      success: false, 
+      error: 'Channel not supported' 
+    };
 
     if (conversation.channel === 'instagram') {
       sendResult = await sendInstagramMessage(conversation.externalId, content);
@@ -43,8 +46,8 @@ export async function POST(
         contentType,
         status: sendResult.success ? 'sent' : 'failed',
         externalId: sendResult.externalId || null,
-        sentBy: 'user', // TODO: получать из сессии
-        metadata: sendResult.success ? null : { error: sendResult.error },
+        sentBy: 'user',
+        metadata: sendResult.success ? null : { error: sendResult.error || 'Unknown error' },
       },
     });
 
