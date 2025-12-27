@@ -1198,3 +1198,453 @@ model Favorite {
   @@map("favorites")
 }
 
+// =============================================
+// CRM - ЛИДЫ И ПРОДАЖИ DELEVER.IO
+// =============================================
+
+// Лид (потенциальный клиент)
+model Lead {
+  id              String   @id @default(cuid())
+  
+  // Основные данные
+  name            String?  // Имя контакта
+  firstName       String?
+  lastName        String?
+  company         String?  // Название компании/ресторана
+  position        String?  // Должность
+  
+  // Контакты
+  phone           String?
+  email           String?
+  telegram        String?  // @username или chat_id
+  whatsapp        String?
+  
+  // Источник
+  source          String   // amocrm, google_maps, website, cold_outreach, referral
+  sourceId        String?  // ID в источнике
+  
+  // Привязка к ресторану (если есть)
+  restaurantId    String?
+  
+  // Скоринг
+  score           Int      @default(0)  // 0-100
+  scoreFactors    Json?    // { hasEmail: 10, hasPhone: 20, restaurantSize: 30 }
+  
+  // Сегмент
+  segment         String?  // hot, warm, cold, enterprise, smb
+  
+  // Теги
+  tags            String[]
+  
+  // Статус в воронке
+  status          String   @default("new") // new, contacted, qualified, demo_scheduled, demo_done, negotiation, won, lost, nurturing
+  lostReason      String?  // Причина отказа
+  
+  // Ответственный
+  assignedTo      String?  // userId менеджера
+  
+  // Касания
+  touches         Touch[]
+  
+  // AI Диалоги
+  aiConversations AIConversation[]
+  
+  // Сделки
+  deals           Deal[]
+  
+  // Заметки
+  notes           LeadNote[]
+  
+  // Временные метки
+  lastContactAt   DateTime?
+  nextActionAt    DateTime?
+  nextAction      String?   // Следующее действие
+  
+  // Дополнительные данные из AmoCRM
+  amoCrmData      Json?     // Все поля из AmoCRM
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@unique([source, sourceId])
+  @@index([status])
+  @@index([score])
+  @@index([segment])
+  @@index([assignedTo])
+  @@index([phone])
+  @@index([email])
+  @@map("leads")
+}
+
+// Заметки к лиду
+model LeadNote {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  text      String   @db.Text
+  authorId  String?  // Кто написал
+  
+  createdAt DateTime @default(now())
+  
+  @@index([leadId])
+  @@map("lead_notes")
+}
+
+// Касание (контакт с лидом)
+model Touch {
+  id            String   @id @default(cuid())
+  leadId        String
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  // Тип касания
+  channel       String   // email, sms, telegram, whatsapp, call, meeting
+  direction     String   // outbound, inbound
+  
+  // Содержимое
+  subject       String?  // Тема (для email)
+  content       String?  @db.Text // Текст сообщения
+  
+  // Статус
+  status        String   @default("sent") // pending, sent, delivered, opened, clicked, replied, failed
+  
+  // Метаданные
+  metadata      Json?    // { messageId, deliveredAt, openedAt, etc. }
+  
+  // Ответ
+  response      String?  @db.Text // Ответ клиента
+  responseAt    DateTime?
+  
+  // Результат
+  outcome       String?  // positive, negative, neutral, no_response
+  
+  // AI анализ ответа
+  aiAnalysis    Json?    // { sentiment, intent, objections, nextAction }
+  
+  // Связь с кампанией
+  campaignId    String?
+  campaign      Campaign? @relation(fields: [campaignId], references: [id])
+  
+  // Кто выполнил
+  performedBy   String?  // userId или "ai_robot"
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([leadId])
+  @@index([channel])
+  @@index([status])
+  @@index([campaignId])
+  @@map("touches")
+}
+
+// AI Диалог (история общения с AI-роботом)
+model AIConversation {
+  id            String   @id @default(cuid())
+  leadId        String
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  // Канал диалога
+  channel       String   // telegram, whatsapp, email
+  
+  // Статус диалога
+  status        String   @default("active") // active, paused, completed, escalated
+  
+  // Текущий этап воронки
+  stage         String   @default("introduction") // introduction, qualification, demo_pitch, objection_handling, closing
+  
+  // История сообщений
+  messages      AIMessage[]
+  
+  // Контекст для GPT
+  context       Json?    // { leadInfo, previousMessages, currentObjections, etc. }
+  
+  // Достигнутые цели
+  goals         Json?    // { qualified: true, demoScheduled: false, etc. }
+  
+  // Эскалация
+  escalatedAt   DateTime?
+  escalatedTo   String?  // userId менеджера
+  escalationReason String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([leadId])
+  @@index([status])
+  @@map("ai_conversations")
+}
+
+// Сообщение в AI диалоге
+model AIMessage {
+  id              String   @id @default(cuid())
+  conversationId  String
+  conversation    AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  // Роль
+  role            String   // assistant, user
+  
+  // Содержимое
+  content         String   @db.Text
+  
+  // Намерение (определённое AI)
+  intent          String?  // interested, objection, question, positive, negative
+  
+  // Использованная техника
+  technique       String?  // SPIN, BANT, urgency, social_proof, etc.
+  
+  // Токены
+  promptTokens    Int?
+  completionTokens Int?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([conversationId])
+  @@map("ai_messages")
+}
+
+// Сделка
+model Deal {
+  id            String   @id @default(cuid())
+  leadId        String
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  // Название сделки
+  name          String
+  
+  // Сумма
+  amount        Float?   // Сумма сделки
+  currency      String   @default("USD")
+  
+  // Этап воронки
+  stage         String   @default("new") // new, qualified, demo, proposal, negotiation, won, lost
+  
+  // Вероятность закрытия
+  probability   Int?     // 0-100%
+  
+  // Продукт/тариф
+  product       String?  // starter, business, enterprise
+  
+  // Даты
+  expectedCloseDate DateTime?
+  actualCloseDate   DateTime?
+  
+  // Причина выигрыша/проигрыша
+  closeReason   String?
+  
+  // Менеджер
+  assignedTo    String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([leadId])
+  @@index([stage])
+  @@index([assignedTo])
+  @@map("deals")
+}
+
+// Кампания (рассылка)
+model Campaign {
+  id            String   @id @default(cuid())
+  
+  // Название
+  name          String
+  description   String?  @db.Text
+  
+  // Тип кампании
+  type          String   // cold_outreach, nurturing, reactivation, announcement
+  
+  // Канал
+  channel       String   // email, sms, telegram, multi
+  
+  // Шаблон
+  templateId    String?
+  template      MessageTemplate? @relation(fields: [templateId], references: [id])
+  
+  // Сегмент целевой аудитории
+  segment       Json?    // { status: ["cold"], score: { gte: 30 }, tags: ["restaurant"] }
+  
+  // Расписание
+  scheduledAt   DateTime?
+  
+  // Статус
+  status        String   @default("draft") // draft, scheduled, running, paused, completed
+  
+  // Последовательность (для drip campaigns)
+  sequence      CampaignStep[]
+  
+  // Связанные касания
+  touches       Touch[]
+  
+  // Статистика
+  stats         Json?    // { sent: 100, delivered: 95, opened: 45, clicked: 12, replied: 5 }
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([status])
+  @@index([channel])
+  @@map("campaigns")
+}
+
+// Шаг кампании (для drip)
+model CampaignStep {
+  id            String   @id @default(cuid())
+  campaignId    String
+  campaign      Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  // Порядок
+  order         Int
+  
+  // Задержка (в часах от предыдущего шага)
+  delayHours    Int      @default(24)
+  
+  // Шаблон сообщения
+  templateId    String?
+  
+  // Условие (когда переходить)
+  condition     Json?    // { ifNoResponse: true, ifOpened: false }
+  
+  // Статистика
+  stats         Json?
+  
+  @@index([campaignId])
+  @@map("campaign_steps")
+}
+
+// Шаблон сообщения
+model MessageTemplate {
+  id            String   @id @default(cuid())
+  
+  // Название
+  name          String
+  
+  // Канал
+  channel       String   // email, sms, telegram
+  
+  // Тема (для email)
+  subject       String?
+  
+  // Тело сообщения (с переменными {{name}}, {{company}})
+  body          String   @db.Text
+  
+  // Переменные
+  variables     String[] // ["name", "company", "product"]
+  
+  // Тип
+  type          String   @default("outreach") // outreach, follow_up, demo_invite, proposal, objection_response
+  
+  // A/B тестирование
+  isVariant     Boolean  @default(false)
+  parentId      String?  // ID оригинального шаблона
+  
+  // Статистика
+  stats         Json?    // { sent: 500, openRate: 0.45, replyRate: 0.12 }
+  
+  // Связанные кампании
+  campaigns     Campaign[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([channel])
+  @@index([type])
+  @@map("message_templates")
+}
+
+// AI Промпты (системные промпты для робота)
+model AIPrompt {
+  id            String   @id @default(cuid())
+  
+  // Название
+  name          String
+  
+  // Этап продаж
+  stage         String   // qualification, demo_pitch, objection_handling, closing
+  
+  // Системный промпт
+  systemPrompt  String   @db.Text
+  
+  // Примеры диалогов (few-shot)
+  examples      Json?    // [{ user: "...", assistant: "..." }]
+  
+  // Техники продаж для этого этапа
+  techniques    String[] // ["SPIN", "BANT", "social_proof"]
+  
+  // Активный
+  isActive      Boolean  @default(true)
+  
+  // Версия
+  version       Int      @default(1)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@unique([stage, version])
+  @@map("ai_prompts")
+}
+
+// Возражения и ответы
+model Objection {
+  id            String   @id @default(cuid())
+  
+  // Типичное возражение
+  objection     String   @db.Text
+  
+  // Категория
+  category      String   // price, time, competitor, need, authority, trust
+  
+  // Ответы (варианты)
+  responses     Json     // [{ response: "...", technique: "feel_felt_found" }]
+  
+  // Частота появления
+  frequency     Int      @default(0)
+  
+  // Успешность ответов
+  successRate   Float?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([category])
+  @@map("objections")
+}
+
+// Статистика продаж
+model SalesStats {
+  id            String   @id @default(cuid())
+  
+  // Период
+  date          DateTime @db.Date
+  
+  // Воронка
+  newLeads      Int      @default(0)
+  contacted     Int      @default(0)
+  qualified     Int      @default(0)
+  demosScheduled Int     @default(0)
+  demosDone     Int      @default(0)
+  proposals     Int      @default(0)
+  won           Int      @default(0)
+  lost          Int      @default(0)
+  
+  // Касания
+  emailsSent    Int      @default(0)
+  smsSent       Int      @default(0)
+  telegramSent  Int      @default(0)
+  callsMade     Int      @default(0)
+  
+  // Ответы
+  replies       Int      @default(0)
+  positiveReplies Int    @default(0)
+  
+  // AI робот
+  aiConversations Int    @default(0)
+  aiEscalations   Int    @default(0)
+  
+  // Выручка
+  revenue       Float    @default(0)
+  
+  @@unique([date])
+  @@map("sales_stats")
+}
+

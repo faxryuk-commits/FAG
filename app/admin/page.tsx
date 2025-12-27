@@ -5011,6 +5011,12 @@ export default function AdminPage() {
           </div>
           <div className="flex items-center gap-3">
             <Link 
+              href="/crm" 
+              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-lg text-white text-sm font-medium transition-all"
+            >
+              🚀 CRM
+            </Link>
+            <Link 
               href="/" 
               className="px-4 py-2 text-white/60 hover:text-white transition-colors text-sm"
             >
