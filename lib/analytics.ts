@@ -11,25 +11,42 @@
  * const { trackView, trackClick, trackSearch } = useAnalytics();
  */
 
-// Генерация уникального ID сессии
+// Получение куки по имени
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? match[2] : null;
+}
+
+// Генерация уникального ID сессии (предпочитаем куки)
 function generateSessionId(): string {
   if (typeof window === 'undefined') return '';
   
+  // Сначала проверяем куки (установлены middleware)
+  const cookieSession = getCookie('_fag_sid');
+  if (cookieSession) return cookieSession;
+  
+  // Fallback на sessionStorage
   let sessionId = sessionStorage.getItem('analytics_session_id');
   if (!sessionId) {
-    sessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    sessionId = `s_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
     sessionStorage.setItem('analytics_session_id', sessionId);
   }
   return sessionId;
 }
 
-// Генерация ID посетителя (сохраняется между сессиями)
+// Генерация ID посетителя (предпочитаем куки - работает между сессиями)
 function generateVisitorId(): string {
   if (typeof window === 'undefined') return '';
   
+  // Сначала проверяем куки (установлены middleware, живут 1 год)
+  const cookieVisitor = getCookie('_fag_vid');
+  if (cookieVisitor) return cookieVisitor;
+  
+  // Fallback на localStorage
   let visitorId = localStorage.getItem('analytics_visitor_id');
   if (!visitorId) {
-    visitorId = `vis_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    visitorId = `v_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
     localStorage.setItem('analytics_visitor_id', visitorId);
   }
   return visitorId;

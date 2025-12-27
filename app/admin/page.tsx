@@ -2254,6 +2254,294 @@ const REFRESH_OPTIONS = [
   { id: 'full', label: 'Всё сразу', desc: 'Полное обновление', cost: '$0.017' },
 ];
 
+// Предустановленные категории меню
+const MENU_CATEGORIES = [
+  '🥗 Салаты',
+  '🍲 Супы',
+  '🍖 Горячее',
+  '🍕 Пицца',
+  '🍔 Бургеры',
+  '🌯 Шаурма',
+  '🍜 Лапша',
+  '🍚 Плов',
+  '🥟 Самса',
+  '🍰 Десерты',
+  '🥤 Напитки',
+  '🍺 Алкоголь',
+  '🍳 Завтраки',
+  '👶 Детское',
+  '🥡 Сеты',
+];
+
+// Компонент редактора меню
+function MenuEditor({ 
+  restaurantId, 
+  initialItems, 
+  onUpdate 
+}: { 
+  restaurantId: string; 
+  initialItems: Array<{ id: string; name: string; price: number | null; category: string | null; description?: string | null }>;
+  onUpdate: () => void;
+}) {
+  const [items, setItems] = useState(initialItems);
+  const [newItem, setNewItem] = useState({ name: '', price: '', category: '', description: '' });
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState({ name: '', price: '', category: '', description: '' });
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+
+  // Группировка по категориям
+  const groupedItems = items.reduce((acc, item) => {
+    const cat = item.category || 'Без категории';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(item);
+    return acc;
+  }, {} as Record<string, typeof items>);
+
+  const addItem = async () => {
+    if (!newItem.name.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/restaurants/${restaurantId}/menu`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newItem.name,
+          price: newItem.price ? parseFloat(newItem.price) : null,
+          category: newItem.category || null,
+          description: newItem.description || null,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setItems(prev => [...prev, data.item]);
+        setNewItem({ name: '', price: '', category: '', description: '' });
+        onUpdate();
+      }
+    } catch (error) {
+      console.error('Error adding menu item:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteItem = async (itemId: string) => {
+    if (!confirm('Удалить позицию?')) return;
+    try {
+      await fetch(`/api/restaurants/${restaurantId}/menu?itemId=${itemId}`, { method: 'DELETE' });
+      setItems(prev => prev.filter(i => i.id !== itemId));
+      onUpdate();
+    } catch (error) {
+      console.error('Error deleting menu item:', error);
+    }
+  };
+
+  const startEdit = (item: typeof items[0]) => {
+    setEditingId(item.id);
+    setEditValues({
+      name: item.name,
+      price: item.price?.toString() || '',
+      category: item.category || '',
+      description: item.description || '',
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId || !editValues.name.trim()) return;
+    setSaving(true);
+    try {
+      // Обновляем через PUT (массовое обновление)
+      const updatedItems = items.map(item => 
+        item.id === editingId 
+          ? { ...item, name: editValues.name, price: editValues.price ? parseFloat(editValues.price) : null, category: editValues.category || null, description: editValues.description || null }
+          : item
+      );
+      
+      await fetch(`/api/restaurants/${restaurantId}/menu`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: updatedItems }),
+      });
+      
+      setItems(updatedItems);
+      setEditingId(null);
+      onUpdate();
+    } catch (error) {
+      console.error('Error updating menu item:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Быстрые категории */}
+      <div className="flex flex-wrap gap-1">
+        {MENU_CATEGORIES.slice(0, 10).map(cat => (
+          <button
+            key={cat}
+            onClick={() => setNewItem(p => ({ ...p, category: cat }))}
+            className={`px-2 py-1 text-xs rounded-lg transition-colors ${
+              newItem.category === cat 
+                ? 'bg-blue-500 text-white' 
+                : 'bg-white/5 text-white/60 hover:bg-white/10'
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+        <button
+          onClick={() => setShowCategoryPicker(!showCategoryPicker)}
+          className="px-2 py-1 text-xs bg-white/5 text-white/40 rounded-lg hover:bg-white/10"
+        >
+          ещё...
+        </button>
+      </div>
+
+      {/* Дополнительные категории */}
+      {showCategoryPicker && (
+        <div className="flex flex-wrap gap-1 p-2 bg-white/5 rounded-lg">
+          {MENU_CATEGORIES.slice(10).map(cat => (
+            <button
+              key={cat}
+              onClick={() => { setNewItem(p => ({ ...p, category: cat })); setShowCategoryPicker(false); }}
+              className="px-2 py-1 text-xs bg-white/10 text-white/70 rounded-lg hover:bg-white/20"
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Форма добавления */}
+      <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg space-y-2">
+        <div className="text-sm text-green-400 font-medium">+ Добавить позицию</div>
+        <div className="grid grid-cols-12 gap-2">
+          <input
+            type="text"
+            value={newItem.name}
+            onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))}
+            placeholder="Название блюда *"
+            className="col-span-5 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+          />
+          <input
+            type="number"
+            value={newItem.price}
+            onChange={e => setNewItem(p => ({ ...p, price: e.target.value }))}
+            placeholder="Цена"
+            className="col-span-2 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+          />
+          <input
+            type="text"
+            value={newItem.category}
+            onChange={e => setNewItem(p => ({ ...p, category: e.target.value }))}
+            placeholder="Категория"
+            className="col-span-3 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+          />
+          <button
+            onClick={addItem}
+            disabled={saving || !newItem.name.trim()}
+            className="col-span-2 px-3 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 disabled:opacity-50"
+          >
+            {saving ? '...' : '+ Добавить'}
+          </button>
+        </div>
+        <input
+          type="text"
+          value={newItem.description}
+          onChange={e => setNewItem(p => ({ ...p, description: e.target.value }))}
+          placeholder="Описание (опционально)"
+          className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"
+        />
+      </div>
+
+      {/* Статистика */}
+      <div className="flex items-center gap-4 text-sm">
+        <span className="text-white/40">Всего: <span className="text-white font-medium">{items.length}</span> позиций</span>
+        <span className="text-white/40">Категорий: <span className="text-white font-medium">{Object.keys(groupedItems).length}</span></span>
+      </div>
+
+      {/* Список по категориям */}
+      {items.length === 0 ? (
+        <div className="text-center py-8 text-white/40">
+          <div className="text-3xl mb-2">🍽️</div>
+          Меню пустое. Добавьте первую позицию выше.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {Object.entries(groupedItems).map(([category, categoryItems]) => (
+            <div key={category} className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-white/60">{category}</span>
+                <span className="text-xs text-white/30">({categoryItems.length})</span>
+              </div>
+              <div className="space-y-1">
+                {categoryItems.map(item => (
+                  <div key={item.id} className="group">
+                    {editingId === item.id ? (
+                      // Режим редактирования
+                      <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg space-y-2">
+                        <div className="grid grid-cols-12 gap-2">
+                          <input
+                            type="text"
+                            value={editValues.name}
+                            onChange={e => setEditValues(p => ({ ...p, name: e.target.value }))}
+                            className="col-span-5 px-2 py-1.5 bg-white/10 border border-white/20 rounded text-white text-sm"
+                          />
+                          <input
+                            type="number"
+                            value={editValues.price}
+                            onChange={e => setEditValues(p => ({ ...p, price: e.target.value }))}
+                            className="col-span-2 px-2 py-1.5 bg-white/10 border border-white/20 rounded text-white text-sm"
+                          />
+                          <input
+                            type="text"
+                            value={editValues.category}
+                            onChange={e => setEditValues(p => ({ ...p, category: e.target.value }))}
+                            className="col-span-3 px-2 py-1.5 bg-white/10 border border-white/20 rounded text-white text-sm"
+                          />
+                          <div className="col-span-2 flex gap-1">
+                            <button onClick={saveEdit} disabled={saving} className="flex-1 px-2 py-1.5 bg-green-500 text-white rounded text-xs">✓</button>
+                            <button onClick={() => setEditingId(null)} className="flex-1 px-2 py-1.5 bg-white/10 text-white/60 rounded text-xs">✕</button>
+                          </div>
+                        </div>
+                        <input
+                          type="text"
+                          value={editValues.description}
+                          onChange={e => setEditValues(p => ({ ...p, description: e.target.value }))}
+                          placeholder="Описание"
+                          className="w-full px-2 py-1.5 bg-white/10 border border-white/20 rounded text-white text-sm"
+                        />
+                      </div>
+                    ) : (
+                      // Режим просмотра
+                      <div className="flex items-center gap-3 px-3 py-2 bg-white/5 rounded-lg hover:bg-white/10 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-white text-sm truncate">{item.name}</div>
+                          {item.description && <div className="text-xs text-white/40 truncate">{item.description}</div>}
+                        </div>
+                        {item.price && (
+                          <div className="text-green-400 font-medium text-sm whitespace-nowrap">
+                            {item.price.toLocaleString()} сум
+                          </div>
+                        )}
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => startEdit(item)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded text-xs">✏️</button>
+                          <button onClick={() => deleteItem(item.id)} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded text-xs">🗑️</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Компонент аналитики ресторана
 function RestaurantAnalytics({ restaurantId }: { restaurantId: string }) {
   const [data, setData] = useState<{
@@ -2720,7 +3008,6 @@ function RestaurantAccordionCard({
   const [editedHours, setEditedHours] = useState<RestaurantDetail['workingHours']>([]);
   const [refreshResult, setRefreshResult] = useState<{ success: boolean; message: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'edit' | 'analytics' | 'photos' | 'menu' | 'reviews' | 'history'>('edit');
-  const [newMenuItem, setNewMenuItem] = useState({ name: '', price: '', category: '' });
 
   const DAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
@@ -2837,37 +3124,6 @@ function RestaurantAccordionCard({
       }
       return [...prev, { id: `new-${dayOfWeek}`, dayOfWeek, openTime: '09:00', closeTime: '22:00', isClosed: false, [field]: value }];
     });
-  };
-
-  const addMenuItem = async () => {
-    if (!detail || !newMenuItem.name) return;
-    try {
-      const res = await fetch(`/api/restaurants/${detail.id}/menu`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newMenuItem.name,
-          price: newMenuItem.price ? parseFloat(newMenuItem.price) : null,
-          category: newMenuItem.category || null,
-        }),
-      });
-      if (res.ok) {
-        setNewMenuItem({ name: '', price: '', category: '' });
-        fetchDetail();
-      }
-    } catch (error) {
-      console.error('Error adding menu item:', error);
-    }
-  };
-
-  const deleteMenuItem = async (itemId: string) => {
-    if (!detail || !confirm('Удалить позицию?')) return;
-    try {
-      await fetch(`/api/restaurants/${detail.id}/menu?itemId=${itemId}`, { method: 'DELETE' });
-      fetchDetail();
-    } catch (error) {
-      console.error('Error deleting menu item:', error);
-    }
   };
 
   return (
@@ -3083,42 +3339,11 @@ function RestaurantAccordionCard({
 
                 {/* TAB: Меню */}
                 {activeTab === 'menu' && (
-                  <div className="space-y-4">
-                    {/* Форма добавления */}
-                    <div className="flex gap-2 items-end">
-                      <div className="flex-1">
-                        <label className="block text-xs text-white/40 mb-1">Название блюда</label>
-                        <input type="text" value={newMenuItem.name} onChange={e => setNewMenuItem(p => ({ ...p, name: e.target.value }))} placeholder="Плов, Лагман..." className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm" />
-                      </div>
-                      <div className="w-24">
-                        <label className="block text-xs text-white/40 mb-1">Цена</label>
-                        <input type="text" value={newMenuItem.price} onChange={e => setNewMenuItem(p => ({ ...p, price: e.target.value }))} placeholder="50000" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm" />
-                      </div>
-                      <div className="w-32">
-                        <label className="block text-xs text-white/40 mb-1">Категория</label>
-                        <input type="text" value={newMenuItem.category} onChange={e => setNewMenuItem(p => ({ ...p, category: e.target.value }))} placeholder="Горячее" className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm" />
-                      </div>
-                      <button onClick={addMenuItem} className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm">+ Добавить</button>
-                    </div>
-                    
-                    {/* Список меню */}
-                    {detail.menuItems && detail.menuItems.length > 0 ? (
-                      <div className="space-y-2">
-                        {detail.menuItems.map(item => (
-                          <div key={item.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg">
-                            <div className="flex-1">
-                              <div className="font-medium text-white">{item.name}</div>
-                              {item.category && <div className="text-xs text-white/40">{item.category}</div>}
-                            </div>
-                            {item.price && <div className="text-green-400 font-medium">{item.price.toLocaleString()} сум</div>}
-                            <button onClick={() => deleteMenuItem(item.id)} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded">🗑️</button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-4 text-white/40">Меню пусто</div>
-                    )}
-                  </div>
+                  <MenuEditor 
+                    restaurantId={detail.id} 
+                    initialItems={detail.menuItems || []} 
+                    onUpdate={fetchDetail}
+                  />
                 )}
 
                 {/* TAB: Отзывы */}
