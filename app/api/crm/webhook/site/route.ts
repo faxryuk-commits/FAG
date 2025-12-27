@@ -128,8 +128,8 @@ export async function POST(request: NextRequest) {
       await prisma.leadNote.create({
         data: {
           leadId: lead.id,
-          content: `📝 Сообщение из формы:\n\n${data.message}`,
-          author: 'Сайт',
+          text: `📝 Сообщение из формы:\n\n${data.message}`,
+          authorId: 'website',
         },
       });
     }
