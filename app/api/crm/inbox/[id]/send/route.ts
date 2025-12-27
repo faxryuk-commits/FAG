@@ -82,15 +82,17 @@ async function sendInstagramMessage(recipientId: string, text: string): Promise<
       return { success: false, error: 'Instagram not configured' };
     }
 
-    // Используем Instagram Account ID для отправки
-    const instagramAccountId = settings.instagramAccountId || settings.instagramPageId;
-    if (!instagramAccountId) {
-      return { success: false, error: 'Instagram Account ID not configured' };
+    // Пробуем разные ID для отправки
+    const pageId = settings.instagramPageId;
+    const igAccountId = settings.instagramAccountId;
+    
+    if (!pageId && !igAccountId) {
+      return { success: false, error: 'Instagram/Page ID not configured' };
     }
 
-    // Instagram Messaging API - правильный endpoint
-    const response = await fetch(
-      `https://graph.facebook.com/v18.0/${instagramAccountId}/messages`,
+    // Сначала пробуем через Page ID (Facebook Messenger style)
+    let response = await fetch(
+      `https://graph.facebook.com/v18.0/${pageId}/messages`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -102,9 +104,27 @@ async function sendInstagramMessage(recipientId: string, text: string): Promise<
       }
     );
 
-    const data = await response.json();
-    
-    console.log('Instagram send response:', JSON.stringify(data));
+    let data = await response.json();
+    console.log('Instagram send via Page ID:', JSON.stringify(data));
+
+    // Если не сработало через Page ID, пробуем через Instagram Account ID
+    if (data.error && igAccountId && igAccountId !== pageId) {
+      console.log('Trying via Instagram Account ID...');
+      response = await fetch(
+        `https://graph.facebook.com/v18.0/${igAccountId}/messages`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recipient: { id: recipientId },
+            message: { text },
+            access_token: settings.instagramAccessToken,
+          }),
+        }
+      );
+      data = await response.json();
+      console.log('Instagram send via IG Account ID:', JSON.stringify(data));
+    }
 
     if (data.error) {
       return { success: false, error: data.error.message };
