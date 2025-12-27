@@ -47,7 +47,7 @@ export async function POST(
         status: sendResult.success ? 'sent' : 'failed',
         externalId: sendResult.externalId || null,
         sentBy: 'user',
-        metadata: sendResult.success ? null : { error: sendResult.error || 'Unknown error' },
+        metadata: sendResult.success ? undefined : { error: sendResult.error || 'Unknown error' },
       },
     });
 
