@@ -1,8 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { 
+  trackCardView, 
+  trackCall, 
+  trackWebsiteClick, 
+  trackRoute, 
+  trackShare, 
+  trackFavorite,
+  trackPhotoView,
+  trackMenuView 
+} from '@/lib/analytics';
 
 interface Restaurant {
   id: string;
@@ -86,6 +96,15 @@ export default function RestaurantPage() {
     setTheme(newTheme);
     localStorage.setItem(THEME_KEY, newTheme);
   };
+
+  // Трекинг просмотра карточки (только один раз)
+  const trackedRef = useRef(false);
+  useEffect(() => {
+    if (restaurant && !trackedRef.current) {
+      trackedRef.current = true;
+      trackCardView(restaurant.id);
+    }
+  }, [restaurant]);
 
   useEffect(() => {
     if (slug) fetchRestaurant();
@@ -206,7 +225,13 @@ export default function RestaurantPage() {
               {theme === 'dark' ? '☀️' : '🌙'}
             </button>
             <button 
-              onClick={() => setIsFavorite(!isFavorite)}
+              onClick={() => {
+                const newState = !isFavorite;
+                setIsFavorite(newState);
+                if (restaurant) {
+                  trackFavorite(restaurant.id, newState ? 'add' : 'remove');
+                }
+              }}
               className={`w-8 h-8 rounded-lg text-lg ${
                 theme === 'dark' ? 'bg-white/5' : 'bg-gray-100'
               } ${isFavorite ? 'text-red-500' : theme === 'dark' ? 'text-white/50' : 'text-gray-400'}`}
@@ -224,7 +249,10 @@ export default function RestaurantPage() {
           {hasImages && (
             <div 
               className="w-full md:w-80 h-48 md:h-56 rounded-2xl overflow-hidden cursor-pointer relative group flex-shrink-0"
-              onClick={() => setShowGallery(true)}
+              onClick={() => {
+                setShowGallery(true);
+                trackPhotoView(restaurant.id, 0);
+              }}
             >
               <img src={restaurant.images[0]} alt={restaurant.name} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
@@ -280,26 +308,43 @@ export default function RestaurantPage() {
             {/* Actions */}
             <div className="flex flex-wrap gap-2">
               {restaurant.phone && (
-                <a href={`tel:${restaurant.phone}`} className="flex items-center gap-1.5 px-4 py-2 bg-green-500 text-white text-sm rounded-xl font-medium hover:bg-green-600">
+                <a 
+                  href={`tel:${restaurant.phone}`} 
+                  onClick={() => trackCall(restaurant.id, restaurant.phone || undefined)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-green-500 text-white text-sm rounded-xl font-medium hover:bg-green-600"
+                >
                   📞 Позвонить
                 </a>
               )}
               {restaurant.sourceUrl && (
-                <a href={restaurant.sourceUrl} target="_blank" className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl transition-colors ${
-                  theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}>
+                <a 
+                  href={restaurant.sourceUrl} 
+                  target="_blank" 
+                  onClick={() => trackRoute(restaurant.id)}
+                  className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl transition-colors ${
+                    theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
                   🗺️ Карта
                 </a>
               )}
               {restaurant.website && (
-                <a href={restaurant.website} target="_blank" className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl transition-colors ${
-                  theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}>
+                <a 
+                  href={restaurant.website} 
+                  target="_blank" 
+                  onClick={() => trackWebsiteClick(restaurant.id, restaurant.website || undefined)}
+                  className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl transition-colors ${
+                    theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
                   🌐 Сайт
                 </a>
               )}
               <button 
-                onClick={() => navigator.share?.({ title: restaurant.name, url: window.location.href })}
+                onClick={() => {
+                  trackShare(restaurant.id, 'native');
+                  navigator.share?.({ title: restaurant.name, url: window.location.href });
+                }}
                 className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl transition-colors ${
                   theme === 'dark' ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
@@ -320,7 +365,11 @@ export default function RestaurantPage() {
                 {restaurant.images.slice(0, 12).map((img, idx) => (
                   <button
                     key={idx}
-                    onClick={() => { setCurrentImageIndex(idx); setShowGallery(true); }}
+                    onClick={() => { 
+                      setCurrentImageIndex(idx); 
+                      setShowGallery(true);
+                      trackPhotoView(restaurant.id, idx);
+                    }}
                     className="aspect-square rounded-xl overflow-hidden hover:opacity-80 transition-opacity"
                   >
                     <img src={img} alt="" className="w-full h-full object-cover" />
@@ -462,17 +511,26 @@ export default function RestaurantPage() {
               </h3>
               <div className="space-y-2">
                 {restaurant.phone && (
-                  <a href={`tel:${restaurant.phone}`} className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
-                    theme === 'dark' ? 'bg-white/5 hover:bg-white/10' : 'bg-gray-50 hover:bg-gray-100'
-                  }`}>
+                  <a 
+                    href={`tel:${restaurant.phone}`} 
+                    onClick={() => trackCall(restaurant.id, restaurant.phone || undefined)}
+                    className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                      theme === 'dark' ? 'bg-white/5 hover:bg-white/10' : 'bg-gray-50 hover:bg-gray-100'
+                    }`}
+                  >
                     <span className="text-green-500">📱</span>
                     <span className={`text-sm ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{restaurant.phone}</span>
                   </a>
                 )}
                 {restaurant.website && (
-                  <a href={restaurant.website} target="_blank" className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
-                    theme === 'dark' ? 'bg-white/5 hover:bg-white/10' : 'bg-gray-50 hover:bg-gray-100'
-                  }`}>
+                  <a 
+                    href={restaurant.website} 
+                    target="_blank" 
+                    onClick={() => trackWebsiteClick(restaurant.id, restaurant.website || undefined)}
+                    className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                      theme === 'dark' ? 'bg-white/5 hover:bg-white/10' : 'bg-gray-50 hover:bg-gray-100'
+                    }`}
+                  >
                     <span className="text-blue-500">🌐</span>
                     <span className={`text-sm truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                       {restaurant.website.replace(/^https?:\/\//, '')}
